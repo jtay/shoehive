@@ -121,4 +121,8 @@ export class GameManager {
 
     this.eventBus.emit("lobbyUpdated", lobbyState);
   }
+  
+  public updateLobbyState(): void {
+    this.broadcastLobbyUpdate();
+  }
 } 

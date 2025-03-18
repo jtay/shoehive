@@ -91,6 +91,32 @@ export class WebSocketManager {
         gameId: table.getAttribute("gameId")
       });
     });
+
+    // Add listener for playerSeated event
+    this.eventBus.on("playerSeated", (player, table, seatIndex) => {
+      // Notify the player they have been seated
+      player.sendMessage({
+        type: "seated",
+        tableId: table.id,
+        seatIndex: seatIndex
+      });
+      
+      // Update lobby for all players to see seat changes
+      this.gameManager.updateLobbyState();
+    });
+
+    // Add listener for playerUnseated event
+    this.eventBus.on("playerUnseated", (player, table, seatIndex) => {
+      // Notify the player they have stood up
+      player.sendMessage({
+        type: "unseated",
+        tableId: table.id,
+        seatIndex: seatIndex
+      });
+      
+      // Update lobby for all players to see seat changes
+      this.gameManager.updateLobbyState();
+    });
   }
 
   private sendInitialState(player: Player): void {
