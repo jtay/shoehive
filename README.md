@@ -11,6 +11,37 @@ Shoehive is an **extensible, WebSocket-based multiplayer game framework** design
 ✅ **Lightweight & Scalable** – Designed for high-performance multiplayer games.  
 ✅ **Open Source & Flexible** – Easily integrates with custom game logic.  
 
+## 📐 Implementation Diagram
+```mermaid
+flowchart TD
+ subgraph GameServer["<b>Implementation of Shoehive</b>"]
+        GamePackage["User"]
+        YourCode["Game Package"]
+  end
+ subgraph GameModules["<b>Game Modules</b>"]
+        GameActions["Game Actions"]
+        GameRules["Game Rules"]
+        GamePhases["Game Phases"]
+        ServerActions["Server Actions"]
+  end
+ subgraph TransportModule["<b>Transport Modules</b>"]
+        AuthModule["Authentication Module"]
+        ServerTransportModule["ServerTransportModule"]
+  end
+ subgraph YourCode["<b>Your Code</b>"]
+        GameModules
+        TransportModule
+  end
+ subgraph GamePackage["<b>Game Package</b>"]
+        WebsocketServer["WebSocket Server"]
+        GameState["Game State Management"]
+        CommandHandling["Command Handling"]
+        LobbyState["Lobby State"]
+  end
+    GameModules --> GamePackage
+    TransportModule --> GamePackage
+```
+
 ## 📦 Installation
 
 ```bash
