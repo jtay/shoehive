@@ -3,6 +3,7 @@ import * as http from "http";
 import { EventBus } from "../events/EventBus";
 import { MessageRouter } from "../events/MessageRouter";
 import { Player } from "./Player";
+import { GameManager } from "./GameManager";
 
 export interface AuthProvider {
   authenticatePlayer(request: http.IncomingMessage): Promise<string | null>;
@@ -12,6 +13,7 @@ export class WebSocketManager {
   private wss: WebSocket.Server;
   private eventBus: EventBus;
   private messageRouter: MessageRouter;
+  private gameManager: GameManager;
   private players: Map<string, Player> = new Map();
   private authProvider?: AuthProvider;
 
@@ -19,14 +21,17 @@ export class WebSocketManager {
     server: http.Server,
     eventBus: EventBus,
     messageRouter: MessageRouter,
+    gameManager: GameManager,
     authProvider?: AuthProvider
   ) {
     this.wss = new WebSocket.Server({ server });
     this.eventBus = eventBus;
     this.messageRouter = messageRouter;
+    this.gameManager = gameManager;
     this.authProvider = authProvider;
     
     this.setupConnectionHandler();
+    this.setupEventListeners();
   }
 
   private setupConnectionHandler(): void {
@@ -53,6 +58,9 @@ export class WebSocketManager {
           this.messageRouter.processMessage(player, message);
         });
         
+        // Send initial state to the player
+        this.sendInitialState(player);
+        
         // Emit player connected event
         this.eventBus.emit("playerConnected", player);
         
@@ -63,15 +71,67 @@ export class WebSocketManager {
     });
   }
 
+  private setupEventListeners(): void {
+    this.eventBus.on("lobbyUpdated", (lobbyState) => {
+      const message = {
+        type: "lobbyUpdate",
+        data: lobbyState
+      };
+      
+      // Send to all players
+      this.players.forEach(player => {
+        player.sendMessage(message);
+      });
+    });
+
+    this.eventBus.on("playerJoinedTable", (player, table) => {
+      player.sendMessage({
+        type: "tableJoined",
+        tableId: table.id,
+        gameId: table.getAttribute("gameId")
+      });
+    });
+  }
+
+  private sendInitialState(player: Player): void {
+    // Send player details
+    player.sendMessage({
+      type: "playerInfo",
+      id: player.id
+    });
+
+    // Send available games and tables
+    player.sendMessage({
+      type: "lobbyUpdate",
+      data: {
+        games: this.gameManager.getAvailableGames(),
+        tables: this.gameManager.getAllTables().map(table => ({
+          id: table.id,
+          gameId: table.getAttribute("gameId"),
+          playerCount: table.getPlayerCount(),
+          seats: table.getSeatMap().map(player => player?.id || null),
+          state: table.getState()
+        }))
+      }
+    });
+  }
+
   private createOrReconnectPlayer(socket: WebSocket.WebSocket, playerId: string | null): Player {
     if (playerId && this.players.has(playerId)) {
       // Handle reconnection
       const existingPlayer = this.players.get(playerId)!;
-      // TODO: Handle the existing player's socket gracefully
+      // Disconnect existing socket if any
+      existingPlayer.disconnect();
       
       // Create new player with the existing ID
       const player = new Player(socket, this.eventBus, playerId);
       this.players.set(playerId, player);
+      
+      // If the player was in a table, reconnect them
+      const previousTable = existingPlayer.getTable();
+      if (previousTable) {
+        player.setTable(previousTable);
+      }
       
       this.eventBus.emit("playerReconnected", player);
       return player;

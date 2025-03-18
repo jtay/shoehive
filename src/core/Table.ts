@@ -16,6 +16,7 @@ export class Table {
   private state: TableState = TableState.WAITING;
   private readonly totalSeats: number;
   private readonly maxSeatsPerPlayer: number;
+  private attributes: Map<string, any> = new Map();
 
   constructor(
     eventBus: EventBus,
@@ -139,5 +140,17 @@ export class Table {
     for (const player of players) {
       player.sendMessage(message);
     }
+  }
+
+  public setAttribute(key: string, value: any): void {
+    this.attributes.set(key, value);
+  }
+
+  public getAttribute(key: string): any {
+    return this.attributes.get(key);
+  }
+
+  public hasAttribute(key: string): boolean {
+    return this.attributes.has(key);
   }
 } 
