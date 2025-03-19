@@ -21,6 +21,32 @@ Shoehive is an **extensible, WebSocket-based multiplayer game framework** design
 npm i shoehive
 ```
 
+## 🧪 Testing
+
+The framework includes comprehensive test suites to ensure reliability and correctness.
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run specific test file
+npx jest tests/events/EventBus.test.ts
+
+# Generate test coverage report
+npm test -- --coverage
+```
+
+### Test Structure
+
+- `tests/core/` - Tests for core components (Player, Table, etc.)
+- `tests/events/` - Tests for event handling and message routing
+- `tests/transport/` - Tests for transport modules
+- `tests/integration/` - Integration tests for component interactions
+
+To add new tests, follow the existing patterns in the test directories.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests into the `dev` branch.

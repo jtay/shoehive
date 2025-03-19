@@ -1,6 +1,6 @@
 import { EventBus } from "../events/EventBus";
 import { Player } from "./Player";
-import { v4 as uuidv4 } from "uuid";
+import crypto from "crypto";
 
 export enum TableState {
   WAITING = "waiting",
@@ -24,7 +24,7 @@ export class Table {
     maxSeatsPerPlayer: number,
     id?: string
   ) {
-    this.id = id || uuidv4();
+    this.id = id || crypto.randomUUID();
     this.eventBus = eventBus;
     this.totalSeats = totalSeats;
     this.maxSeatsPerPlayer = maxSeatsPerPlayer;

@@ -1,0 +1,67 @@
+name: Publish to npm
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - '!.github/workflows/publish.yml'
+
+jobs:
+  test-build-publish:
+    name: Test, Build, and Publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2  # We need at least 2 commits to compare versions
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18.x'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Check version change
+        id: check-version
+        run: |
+          # Get current package.json version
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current version: $CURRENT_VERSION"
+          
+          # Get package.json version from previous commit
+          git checkout HEAD~1 package.json
+          PREVIOUS_VERSION=$(node -p "require('./package.json').version")
+          echo "Previous version: $PREVIOUS_VERSION"
+          
+          # Restore current package.json
+          git checkout HEAD package.json
+          
+          # Compare versions
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version unchanged, will not publish"
+            echo "should_publish=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish to npm
+        if: steps.check-version.outputs.should_publish == 'true'
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} 
