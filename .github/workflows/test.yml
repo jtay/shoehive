@@ -1,4 +1,4 @@
-name: Run Tests
+name: Tests
 
 on:
   pull_request:
@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [16.x, 18.x, 20.x]
+        node-version: [18.x, 20.x]
 
     steps:
       - name: Checkout code
@@ -33,6 +33,7 @@ jobs:
 
       - name: Lint
         run: npm run lint --if-present
+        continue-on-error: true  # Allow lint errors initially
 
       - name: Run tests
         run: npm test

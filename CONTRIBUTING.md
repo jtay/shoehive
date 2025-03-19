@@ -18,6 +18,16 @@ Thank you for considering contributing to Shoehive! This document provides guide
 4. Build the project: `npm run build`
 5. Run tests: `npm test`
 
+### Node.js Version Requirements
+
+Shoehive requires Node.js 18.0.0 or later. This is specified in the `engines` field in package.json.
+
+If you're using nvm (Node Version Manager), you can switch to the appropriate version with:
+
+```bash
+nvm use 18
+```
+
 ## Code Style
 
 We use ESLint to enforce consistent code style. Our linting rules are defined in `.eslintrc.js`.

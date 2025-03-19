@@ -7,11 +7,11 @@ module.exports = {
   plugins: ['@typescript-eslint'],
   env: {
     node: true,
-    es6: true,
+    es2017: true,
     jest: true,
   },
   parserOptions: {
-    ecmaVersion: 2020,
+    ecmaVersion: 2019,
     sourceType: 'module',
   },
   rules: {
