@@ -4,4 +4,8 @@ dist
 # Ignore all files in the node_modules directory
 node_modules
 
+# Ignore all files in the test-results directory
+test-results
 
+# Ignore all files in the coverage directory
+coverage
