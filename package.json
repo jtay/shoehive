@@ -1,9 +1,21 @@
 {
   "name": "shoehive",
-  "version": "0.0.41",
+  "version": "0.1.0",
   "description": "WebSocket-based multiplayer game framework for real-time, event-driven gameplay",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "keywords": [
+    "websocket",
+    "real-time",
+    "casino",
+    "poker",
+    "blackjack",
+    "roulette",
+    "slot",
+    "game server",
+    "game framework",
+    "game development"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",

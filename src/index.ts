@@ -1,10 +1,11 @@
 import { Player } from "./core/Player";
 import { Table, TableState } from "./core/Table";
 import { TableFactory } from "./core/TableFactory";
-import { WebSocketManager, AuthProvider } from "./core/WebSocketManager";
+import { WebSocketManager } from "./core/WebSocketManager";
 import { EventBus } from "./events/EventBus";
 import { MessageRouter } from "./events/MessageRouter";
 import { GameManager, GameDefinition } from "./core/GameManager";
+import { AuthModule, ServerTransportModule, TransportModule } from "./transport";
 import * as http from "http";
 
 // Export all the classes
@@ -17,18 +18,23 @@ export {
   EventBus,
   MessageRouter,
   GameManager,
-  GameDefinition
+  GameDefinition,
+  // Export new transport modules
+  AuthModule,
+  ServerTransportModule,
+  TransportModule
 };
 
 export function createGameServer(
   server: http.Server,
-  authProvider?: AuthProvider
+  authModule?: AuthModule,
+  serverTransportModule?: ServerTransportModule
 ) {
   const eventBus = new EventBus();
   const messageRouter = new MessageRouter(eventBus);
   const tableFactory = new TableFactory(eventBus);
   const gameManager = new GameManager(eventBus, tableFactory);
-  const wsManager = new WebSocketManager(server, eventBus, messageRouter, gameManager, authProvider);
+  const wsManager = new WebSocketManager(server, eventBus, messageRouter, gameManager, authModule);
   
   // Register default message handlers
   messageRouter.registerCommandHandler("joinTable", (player, data) => {
@@ -79,6 +85,11 @@ export function createGameServer(
     messageRouter,
     tableFactory,
     gameManager,
-    wsManager
+    wsManager,
+    // Add transport modules to the returned object
+    transport: {
+      auth: authModule,
+      server: serverTransportModule
+    }
   };
 } 

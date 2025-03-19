@@ -4,10 +4,7 @@ import { EventBus } from "../events/EventBus";
 import { MessageRouter } from "../events/MessageRouter";
 import { Player } from "./Player";
 import { GameManager } from "./GameManager";
-
-export interface AuthProvider {
-  authenticatePlayer(request: http.IncomingMessage): Promise<string | null>;
-}
+import { AuthModule } from "../transport/AuthModule";
 
 export class WebSocketManager {
   private wss: WebSocket.Server;
@@ -15,20 +12,20 @@ export class WebSocketManager {
   private messageRouter: MessageRouter;
   private gameManager: GameManager;
   private players: Map<string, Player> = new Map();
-  private authProvider?: AuthProvider;
+  private authModule?: AuthModule;
 
   constructor(
     server: http.Server,
     eventBus: EventBus,
     messageRouter: MessageRouter,
     gameManager: GameManager,
-    authProvider?: AuthProvider
+    authModule?: AuthModule
   ) {
     this.wss = new WebSocket.Server({ server });
     this.eventBus = eventBus;
     this.messageRouter = messageRouter;
     this.gameManager = gameManager;
-    this.authProvider = authProvider;
+    this.authModule = authModule;
     
     this.setupConnectionHandler();
     this.setupEventListeners();
@@ -40,8 +37,8 @@ export class WebSocketManager {
         // Authenticate the connection if an auth provider is available
         let playerId: string | null = null;
         
-        if (this.authProvider) {
-          playerId = await this.authProvider.authenticatePlayer(request);
+        if (this.authModule) {
+          playerId = await this.authModule.authenticatePlayer(request);
           
           if (!playerId) {
             socket.close(1008, "Authentication failed");
