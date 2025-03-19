@@ -31,12 +31,108 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install jq for JSON processing
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
       - name: Lint
         run: npm run lint --if-present
         continue-on-error: true  # Allow lint errors initially
 
       - name: Run tests
-        run: npm test
+        id: test
+        run: |
+          # Create a directory for test outputs
+          mkdir -p test-results
+          # Run tests and save results
+          npx jest --json --outputFile=test-results/jest-results.json || true
+          # Also run with coverage for the report
+          npx jest --coverage
+
+      - name: Process test results
+        id: process-results
+        if: always()
+        run: |
+          echo "### Test Results for Node.js ${{ matrix.node-version }} 🧪" > test-results/comment.md
+          echo "" >> test-results/comment.md
+          
+          if [ -f test-results/jest-results.json ]; then
+            # Extract test results
+            TOTAL=$(jq '.numTotalTests' test-results/jest-results.json)
+            PASSED=$(jq '.numPassedTests' test-results/jest-results.json)
+            FAILED=$(jq '.numFailedTests' test-results/jest-results.json)
+            
+            # Format a nice table
+            echo "| Status | Total | Passed ✅ | Failed ❌ |" >> test-results/comment.md
+            echo "| ------ | ----- | --------- | --------- |" >> test-results/comment.md
+            
+            if [ "$FAILED" -eq "0" ]; then
+              echo "| ✅ Passed | $TOTAL | $PASSED | $FAILED |" >> test-results/comment.md
+            else
+              echo "| ❌ Failed | $TOTAL | $PASSED | $FAILED |" >> test-results/comment.md
+              
+              # Add failed tests details
+              echo "" >> test-results/comment.md
+              echo "#### Failed Tests" >> test-results/comment.md
+              echo "" >> test-results/comment.md
+              
+              # Extract and format failed tests
+              jq -r '.testResults[].assertionResults[] | select(.status=="failed") | "- ❌ **" + .ancestorTitles[0] + "**: " + .title' test-results/jest-results.json >> test-results/comment.md
+            fi
+            
+            # Add coverage summary if available
+            if [ -f coverage/coverage-summary.json ]; then
+              echo "" >> test-results/comment.md
+              echo "#### Coverage Summary" >> test-results/comment.md
+              echo "" >> test-results/comment.md
+              
+              LINES=$(jq -r '.total.lines.pct' coverage/coverage-summary.json)
+              STATEMENTS=$(jq -r '.total.statements.pct' coverage/coverage-summary.json)
+              FUNCTIONS=$(jq -r '.total.functions.pct' coverage/coverage-summary.json)
+              BRANCHES=$(jq -r '.total.branches.pct' coverage/coverage-summary.json)
+              
+              echo "| Lines | Statements | Functions | Branches |" >> test-results/comment.md
+              echo "| ----- | ---------- | --------- | -------- |" >> test-results/comment.md
+              echo "| $LINES% | $STATEMENTS% | $FUNCTIONS% | $BRANCHES% |" >> test-results/comment.md
+            fi
+          else
+            echo "❌ **Tests failed to run or produce results**" >> test-results/comment.md
+          fi
+          
+          cat test-results/comment.md
+
+      - name: Post comment on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const commentBody = fs.readFileSync('test-results/comment.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            });
+
+      - name: Post comment on commit
+        if: github.event_name == 'push' && always()
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const commentBody = fs.readFileSync('test-results/comment.md', 'utf8');
+            
+            github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: commentBody
+            });
 
       - name: Build
         run: npm run build 
