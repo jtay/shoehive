@@ -241,6 +241,5 @@ server.listen(3000, () => {
 
 ## Next Steps
 
-- Explore the [API Documentation](./api-reference.md) for detailed method descriptions
-- Check out the [Example Projects](../examples/) for complete implementations
-- Learn about [Custom Player Attributes](./player-attributes.md) to store additional player data 
+- Explore the [API Documentation](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md) for detailed method descriptions
+- Learn about [Custom Player Attributes](https://github.com/jtay/shoehive/tree/main/docs/player-attributes.md) to store additional player data 

@@ -439,6 +439,6 @@ if (pokerState && !pokerState.hasFolded) {
 
 ## Related Topics
 
-- [Transport Modules](./transport-modules.md)
-- [Creating Custom Games](./creating-games.md)
-- [API Reference](./api-reference.md) 
+- [Transport Modules](https://github.com/jtay/shoehive/tree/main/docs/transport-modules.md)
+- [Creating Custom Games](https://github.com/jtay/shoehive/tree/main/docs/creating-games.md)
+- [API Reference](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md) 

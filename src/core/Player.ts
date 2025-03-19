@@ -1,7 +1,7 @@
 import { EventBus } from "../events/EventBus";
 import { Table } from "./Table";
-import { v4 as uuidv4 } from "uuid";
 import * as WebSocket from "ws";
+import crypto from "crypto";
 
 export class Player {
   public readonly id: string;
@@ -11,7 +11,7 @@ export class Player {
   private attributes: Map<string, any> = new Map();
 
   constructor(socket: WebSocket.WebSocket, eventBus: EventBus, id?: string) {
-    this.id = id || uuidv4();
+    this.id = id || crypto.randomUUID();
     this.socket = socket;
     this.eventBus = eventBus;
     this.setupSocketListeners();

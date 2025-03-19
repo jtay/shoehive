@@ -321,5 +321,5 @@ You can register additional commands for your specific game logic.
 
 For implementation examples, please refer to:
 
-- [Transport Modules Implementation](./transport-modules.md)
-- [Creating Custom Game Logic](./creating-games.md) 
+- [Transport Modules Implementation](https://github.com/jtay/shoehive/tree/main/docs/transport-modules.md)
+- [Creating Custom Game Logic](https://github.com/jtay/shoehive/tree/main/docs/creating-games.md) 

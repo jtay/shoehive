@@ -2,7 +2,8 @@
 
 Shoehive is an **extensible, WebSocket-based multiplayer game framework** designed for real-time, event-driven gameplay. It provides a powerful **player management system, message routing, and structured table handling**, allowing developers to build their own game logic while leveraging a robust core.
 
-# [**⚡️ Quick Start Guide**](./docs/quick-start.md) &nbsp; | &nbsp; [**📖 Docs**](./docs/README.md)  &nbsp; | &nbsp; [**🔍 API Reference**](./docs/api-reference.md)
+### [**🐙 GitHub**](https://github.com/jtay/shoehive) &nbsp; | &nbsp; [**📦 Releases**](https://github.com/jtay/shoehive/releases)
+### [**⚡️ Quick Start Guide**](https://github.com/jtay/shoehive/tree/main/docs/quick-start.md) &nbsp; | &nbsp; [**📖 Docs**](https://github.com/jtay/shoehive/tree/main/docs/README.md)  &nbsp; | &nbsp; [**🔍 API Reference**](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md)
 
 ## 🚀 Features
 

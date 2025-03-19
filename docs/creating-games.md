@@ -741,5 +741,5 @@ When creating games with Shoehive, keep these best practices in mind:
 10. **Performance**: Be mindful of message sizes and frequency
 
 ## Next Steps
-- Learn about [using Transport Modules](./transport-modules.md) for authentication and transactions
-- Explore [Advanced Event Patterns](./advanced-events.md) for complex games 
+- Learn about [using Transport Modules](https://github.com/jtay/shoehive/tree/main/docs/transport-modules.md) for authentication and transactions
+- Explore [Advanced Event Patterns](https://github.com/jtay/shoehive/tree/main/docs/advanced-events.md) for complex games 

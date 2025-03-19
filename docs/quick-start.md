@@ -4,13 +4,13 @@ Welcome to Shoehive, the flexible WebSocket-based multiplayer game framework. Th
 
 ## 📋 Table of Contents
 
-1. [Installation](#installation)
-2. [Basic Setup](#basic-setup)
-3. [Understanding Core Concepts](#understanding-core-concepts)
-4. [Using Transport Modules](#using-transport-modules)
-5. [Creating Game Logic](#creating-game-logic)
-6. [Event Handling](#event-handling)
-7. [Common Patterns](#common-patterns)
+1. [Installation](#-installation)
+2. [Basic Setup](#-basic-setup)
+3. [Understanding Core Concepts](#-understanding-core-concepts)
+4. [Using Transport Modules](#-using-transport-modules)
+5. [Creating Game Logic](#-creating-game-logic)
+6. [Event Handling](#-event-handling)
+7. [Common Patterns](#-common-patterns)
 
 ## 🛠️ Installation
 
@@ -115,6 +115,40 @@ gameServer.messageRouter.registerCommandHandler('makeMove', (player, data) => {
 gameServer.eventBus.on('playerSeated', (player, table, seatIndex) => {
   console.log(`Player ${player.id} sat at seat ${seatIndex} in table ${table.id}`);
 });
+```
+
+## 📐 Implementation Diagram
+
+Shoehive is designed to be modular and extensible. The following diagram shows the core components and their relationships when using the base implementations:
+
+```mermaid
+flowchart TD
+ subgraph GameServer["<b>Implementation of Shoehive</b>"]
+        GamePackage["User"]
+        YourCode["Game Package"]
+  end
+ subgraph GameModules["<b>Game Modules</b>"]
+        GameActions["Game Actions"]
+        GameRules["Game Rules"]
+        GamePhases["Game Phases"]
+        ServerActions["Server Actions"]
+  end
+ subgraph TransportModule["<b>Transport Modules</b>"]
+        AuthModule["Authentication Module"]
+        ServerTransportModule["ServerTransportModule"]
+  end
+ subgraph YourCode["<b>Your Code</b>"]
+        GameModules
+        TransportModule
+  end
+ subgraph GamePackage["<b>Game Package</b>"]
+        WebsocketServer["WebSocket Server"]
+        GameState["Game State Management"]
+        CommandHandling["Command Handling"]
+        LobbyState["Lobby State"]
+  end
+    GameModules --> GamePackage
+    TransportModule --> GamePackage
 ```
 
 ## 🔌 Using Transport Modules
@@ -381,10 +415,10 @@ gameServer.eventBus.on('playerReconnected', (player) => {
 ```
 
 ## 🔗 Additional Resources
-- [Advanced Events](./advanced-events.md)
-- [Transport Modules](./transport-modules.md)
-- [Creating Custom Games](./creating-games.md)
-- [Player Attributes](./player-attributes.md)
-- [API Documentation](./api-reference.md)
+- [Advanced Events](https://github.com/jtay/shoehive/tree/main/docs/advanced-events.md)
+- [Transport Modules](https://github.com/jtay/shoehive/tree/main/docs/transport-modules.md)
+- [Creating Custom Games](https://github.com/jtay/shoehive/tree/main/docs/creating-games.md)
+- [Player Attributes](https://github.com/jtay/shoehive/tree/main/docs/player-attributes.md)
+- [API Documentation](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md)
 
 Happy gaming with Shoehive! 🎮 
