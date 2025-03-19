@@ -10,6 +10,12 @@ on:
       - '.github/**'
       - '!.github/workflows/test.yml'
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  checks: write
+
 jobs:
   test:
     name: Test
@@ -103,36 +109,65 @@ jobs:
           cat test-results/comment.md
 
       - name: Post comment on PR
+        id: pr-comment
         if: github.event_name == 'pull_request' && always()
+        continue-on-error: true
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            const commentBody = fs.readFileSync('test-results/comment.md', 'utf8');
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: commentBody
-            });
+            try {
+              const fs = require('fs');
+              const commentBody = fs.readFileSync('test-results/comment.md', 'utf8');
+              
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: commentBody
+              });
+              console.log('Comment posted successfully on PR');
+              return true;
+            } catch (error) {
+              console.error('Error posting comment:', error.message);
+              return false;
+            }
 
       - name: Post comment on commit
+        id: commit-comment
         if: github.event_name == 'push' && always()
+        continue-on-error: true
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            const commentBody = fs.readFileSync('test-results/comment.md', 'utf8');
-            
-            github.rest.repos.createCommitComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: context.sha,
-              body: commentBody
-            });
+            try {
+              const fs = require('fs');
+              const commentBody = fs.readFileSync('test-results/comment.md', 'utf8');
+              
+              await github.rest.repos.createCommitComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+                body: commentBody
+              });
+              console.log('Comment posted successfully on commit');
+              return true;
+            } catch (error) {
+              console.error('Error posting comment:', error.message);
+              return false;
+            }
+
+      # Upload test results as artifacts (especially useful if comments couldn't be posted)
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-node-${{ matrix.node-version }}
+          path: |
+            test-results/
+            coverage/
+          retention-days: 7
 
       - name: Build
         run: npm run build 

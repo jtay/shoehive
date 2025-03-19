@@ -9,6 +9,12 @@ on:
       - '.github/**'
       - '!.github/workflows/publish.yml'
 
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: write
+
 jobs:
   test-build-publish:
     name: Test, Build, and Publish
@@ -102,20 +108,40 @@ jobs:
           cat test-results/comment.md
 
       - name: Post comment on commit
+        id: commit-comment
         if: always()
+        continue-on-error: true
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            const commentBody = fs.readFileSync('test-results/comment.md', 'utf8');
-            
-            github.rest.repos.createCommitComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: context.sha,
-              body: commentBody
-            });
+            try {
+              const fs = require('fs');
+              const commentBody = fs.readFileSync('test-results/comment.md', 'utf8');
+              
+              await github.rest.repos.createCommitComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+                body: commentBody
+              });
+              console.log('Comment posted successfully on commit');
+              return true;
+            } catch (error) {
+              console.error('Error posting comment:', error.message);
+              return false;
+            }
+      
+      # Upload test results as artifacts
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: publish-test-results
+          path: |
+            test-results/
+            coverage/
+          retention-days: 7
 
       - name: Build
         run: npm run build
@@ -154,15 +180,23 @@ jobs:
           
       - name: Add publish result comment
         if: steps.check-version.outputs.should_publish == 'true'
+        continue-on-error: true
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            github.rest.repos.createCommitComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: context.sha,
-              body: `### 📦 Published to npm\n\nVersion \`${process.env.CURRENT_VERSION}\` has been successfully published to npm.`
-            });
+            try {
+              await github.rest.repos.createCommitComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+                body: `### 📦 Published to npm\n\nVersion \`${process.env.CURRENT_VERSION}\` has been successfully published to npm.`
+              });
+              console.log('Publish notification posted successfully');
+              return true;
+            } catch (error) {
+              console.error('Error posting publish notification:', error.message);
+              return false;
+            }
         env:
           CURRENT_VERSION: ${{ steps.check-version.outputs.current_version }} 
