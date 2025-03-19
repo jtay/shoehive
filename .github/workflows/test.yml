@@ -158,16 +158,5 @@ jobs:
               return false;
             }
 
-      # Upload test results as artifacts (especially useful if comments couldn't be posted)
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v2
-        with:
-          name: test-results-node-${{ matrix.node-version }}
-          path: |
-            test-results/
-            coverage/
-          retention-days: 7
-
       - name: Build
         run: npm run build 

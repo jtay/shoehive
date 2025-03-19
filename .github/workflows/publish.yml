@@ -131,17 +131,6 @@ jobs:
               console.error('Error posting comment:', error.message);
               return false;
             }
-      
-      # Upload test results as artifacts
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v2
-        with:
-          name: publish-test-results
-          path: |
-            test-results/
-            coverage/
-          retention-days: 7
 
       - name: Build
         run: npm run build
