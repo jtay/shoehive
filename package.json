@@ -1,9 +1,12 @@
 {
   "name": "shoehive",
-  "version": "0.2.0",
+  "version": "0.2.3",
   "description": "WebSocket-based multiplayer game framework for real-time, event-driven gameplay",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "keywords": [
     "websocket",
     "real-time",
@@ -35,6 +38,8 @@
     "@types/node": "^20.4.5",
     "@types/uuid": "^9.0.2",
     "@types/ws": "^8.5.5",
+    "@typescript-eslint/eslint-plugin": "^5.62.0",
+    "@typescript-eslint/parser": "^5.62.0",
     "eslint": "^8.45.0",
     "jest": "^29.6.2",
     "ts-jest": "^29.1.1",

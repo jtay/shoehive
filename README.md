@@ -2,8 +2,8 @@
 
 Shoehive is an **extensible, WebSocket-based multiplayer game framework** designed for real-time, event-driven gameplay. It provides a powerful **player management system, message routing, and structured table handling**, allowing developers to build their own game logic while leveraging a robust core.
 
-### [**🐙 GitHub**](https://github.com/jtay/shoehive) &nbsp; | &nbsp; [**📦 Releases**](https://github.com/jtay/shoehive/releases)
-### [**⚡️ Quick Start Guide**](https://github.com/jtay/shoehive/tree/main/docs/quick-start.md) &nbsp; | &nbsp; [**📖 Docs**](https://github.com/jtay/shoehive/tree/main/docs/README.md)  &nbsp; | &nbsp; [**🔍 API Reference**](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md)
+[![Run Tests](https://github.com/jtay/shoehive/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/jtay/shoehive/actions/workflows/test.yml) [![Publish to npm](https://github.com/jtay/shoehive/actions/workflows/publish.yml/badge.svg)](https://github.com/jtay/shoehive/actions/workflows/publish.yml)
+#### [**🐙 GitHub**](https://github.com/jtay/shoehive) &nbsp; | &nbsp; [**📦 Releases**](https://github.com/jtay/shoehive/releases) &nbsp; | &nbsp; [**⚡️ Quick Start Guide**](https://github.com/jtay/shoehive/tree/main/docs/quick-start.md) &nbsp; | &nbsp; [**📖 Docs**](https://github.com/jtay/shoehive/tree/main/docs/README.md) &nbsp; | &nbsp; [**🔍 API Reference**](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md) &nbsp; | &nbsp; [**🤝 Contributing**](https://github.com/jtay/shoehive/tree/main/CONTRIBUTING.md)
 
 ## 🚀 Features
 
@@ -46,10 +46,6 @@ npm test -- --coverage
 - `tests/integration/` - Integration tests for component interactions
 
 To add new tests, follow the existing patterns in the test directories.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit issues and pull requests into the `dev` branch.
 
 ## 📄 License
 
