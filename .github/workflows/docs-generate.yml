@@ -41,9 +41,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           # Add all generated API documentation
-          git add docs/pages/api/reference.md
-          git add docs/pages/api/index.md
-          git add docs/pages/api/generated/index.md
+          git add .
           # Don't add other generated files as they're in .gitignore
           git commit -m "Update API documentation" || echo "No changes to commit"
           git push 
