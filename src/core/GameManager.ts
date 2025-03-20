@@ -127,6 +127,11 @@ export class GameManager {
       table.setAttribute("options", options);
     }
 
+    // Call the setupTable function if provided in game definition options
+    if (gameDefinition.options?.setupTable && typeof gameDefinition.options.setupTable === 'function') {
+      gameDefinition.options.setupTable(table);
+    }
+
     return table;
   }
 
