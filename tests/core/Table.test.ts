@@ -203,11 +203,11 @@ describe('Table', () => {
     
     table.setState(TableState.ACTIVE);
     expect(table.getState()).toBe(TableState.ACTIVE);
-    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.STATE_CHANGED, table, TableState.ACTIVE);
+    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.STATE_UPDATED, table, TableState.ACTIVE);
     
     table.setState(TableState.ENDED);
     expect(table.getState()).toBe(TableState.ENDED);
-    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.STATE_CHANGED, table, TableState.ENDED);
+    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.STATE_UPDATED, table, TableState.ENDED);
   });
   
   test('should broadcast message to all players', () => {

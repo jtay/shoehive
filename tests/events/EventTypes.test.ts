@@ -17,6 +17,8 @@ describe('EventTypes', () => {
       CONNECTED: "player:connected",
       DISCONNECTED: "player:disconnected",
       RECONNECTED: "player:reconnected",
+      ATTRIBUTE_CHANGED: "player:attribute:changed",
+      ATTRIBUTES_CHANGED: "player:attributes:changed",
       AUTHENTICATION_FAILED: "player:authentication:failed",
       AUTHENTICATION_SUCCEEDED: "player:authentication:succeeded"
     });
@@ -25,7 +27,9 @@ describe('EventTypes', () => {
   test('TABLE_EVENTS should have all expected event names', () => {
     expect(TABLE_EVENTS).toHaveProperty('CREATED', 'table:created');
     expect(TABLE_EVENTS).toHaveProperty('EMPTY', 'table:empty');
-    expect(TABLE_EVENTS).toHaveProperty('STATE_CHANGED', 'table:state:changed');
+    expect(TABLE_EVENTS).toHaveProperty('STATE_UPDATED', 'table:state:updated');
+    expect(TABLE_EVENTS).toHaveProperty('ATTRIBUTE_CHANGED', 'table:attribute:changed');
+    expect(TABLE_EVENTS).toHaveProperty('ATTRIBUTES_CHANGED', 'table:attributes:changed');
     expect(TABLE_EVENTS).toHaveProperty('PLAYER_JOINED', 'table:player:joined');
     expect(TABLE_EVENTS).toHaveProperty('PLAYER_LEFT', 'table:player:left');
     expect(TABLE_EVENTS).toHaveProperty('PLAYER_SAT', 'table:player:sat');

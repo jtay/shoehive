@@ -29,6 +29,8 @@ export const PLAYER_EVENTS = {
   CONNECTED: "player:connected",
   DISCONNECTED: "player:disconnected",
   RECONNECTED: "player:reconnected",
+  ATTRIBUTE_CHANGED: "player:attribute:changed",
+  ATTRIBUTES_CHANGED: "player:attributes:changed",
   AUTHENTICATION_FAILED: "player:authentication:failed",
   AUTHENTICATION_SUCCEEDED: "player:authentication:succeeded"
 } as const;
@@ -37,7 +39,9 @@ export const PLAYER_EVENTS = {
 export const TABLE_EVENTS = {
   CREATED: "table:created",
   EMPTY: "table:empty",
-  STATE_CHANGED: "table:state:changed",
+  STATE_UPDATED: "table:state:updated",
+  ATTRIBUTE_CHANGED: "table:attribute:changed",
+  ATTRIBUTES_CHANGED: "table:attributes:changed",
   
   // Player-related table events
   PLAYER_JOINED: "table:player:joined",

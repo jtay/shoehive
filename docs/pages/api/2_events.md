@@ -32,8 +32,7 @@ Events related to the game lobby.
 
 | Event | Description | Payload |
 |-------|-------------|---------|
-| `lobby:state` | Emitted when the lobby state changes | Object containing available games and tables |
-| `lobby:state:changed` | Emitted to broadcast lobby updates to all players | Object containing lobby state |
+| `lobby:state` | Emitted when the lobby state changes or updates | Object containing available games and tables |
 
 ## Table Events
 
@@ -43,7 +42,7 @@ Events related to table management and state changes.
 |-------|-------------|---------|
 | `table:created` | Emitted when a new table is created | Table object |
 | `table:empty` | Emitted when a table has no players left | Table object |
-| `table:state:changed` | Emitted when a table's state changes | Table object, new state |
+| `table:state:updated` | Emitted when a table's state changes or is updated | Table object, table state |
 
 ### Table Player Events
 
@@ -93,13 +92,29 @@ eventBus.on('player:connected', (player) => {
 });
 
 // Listen for table state changes
-eventBus.on('table:state:changed', (table, newState) => {
-  console.log(`Table ${table.id} changed state to ${newState}`);
+eventBus.on('table:state:updated', (table, tableState) => {
+  console.log(`Table ${table.id} state updated to:`, tableState);
 });
 
 // Listen for card deals
 eventBus.on('table:card:dealt', (table, seatIndex, card, handId) => {
   console.log(`Dealt ${card.toString()} to seat ${seatIndex}, hand ${handId}`);
+});
+
+// Event pattern usage examples
+eventBus.on('player:connected', (player) => {
+  console.log(`Player ${player.id} connected`);
+});
+
+eventBus.on('table:state:updated', (table, tableState) => {
+  console.log(`Table ${table.id} state updated to:`, tableState);
+});
+
+// Using constant references
+import { TABLE_EVENTS } from 'shoehive';
+
+eventBus.on(TABLE_EVENTS.STATE_UPDATED, (table, tableState) => {
+  console.log(`Table ${table.id} state updated to:`, tableState);
 });
 ```
 

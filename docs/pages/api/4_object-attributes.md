@@ -33,14 +33,101 @@ component.getAttribute(key: string): any;
 
 // Checking if an attribute exists
 component.hasAttribute(key: string): boolean;
+
+// Removing an attribute
+component.removeAttribute(key: string): void;
+
+// Setting multiple attributes at once
+component.setAttributes(attributes: Record<string, any>): void;
+
+// Getting all attributes as a Record object
+component.getAttributes(): Record<string, any>;
 ```
 
-Players also have an additional method:
+## Configurable Player Attribute Relevance
+
+When a player's attributes change, the game server needs to decide whether to broadcast these changes to other components. The Shoehive framework allows game developers to configure which player attributes are relevant for table state updates and which are relevant for lobby updates.
+
+### Configuring Relevant Attributes
+
+When registering a game definition, you can specify which player attributes should trigger updates:
 
 ```typescript
-// Get all attributes as a Record object
-player.getAttributes(): Record<string, any>;
+gameManager.registerGame({
+  id: 'your-game',
+  name: 'Your Game',
+  // ... other game properties ...
+  
+  // Define which player attributes should trigger a table state update when changed
+  tableRelevantPlayerAttributes: ['name', 'chips', 'isReady', 'score'],
+  
+  // Define which player attributes should trigger a lobby update when changed
+  lobbyRelevantPlayerAttributes: ['name', 'status', 'isOnline']
+});
 ```
+
+### How It Works
+
+1. **Table Relevance**: When a player's attribute changes and that player is seated at a table, the system checks if the attribute is in the `tableRelevantPlayerAttributes` list. If it is, the table state is broadcast to all players at the table.
+
+2. **Lobby Relevance**: When a player's attribute changes and that attribute is in the `lobbyRelevantPlayerAttributes` list, the lobby state is updated and broadcast to all connected players.
+
+### Default Values
+
+If you don't specify these attributes, the system uses sensible defaults:
+
+- **Default Table-Relevant Attributes**: `["name", "avatar", "chips", "status", "isReady", "role", "team"]`
+- **Default Lobby-Relevant Attributes**: `["name", "avatar", "isReady", "status"]`
+
+### Performance Benefits
+
+This configuration allows you to optimize the server's performance by reducing unnecessary broadcasts. For example, if a player's internal game state changes but doesn't need to be displayed to other players, you can exclude those attributes from the relevant lists.
+
+### Practical Example
+
+Consider a card game where players have the following attributes:
+
+- `name`: Player's display name
+- `avatar`: Player's profile image
+- `cards`: Player's cards in their hand (private)
+- `points`: Player's score (visible to all)
+- `strategy`: Player's internal strategy tracking (private)
+- `isReady`: Player's ready status
+
+#### Optimized Configuration:
+
+```typescript
+gameManager.registerGame({
+  id: 'card-game',
+  name: 'Strategic Card Game',
+  // ... other properties ...
+  
+  // Only broadcast attributes that affect the visual state of the table
+  tableRelevantPlayerAttributes: ['name', 'avatar', 'points', 'isReady'],
+  
+  // Only show essential player info in the lobby
+  lobbyRelevantPlayerAttributes: ['name', 'isReady']
+});
+
+// Later in your game logic:
+
+// This will trigger a table state update because 'points' is table-relevant
+player.setAttribute('points', 100);
+
+// This will NOT trigger a table state update because 'strategy' is not table-relevant
+player.setAttribute('strategy', 'defensive');
+
+// This will NOT trigger a table state update because 'cards' is not table-relevant
+player.setAttribute('cards', ['A♠', 'K♥', 'Q♦']);
+
+// This will trigger both table and lobby updates because 'isReady' is in both lists
+player.setAttribute('isReady', true);
+```
+
+This configuration ensures that:
+1. Private information like cards and strategy never leak to other players
+2. Network traffic is minimized by only broadcasting necessary changes
+3. The server avoids unnecessary state calculations and broadcasts
 
 ## Basic Usage
 
