@@ -112,7 +112,7 @@ jobs:
         id: pr-comment
         if: github.event_name == 'pull_request' && always()
         continue-on-error: true
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -137,7 +137,7 @@ jobs:
         id: commit-comment
         if: github.event_name == 'push' && always()
         continue-on-error: true
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
