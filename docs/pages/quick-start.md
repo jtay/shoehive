@@ -1,22 +1,29 @@
+---
+layout: default
+title: Quick Start
+permalink: /quick-start
+nav_order: 2
+---
+
 # 🐝 Shoehive Quick Start Guide
 
 Welcome to Shoehive, the flexible WebSocket-based multiplayer game framework. This quick start guide will help you set up your first Shoehive game server and understand the core concepts.
 
-## 📋 Table of Contents
+## Table of Contents
 
-1. [Installation](#-installation)
-2. [Basic Server Setup](#-basic-server-setup)
-3. [Core Concepts Overview](#-core-concepts-overview)
-4. [Event System](#-event-system)
-5. [Creating a Simple Game](#-creating-a-simple-game)
-6. [Card Game Functionality](#-card-game-functionality)
-7. [Player Authentication](#-player-authentication)
-8. [Financial Operations](#-financial-operations)
-9. [Advanced Patterns](#-advanced-patterns)
-10. [Debugging and Monitoring](#-debugging-and-monitoring)
-11. [Additional Resources](#-additional-resources)
+1. [Installation](#installation)
+2. [Basic Server Setup](#basic-server-setup)
+3. [Core Concepts Overview](#core-concepts-overview)
+4. [Event System](#event-system)
+5. [Creating a Simple Game](#creating-a-simple-game)
+6. [Card Game Functionality](#card-game-functionality)
+7. [Player Authentication](#player-authentication)
+8. [Financial Operations](#financial-operations)
+9. [Advanced Patterns](#advanced-patterns)
+10. [Debugging and Monitoring](#debugging-and-monitoring)
+11. [Additional Resources](#additional-resources)
 
-## 🛠️ Installation
+## Installation
 
 Install Shoehive using npm:
 
@@ -30,7 +37,7 @@ Or using yarn:
 yarn add shoehive
 ```
 
-## 🚀 Basic Server Setup
+## Basic Server Setup
 
 Here's a minimal example to set up a Shoehive game server:
 
@@ -64,7 +71,7 @@ const {
 } = gameServer;
 ```
 
-## 🧩 Core Concepts Overview
+## Core Concepts Overview
 
 Shoehive is built around several core concepts:
 
@@ -148,7 +155,7 @@ messageRouter.registerCommandHandler('makeMove', (player, data) => {
 });
 ```
 
-## 📢 Event System
+## Event System
 
 Shoehive uses an event-driven architecture with predefined event constants for type safety and consistency.
 
@@ -223,7 +230,7 @@ Shoehive provides several event categories:
 - `GAME_EVENTS.TURN_STARTED` - When a player's turn starts
 - `GAME_EVENTS.TURN_ENDED` - When a player's turn ends
 
-## 🎲 Creating a Simple Game
+## Creating a Simple Game
 
 Let's create a simple number guessing game:
 
@@ -372,7 +379,7 @@ server.listen(3000, () => {
 });
 ```
 
-## 🃏 Card Game Functionality
+## Card Game Functionality
 
 Shoehive includes built-in support for card games:
 
@@ -465,7 +472,7 @@ function dealInitialCards(table) {
 }
 ```
 
-## 🔐 Player Authentication
+## Player Authentication
 
 Shoehive provides a flexible authentication system through the `AuthModule` interface:
 
@@ -519,7 +526,7 @@ gameServer.eventBus.on(PLAYER_EVENTS.AUTHENTICATION_SUCCEEDED, (playerId, reques
 });
 ```
 
-## 💰 Financial Operations
+## Financial Operations
 
 The `ServerTransportModule` handles financial operations:
 
@@ -635,7 +642,7 @@ async function placeBet(player: Player, betAmount: number) {
 }
 ```
 
-## 🧠 Advanced Patterns
+## Advanced Patterns
 
 ### Game State Management
 
@@ -727,7 +734,7 @@ function getPlayerSeatIndex(table: Table, player: Player): number {
 }
 ```
 
-## 🔍 Debugging and Monitoring
+## Debugging and Monitoring
 
 Shoehive provides built-in debugging tools for event monitoring:
 
@@ -802,12 +809,11 @@ eventBus.on(GAME_EVENTS.STARTED, (table) => {
 });
 ```
 
-## 🔗 Additional Resources
+## Additional Resources
 
-- [API Reference](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md)
-- [Creating Games Guide](https://github.com/jtay/shoehive/tree/main/docs/creating-games.md)
-- [Advanced Events](https://github.com/jtay/shoehive/tree/main/docs/advanced-events.md)
-- [Transport Modules](https://github.com/jtay/shoehive/tree/main/docs/transport-modules.md)
-- [Player Attributes](https://github.com/jtay/shoehive/tree/main/docs/player-attributes.md)
-
-Happy gaming with Shoehive! 🎮 
+- [API Reference](/api/reference)
+- [Creating Games Guide](/guides/creating-games)
+- [Custom Events](/api/custom-events)
+- [Transport Modules](/api/transport-modules)
+- [Object Attributes](/api/object-attributes)
+- [Build a Tic Tac Toe Game](/guides/tic-tac-toe)

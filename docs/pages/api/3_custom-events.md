@@ -1,3 +1,11 @@
+---
+layout: default
+title: Custom Events
+permalink: /api/custom-events
+parent: API
+nav_order: 3
+---
+
 # Extending the Shoehive Event System
 
 This guide explains how to extend the Shoehive event system with your own custom events for your specific game implementations.

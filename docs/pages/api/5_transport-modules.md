@@ -1,3 +1,11 @@
+---
+layout: default
+title: Transport Modules
+permalink: /api/transport-modules
+parent: API
+nav_order: 5
+---
+
 # Transport Modules in Shoehive
 
 Transport Modules provide interfaces for external communication in your Shoehive games. This document provides a detailed explanation of Transport Modules and how to implement them.
@@ -241,14 +249,5 @@ server.listen(3000, () => {
 
 ## Next Steps
 
-- Explore the [API Documentation](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md) for detailed method descriptions
-- Learn about [Custom Player Attributes](https://github.com/jtay/shoehive/tree/main/docs/player-attributes.md) to store additional player data 
-
-// Listen for authentication events
-gameServer.eventBus.on('player:authentication:failed', (requestData, reason) => {
-  console.warn(`Authentication failed: ${reason}`, requestData);
-});
-
-gameServer.eventBus.on('player:authentication:succeeded', (playerId, requestData) => {
-  console.log(`Player ${playerId} authenticated successfully`);
-}); 
+- Explore the [API Documentation](/api/reference) for detailed method descriptions
+- Learn about [Object Attributes](/api/object-attributes) to store additional player data 

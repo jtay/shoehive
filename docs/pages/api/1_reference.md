@@ -1,3 +1,11 @@
+---
+layout: default
+title: API Reference
+parent: API
+permalink: /api/reference
+nav_order: 1
+---
+
 # 📘 Shoehive API Reference
 
 This document provides a comprehensive reference of the main classes and methods available in the Shoehive framework.
