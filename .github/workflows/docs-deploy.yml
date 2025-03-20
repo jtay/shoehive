@@ -1,5 +1,5 @@
-# Workflow for building and deploying Jekyll site to GitHub Pages
-name: Docs Deploy
+# Workflow for building and deploying documentation to GitHub Pages
+name: Documentation CI/CD
 
 on:
   # Runs on pushes targeting the default branch
@@ -10,6 +10,7 @@ on:
       - 'src/**'  # Also trigger on source code changes
       - 'typedoc.json'
       - '.github/workflows/docs-deploy.yml'
+      - 'docs/generate-api-docs.js'
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -45,6 +46,7 @@ jobs:
       
       - name: Generate API documentation
         run: npm run docs:generate
+        # This now generates the API docs but doesn't commit them back to the repo
       
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
