@@ -1,0 +1,13 @@
+title: 🐝 Shoehive
+description: >- 
+  Shoehive is an extensible, WebSocket-based multiplayer game framework designed for 
+  real-time, event-driven gameplay. It provides a player management system, message 
+  routing and structured table handling, allowing developers to focus on building 
+  their own game logic while leveraging a powerful core.
+baseurl: "/" # the subpath of your site, e.g. /blog
+url: "https://shoehive.jtay.co.uk" # the base hostname & protocol for your site, e.g. http://example.com
+
+# Build settings
+theme: just-the-docs
+plugins:
+  - jekyll-feed

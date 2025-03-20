@@ -1,22 +1,30 @@
+---
+layout: default
+title: Build a Tic Tac Toe Game
+permalink: /guides/tic-tac-toe
+parent: Guides
+nav_order: 2
+---
+
 # 🎮 Building a Tic-Tac-Toe Game with Shoehive
 
 This guide walks you through creating a complete multiplayer Tic-Tac-Toe game using the Shoehive framework. Follow these steps to build a well-structured, event-driven game backend that can support two players.
 
 ## 📋 Table of Contents
 
-1. [Overview and Planning](#-overview-and-planning)
-2. [Setting Up Your Project](#-setting-up-your-project)
-3. [Designing Game Events](#-designing-game-events)
-4. [Creating the Game Definition](#-creating-the-game-definition)
-5. [Implementing Command Handlers](#-implementing-command-handlers)
-6. [Game State Management](#-game-state-management)
-7. [Handling Player Moves](#-handling-player-moves)
-8. [Win Condition Detection](#-win-condition-detection)
-9. [Game Lifecycle Management](#-game-lifecycle-management)
-10. [Debugging and Testing](#-debugging-and-testing)
-11. [Complete Implementation](#-complete-implementation)
+1. [Overview and Planning](#overview-and-planning)
+2. [Setting Up Your Project](#setting-up-your-project)
+3. [Designing Game Events](#designing-game-events)
+4. [Creating the Game Definition](#creating-the-game-definition)
+5. [Implementing Command Handlers](#implementing-command-handlers)
+6. [Game State Management](#game-state-management)
+7. [Main Application](#main-application)
+8. [Debugging and Testing](#debugging-and-testing)
+9. [Complete Implementation](#complete-implementation)
+10. [Best Practices Recap](#best-practices-recap)
+11. [Next Steps](#next-steps)
 
-## 🗺️ Overview and Planning
+## Overview and Planning
 
 Before diving into code, let's plan our Tic-Tac-Toe game:
 
@@ -40,7 +48,7 @@ We'll use several design patterns:
 4. **Observer Pattern**: For notifying players of game changes
 5. **Factory Pattern**: For creating new game instances
 
-## 🛠️ Setting Up Your Project
+## Setting Up Your Project
 
 First, let's set up a new project:
 
@@ -74,7 +82,7 @@ tic-tac-toe-shoehive/
 └── README.md
 ```
 
-## 🔄 Designing Game Events
+## Designing Game Events
 
 Let's create our game-specific event constants in `src/events.ts`:
 
@@ -132,7 +140,7 @@ export enum GameState {
 }
 ```
 
-## 🎲 Creating the Game Definition
+## Creating the Game Definition
 
 Now, let's implement the game definition in `src/game-logic.ts`:
 
@@ -314,7 +322,7 @@ export function resetGame(table: Table): void {
 }
 ```
 
-## 📝 Implementing Command Handlers
+## Implementing Command Handlers
 
 Next, let's create command handlers for player actions in `src/command-handlers.ts`:
 
@@ -702,7 +710,7 @@ export function registerTicTacToeCommandHandlers(
 }
 ```
 
-## 🚀 Game State Management
+## Game State Management
 
 Let's create a utility file for game state transitions in `src/utils.ts`:
 
@@ -765,7 +773,7 @@ export function getGameStateForPlayer(table: Table, player: Player): Record<stri
 }
 ```
 
-## 🎯 Main Application
+## Main Application
 
 Now, let's tie everything together in our main `src/index.ts` file:
 
@@ -829,7 +837,7 @@ server.listen(PORT, () => {
 });
 ```
 
-## 🧪 Debugging and Testing
+## Debugging and Testing
 
 To make development easier, add a script to `package.json`:
 
@@ -850,7 +858,7 @@ You can now run your server in development mode with:
 npm run dev
 ```
 
-## 📊 Complete Implementation
+## Complete Implementation
 
 The final code structure follows a modular design with clear separation of concerns:
 
@@ -956,7 +964,7 @@ ws.on('close', () => {
 });
 ```
 
-## 📝 Best Practices Recap
+## Best Practices Recap
 
 Let's recap the design patterns and best practices we've used:
 
@@ -971,7 +979,7 @@ Let's recap the design patterns and best practices we've used:
 9. **Player Notification**: Consistent messaging to keep players informed
 10. **Immutable Data**: Careful state handling to avoid unexpected mutations
 
-## 🔗 Next Steps
+## Next Steps
 
 To enhance your Tic-Tac-Toe game, consider:
 
