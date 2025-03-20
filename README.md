@@ -5,7 +5,7 @@ Shoehive is an **extensible, WebSocket-based multiplayer game framework** design
 Shoehive is built with TypeScript and is designed to be used with Node.js. **It is currently in active development and is not yet ready for production use.**
 
 [![Tests](https://github.com/jtay/shoehive/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/jtay/shoehive/actions/workflows/test.yml) [![NPM Publish](https://github.com/jtay/shoehive/actions/workflows/publish.yml/badge.svg)](https://github.com/jtay/shoehive/actions/workflows/publish.yml) [![Docs](https://github.com/jtay/shoehive/actions/workflows/docs-deploy.yml/badge.svg?branch=main)](https://github.com/jtay/shoehive/actions/workflows/docs-deploy.yml)
-#### [**🐙 GitHub**](https://github.com/jtay/shoehive) &nbsp; | &nbsp; [**📦 Releases**](https://github.com/jtay/shoehive/releases) &nbsp; | &nbsp; [**⚡️ Quick Start Guide**](https://shoehive.jtay.co.uk/quick-start) &nbsp; | &nbsp; [**📖 Docs**](https://shoehive.jtay.co.uk/docs) &nbsp; | &nbsp; [**🔍 API Reference**](https://shoehive.jtay.co.uk/api/reference) &nbsp; | &nbsp; [**🤝 Contributing**](https://github.com/jtay/shoehive/tree/main/CONTRIBUTING.md)
+#### [**🐙 GitHub**](https://github.com/jtay/shoehive) &nbsp; | &nbsp; [**📦 Releases**](https://github.com/jtay/shoehive/releases) &nbsp; | &nbsp; [**⚡️ Quick Start Guide**](https://shoehive.jtay.co.uk/quick-start) &nbsp; | &nbsp; [**📖 Docs**](https://shoehive.jtay.co.uk/docs) &nbsp; | &nbsp; [**🔍 API Reference**](https://shoehive.jtay.co.uk/api/generated) &nbsp; | &nbsp; [**🤝 Contributing**](https://github.com/jtay/shoehive/tree/main/CONTRIBUTING.md)
 
 ## 🚀 Features
 
