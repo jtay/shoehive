@@ -9,3 +9,8 @@ test-results
 
 # Ignore all files in the coverage directory
 coverage
+
+# TypeDoc generated files
+docs/pages/api/generated/
+docs/_site/
+docs/.jekyll-cache/

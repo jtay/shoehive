@@ -2,7 +2,7 @@
 layout: default
 title: Custom Events
 permalink: /api/custom-events
-parent: API
+parent: Components
 nav_order: 3
 ---
 

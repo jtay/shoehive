@@ -2,7 +2,7 @@
 layout: default
 title: Default Events
 permalink: /api/default-events
-parent: API
+parent: Components
 nav_order: 2
 ---
 
