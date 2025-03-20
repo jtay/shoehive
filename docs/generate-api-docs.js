@@ -93,6 +93,43 @@ function fixLinks(content, basePath) {
   
   let processedContent = content;
   
+  // Handle links with fragment identifiers (#section-name) where file and directory have the same name
+  // Example: /api/classes/messagerouter/MessageRouter.md#processmessage -> /api/classes/messagerouter/#processmessage
+  processedContent = processedContent.replace(
+    /\[([^\]]+)\]\(([\/\w-]+)\/([^\/\s]+)\/\3\.md(#[\w-]+)\)/gi,
+    (match, linkText, basePath, dirName, fragment) => {
+      return `[${linkText}](${basePath}/${dirName.toLowerCase()}/${fragment})`;
+    }
+  );
+  
+  // Handle general links with fragment identifiers
+  // Example: path/to/something.md#section -> /api/path/to/something/#section
+  processedContent = processedContent.replace(
+    /\[([^\]]+)\]\(([^)]+)\.md(#[\w-]+)\)/g,
+    (match, linkText, linkPath, fragment) => {
+      // Process the linkPath normally (without the fragment)
+      let newLink;
+      
+      // Handle various path formats
+      if (linkPath.startsWith('../') || linkPath.startsWith('./')) {
+        // Relative path
+        const cleanPath = linkPath.replace(/^(?:\.\.\/)+|^\.\//g, '').toLowerCase();
+        newLink = `/api/${cleanPath}/`;
+      } else if (linkPath.startsWith('/')) {
+        // Absolute path
+        newLink = `/api${linkPath.toLowerCase()}/`;
+      } else if (linkPath.includes('/')) {
+        // Path with directory structure but not starting with / or ./
+        newLink = `/api/${linkPath.toLowerCase()}/`;
+      } else {
+        // Same directory file
+        newLink = `${basePath}${linkPath.toLowerCase()}/`;
+      }
+      
+      return `[${linkText}](${newLink}${fragment})`;
+    }
+  );
+  
   // Handle TypeDoc-specific formats first - these often have specific formats like [**shoehive**](../README.md)
   processedContent = processedContent.replace(
     /\[([^\]]+)\]\(([^)]+)\/README\.md\)/g,
@@ -190,6 +227,14 @@ function processReadmeLinks(content) {
     /\[([^\]]+)\]\((enumerations|classes|interfaces|functions)\/([^)]+)\.md\)/g,
     (match, linkText, type, itemName) => {
       return `[${linkText}](/api/${type.toLowerCase()}/${itemName.toLowerCase()}/)`;
+    }
+  );
+  
+  // Handle links with 'enums' instead of 'enumerations'
+  processedContent = processedContent.replace(
+    /\[([^\]]+)\]\((enums)\/([^)]+)\.md\)/g,
+    (match, linkText, type, itemName) => {
+      return `[${linkText}](/api/enums/${itemName.toLowerCase()}/)`;
     }
   );
   
