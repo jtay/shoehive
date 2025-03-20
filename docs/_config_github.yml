@@ -1,9 +1,3 @@
-# GitHub Pages specific configuration
-# This overrides settings for GitHub Pages environment
-
-# Ensure baseurl is correctly set for GitHub Pages
-baseurl: ""  # Adjust if your repo name is different
-
 # GitHub Pages specific settings
 github:
   is_project_page: true

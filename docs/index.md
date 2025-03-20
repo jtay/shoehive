@@ -31,4 +31,4 @@ Welcome to the Shoehive documentation. This guide will help you learn about the 
 
 ## License
 
-This project is licensed under the [The Unlicense](https://unlicense.org/). See the [LICENSE](LICENSE) file for details.
+This project is licensed under the [The Unlicense](https://unlicense.org/). See the [LICENSE](https://github.com/jtay/shoehive/blob/main/LICENSE) file for details.

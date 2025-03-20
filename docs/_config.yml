@@ -5,7 +5,7 @@ description: >-
   routing and structured table handling, allowing developers to focus on building 
   their own game logic while leveraging a powerful core.
 baseurl: "/" # the subpath of your site, e.g. /blog
-url: "https://shoehive.jtay.co.uk" # the base hostname & protocol for your site, e.g. http://example.com
+url: "https://shoehive.jtay.co.uk"
 
 # Build settings
 theme: just-the-docs
