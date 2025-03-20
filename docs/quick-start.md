@@ -7,10 +7,11 @@ Welcome to Shoehive, the flexible WebSocket-based multiplayer game framework. Th
 1. [Installation](#-installation)
 2. [Basic Setup](#-basic-setup)
 3. [Understanding Core Concepts](#-understanding-core-concepts)
-4. [Using Transport Modules](#-using-transport-modules)
-5. [Creating Game Logic](#-creating-game-logic)
-6. [Event Handling](#-event-handling)
-7. [Common Patterns](#-common-patterns)
+4. [Using Card Game Functionality](#-using-card-game-functionality)
+5. [Using Transport Modules](#-using-transport-modules)
+6. [Creating Game Logic](#-creating-game-logic)
+7. [Event Handling](#-event-handling)
+8. [Common Patterns](#-common-patterns)
 
 ## 🛠️ Installation
 
@@ -81,6 +82,7 @@ Tables group players together and represent a specific game instance:
 - Tables have a unique ID
 - Tables have seats that players can occupy
 - Tables have a state (WAITING, ACTIVE, ENDED)
+- Tables can have card decks and player hands (for card games)
 
 ```typescript
 // Creating a table
@@ -117,38 +119,185 @@ gameServer.eventBus.on('playerSeated', (player, table, seatIndex) => {
 });
 ```
 
-## 📐 Implementation Diagram
+## 🃏 Using Card Game Functionality
 
-Shoehive is designed to be modular and extensible. The following diagram shows the core components and their relationships when using the base implementations:
+Shoehive includes built-in support for card games, with card decks, hands, and dealing functionality.
+
+### Creating and Managing a Deck
+
+```typescript
+// Create a deck for the table (single 52-card deck)
+table.createDeck();
+
+// Create multiple decks (e.g., 6 decks for Blackjack)
+table.createDeck(6);
+
+// Shuffle the deck
+table.shuffleDeck();
+
+// Draw a card from the deck (visible by default)
+const card = table.drawCard();
+
+// Draw a hidden card
+const hiddenCard = table.drawCard(false);
+```
+
+### Managing Hands and Dealing Cards
+
+Each seat at a table has a default "main" hand, and you can add additional hands (e.g., for split hands in Blackjack):
+
+```typescript
+// Deal a card to a player's main hand
+table.dealCardToSeat(seatIndex);
+
+// Deal a hidden card
+table.dealCardToSeat(seatIndex, false);
+
+// Add a new hand to a seat (e.g., for splitting)
+table.addHandToSeat(seatIndex, 'split');
+
+// Deal to specific hand
+table.dealCardToSeat(seatIndex, true, 'split');
+
+// Get a specific hand
+const hand = table.getHandAtSeat(seatIndex, 'main');
+
+// Get all hands for a seat
+const allHands = table.getAllHandsAtSeat(seatIndex);
+
+// Clear a specific hand
+table.clearHandAtSeat(seatIndex, 'main');
+
+// Clear all hands on the table
+table.clearAllHands();
+```
+
+### Working with Cards and Hands
+
+You can use the Hand and Card interfaces to manage card game states:
+
+```typescript
+// Get cards from a hand
+const hand = table.getHandAtSeat(0);
+const allCards = hand.getCards();
+const visibleCards = hand.getVisibleCards();
+const hiddenCards = hand.getHiddenCards();
+
+// Get information about cards
+const firstCard = allCards[0];
+console.log(`Card: ${firstCard.rank} of ${firstCard.suit}`);
+console.log(`Value: ${firstCard.value}`);
+console.log(`Visible: ${firstCard.isVisible}`);
+
+// Use hand attributes to store game-specific values
+hand.setAttribute('value', 17);
+hand.setAttribute('busted', false);
+
+// Check for specific conditions
+if (hand.getAttribute('value') > 21) {
+  hand.setAttribute('busted', true);
+}
+```
+
+### Creating a Simple Blackjack Game
+
+Here's a simplified example of setting up Blackjack game logic:
+
+```typescript
+function initializeBlackjackTable(table) {
+  // Create a 6-deck shoe
+  table.createDeck(6);
+  table.shuffleDeck();
+  
+  // Deal initial cards
+  for (let i = 0; i < table.getSeatMap().length; i++) {
+    const seat = table.getSeatMap()[i];
+    if (seat.player) {
+      // Deal 2 cards to player - first visible, second visible
+      table.dealCardToSeat(i, true);
+      table.dealCardToSeat(i, true);
+      
+      // Calculate hand value
+      calculateHandValue(table, i);
+    }
+  }
+  
+  // Deal dealer cards - first visible, second hidden
+  const dealerSeatIndex = table.getSeatMap().length - 1;
+  table.dealCardToSeat(dealerSeatIndex, true);
+  table.dealCardToSeat(dealerSeatIndex, false);
+}
+
+function calculateHandValue(table, seatIndex, handId = 'main') {
+  const hand = table.getHandAtSeat(seatIndex, handId);
+  if (!hand) return;
+  
+  const cards = hand.getCards();
+  let value = 0;
+  let aces = 0;
+  
+  // Calculate value of hand
+  for (const card of cards) {
+    if (card.rank === 'ace') {
+      aces++;
+      value += 11;
+    } else {
+      value += card.value || 0;
+    }
+  }
+  
+  // Adjust for aces if bust
+  while (value > 21 && aces > 0) {
+    value -= 10;
+    aces--;
+  }
+  
+  hand.setAttribute('value', value);
+  
+  return value;
+}
+```
+
+### Card Game Architecture
+
+The card game functionality in Shoehive follows this structure:
 
 ```mermaid
 flowchart TD
- subgraph GameServer["<b>Implementation of Shoehive</b>"]
-        GamePackage["User"]
-        YourCode["Game Package"]
+  subgraph Table["Table"]
+    Deck["Deck"]
+    Seats["Seats"]
   end
- subgraph GameModules["<b>Game Modules</b>"]
-        GameActions["Game Actions"]
-        GameRules["Game Rules"]
-        GamePhases["Game Phases"]
-        ServerActions["Server Actions"]
+  
+  subgraph Seats["Seats"]
+    Seat1["Seat 1"]
+    Seat2["Seat 2"]
+    SeatN["Seat N"]
   end
- subgraph TransportModule["<b>Transport Modules</b>"]
-        AuthModule["Authentication Module"]
-        ServerTransportModule["ServerTransportModule"]
+  
+  subgraph Seat1["Seat 1"]
+    S1MainHand["Main Hand"]
+    S1SplitHand["Split Hand"]
   end
- subgraph YourCode["<b>Your Code</b>"]
-        GameModules
-        TransportModule
+  
+  subgraph S1MainHand["Main Hand"]
+    S1Card1["Card 1 (visible)"]
+    S1Card2["Card 2 (hidden)"]
   end
- subgraph GamePackage["<b>Game Package</b>"]
-        WebsocketServer["WebSocket Server"]
-        GameState["Game State Management"]
-        CommandHandling["Command Handling"]
-        LobbyState["Lobby State"]
+  
+  subgraph Deck["Deck"]
+    Cards["Cards"]
+    DiscardPile["Discard Pile"]
   end
-    GameModules --> GamePackage
-    TransportModule --> GamePackage
+  
+  Table -->|contains| Deck
+  Table -->|has| Seats
+  Deck -->|provides| S1Card1
+  Deck -->|provides| S1Card2
+  S1Card1 -->|belongs to| S1MainHand
+  S1Card2 -->|belongs to| S1MainHand
+  S1MainHand -->|belongs to| Seat1
+  S1SplitHand -->|belongs to| Seat1
 ```
 
 ## 🔌 Using Transport Modules

@@ -157,8 +157,8 @@ describe('Game Server Integration', () => {
     table.sitPlayerAtSeat('player1', 0);
     table.sitPlayerAtSeat('player2', 1);
     
-    expect(table.getSeatMap()[0]).toBe(player1);
-    expect(table.getSeatMap()[1]).toBe(player2);
+    expect(table.getSeatMap()[0].player).toBe(player1);
+    expect(table.getSeatMap()[1].player).toBe(player2);
     expect(eventSpy).toHaveBeenCalledWith('playerSeated', player1, table, 0);
     expect(eventSpy).toHaveBeenCalledWith('playerSeated', player2, table, 1);
     

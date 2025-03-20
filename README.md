@@ -49,5 +49,4 @@ To add new tests, follow the existing patterns in the test directories.
 
 ## 📄 License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
+This project is licensed under the [The Unlicense](https://unlicense.org/). See the [LICENSE](LICENSE) file for details.

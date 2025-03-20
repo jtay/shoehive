@@ -114,7 +114,7 @@ export class GameManager {
         id: table.id,
         gameId: table.getAttribute("gameId"),
         playerCount: table.getPlayerCount(),
-        seats: table.getSeatMap().map(player => player?.id || null),
+        seats: table.getSeatMap().map(seatData => seatData.player?.id || null),
         state: table.getState()
       }))
     };
