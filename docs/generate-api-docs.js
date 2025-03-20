@@ -26,6 +26,9 @@ has_children: true
 nav_order: 2
 ---
 
+v${require('../package.json').version}
+{: .label .label-green }
+
 # 📘 API Documentation
 
 This section contains the API documentation for Shoehive, automatically generated from source code.
@@ -240,6 +243,8 @@ has_children: true
 nav_order: 4
 ---
 
+v${require('../package.json').version}
+{: .label .label-green }
 ${fixedContent}`;
       
       fs.writeFileSync(indexPath, indexContent);
@@ -265,6 +270,9 @@ permalink: ${parentPath}${dirName}/
 has_children: true
 nav_order: 4
 ---
+
+v${require('../package.json').version}
+{: .label .label-green }
 
 # Generated API Reference
 
@@ -319,9 +327,10 @@ has_children: true
 nav_order: ${navOrder[item.name]}
 ---
 
-# ${subDirTitle}
+v${require('../package.json').version}
+{: .label .label-green }
 
-`;
+# ${subDirTitle}`;
         fs.writeFileSync(indexPath, indexContent);
         console.log(`Created/updated index for: ${subDirPermalink}`);
       }
@@ -370,6 +379,8 @@ parent: ${escapedParent}
 nav_order: ${navOrder[item.name]}
 ---
 
+v${require('../package.json').version}
+{: .label .label-green }
 `;
       
       // Replace existing content if needed
