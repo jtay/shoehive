@@ -117,7 +117,7 @@ describe('Table', () => {
     const result = table.sitPlayerAtSeat(player1.id, 0);
     
     expect(result).toBe(true);
-    expect(table.getSeatMap()[0]).toBe(player1);
+    expect(table.getSeatMap()[0].player).toBe(player1);
     expect(spy).toHaveBeenCalledWith('playerSeated', player1, table, 0);
   });
   
@@ -136,7 +136,7 @@ describe('Table', () => {
     const result = table.sitPlayerAtSeat(player2.id, 0);
     
     expect(result).toBe(false);
-    expect(table.getSeatMap()[0]).toBe(player1);
+    expect(table.getSeatMap()[0].player).toBe(player1);
   });
   
   test('should not sit player if not at table', () => {
@@ -154,7 +154,7 @@ describe('Table', () => {
     const result = table.sitPlayerAtSeat(player1.id, 1);
     
     expect(result).toBe(false);
-    expect(table.getSeatMap()[1]).toBeNull();
+    expect(table.getSeatMap()[1].player).toBeNull();
   });
   
   test('should remove player from seat successfully', () => {
@@ -166,7 +166,7 @@ describe('Table', () => {
     const result = table.removePlayerFromSeat(0);
     
     expect(result).toBe(true);
-    expect(table.getSeatMap()[0]).toBeNull();
+    expect(table.getSeatMap()[0].player).toBeNull();
     expect(spy).toHaveBeenCalledWith('playerUnseated', player1, table, 0);
   });
   
@@ -231,5 +231,15 @@ describe('Table', () => {
     expect(table.getAttribute('gameType')).toBe('blackjack');
     
     expect(table.getAttribute('nonexistent')).toBeUndefined();
+  });
+  
+  test('should get player at seat', () => {
+    table.addPlayer(player1);
+    table.sitPlayerAtSeat(player1.id, 0);
+    
+    expect(table.getPlayerAtSeat(0)).toBe(player1);
+    expect(table.getPlayerAtSeat(1)).toBeNull();
+    expect(table.getPlayerAtSeat(-1)).toBeNull();
+    expect(table.getPlayerAtSeat(2)).toBeNull();
   });
 }); 
