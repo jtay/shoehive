@@ -16,6 +16,13 @@ export class MessageRouter {
     this.commandHandlers = new Map();
   }
 
+  /**
+   * Register a command handler for a specific action. For example, if you
+   * want a user to be able to make a choice, you could register `game:choice:make`
+   * and then handle it in your game logic.
+   * @param action - The action to register the handler for
+   * @param handler - The handler function to be called when the action is received
+   */
   public registerCommandHandler(
     action: string,
     handler: (player: Player, data: any) => void
@@ -23,6 +30,11 @@ export class MessageRouter {
     this.commandHandlers.set(action, handler);
   }
 
+  /**
+   * Process a message from the client.
+   * @param player - The player object
+   * @param messageStr - The message string to process
+   */
   public processMessage(player: Player, messageStr: string): void {
     try {
       const message = JSON.parse(messageStr) as Message;
