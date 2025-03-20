@@ -806,8 +806,9 @@ eventBus.on(GAME_EVENTS.STARTED, (table) => {
 
 - [API Reference](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md)
 - [Creating Games Guide](https://github.com/jtay/shoehive/tree/main/docs/creating-games.md)
-- [Advanced Events](https://github.com/jtay/shoehive/tree/main/docs/advanced-events.md)
+- [Custom Events](https://github.com/jtay/shoehive/tree/main/docs/event-system-custom-events.md)
 - [Transport Modules](https://github.com/jtay/shoehive/tree/main/docs/transport-modules.md)
 - [Player Attributes](https://github.com/jtay/shoehive/tree/main/docs/player-attributes.md)
+- [Build a Tic Tac Toe Game](https://github.com/jtay/shoehive/tree/main/docs/tic-tac-toe-guide.md)
 
 Happy gaming with Shoehive! 🎮 
