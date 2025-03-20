@@ -1,0 +1,14 @@
+{
+  "entryPoints": ["./src/index.ts"],
+  "out": "./docs/pages/api/generated",
+  "plugin": ["typedoc-plugin-markdown"],
+  "disableSources": true,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeExternals": true,
+  "excludeNotDocumented": false,
+  "readme": "none",
+  "hidePageTitle": false,
+  "hideBreadcrumbs": true,
+  "logLevel": "Info"
+} 

@@ -7,6 +7,8 @@ on:
     branches: ["main"]
     paths:
       - 'docs/**'
+      - 'src/**'  # Also trigger on source code changes
+      - 'typedoc.json'
       - '.github/workflows/docs-deploy.yml'
 
   # Allows you to run this workflow manually from the Actions tab
@@ -31,6 +33,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install Node.js dependencies
+        run: npm ci
+      
+      - name: Generate API documentation
+        run: npm run docs:generate
       
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1

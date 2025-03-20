@@ -1,6 +1,6 @@
 ---
 layout: default
-title: API
+title: Components
 has_children: true
 permalink: /api
 nav_order: 4

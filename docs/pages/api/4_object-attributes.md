@@ -2,7 +2,7 @@
 layout: default
 title: Object Attributes
 permalink: /api/object-attributes
-parent: API
+parent: Components
 nav_order: 4
 ---
 

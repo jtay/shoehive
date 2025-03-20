@@ -2,7 +2,7 @@
 layout: default
 title: Transport Modules
 permalink: /api/transport-modules
-parent: API
+parent: Components
 nav_order: 5
 ---
 
