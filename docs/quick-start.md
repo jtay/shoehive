@@ -5,13 +5,16 @@ Welcome to Shoehive, the flexible WebSocket-based multiplayer game framework. Th
 ## 📋 Table of Contents
 
 1. [Installation](#-installation)
-2. [Basic Setup](#-basic-setup)
-3. [Understanding Core Concepts](#-understanding-core-concepts)
-4. [Using Card Game Functionality](#-using-card-game-functionality)
-5. [Using Transport Modules](#-using-transport-modules)
-6. [Creating Game Logic](#-creating-game-logic)
-7. [Event Handling](#-event-handling)
-8. [Common Patterns](#-common-patterns)
+2. [Basic Server Setup](#-basic-server-setup)
+3. [Core Concepts Overview](#-core-concepts-overview)
+4. [Event System](#-event-system)
+5. [Creating a Simple Game](#-creating-a-simple-game)
+6. [Card Game Functionality](#-card-game-functionality)
+7. [Player Authentication](#-player-authentication)
+8. [Financial Operations](#-financial-operations)
+9. [Advanced Patterns](#-advanced-patterns)
+10. [Debugging and Monitoring](#-debugging-and-monitoring)
+11. [Additional Resources](#-additional-resources)
 
 ## 🛠️ Installation
 
@@ -27,7 +30,7 @@ Or using yarn:
 yarn add shoehive
 ```
 
-## 🚀 Basic Setup
+## 🚀 Basic Server Setup
 
 Here's a minimal example to set up a Shoehive game server:
 
@@ -48,9 +51,22 @@ server.listen(PORT, () => {
 });
 ```
 
-## 🧩 Understanding Core Concepts
+This creates a WebSocket server that will handle connections from game clients. The `createGameServer` function returns several important objects:
 
-Shoehive is built around a few core concepts:
+```typescript
+const {
+  eventBus,          // Central event system
+  messageRouter,     // Handles incoming client messages
+  tableFactory,      // Creates tables with specific configurations
+  gameManager,       // Manages game definitions and tables
+  wsManager,         // Manages WebSocket connections and players
+  transport          // Handles authentication and financial operations
+} = gameServer;
+```
+
+## 🧩 Core Concepts Overview
+
+Shoehive is built around several core concepts:
 
 ### Players
 
@@ -61,72 +77,309 @@ Players represent connected clients. Each player:
 - Can have custom attributes
 
 ```typescript
-// Example of working with players
+// Get a player
 const player = gameServer.wsManager.getPlayer('player-id');
-if (player) {
-  // Set custom attributes
-  player.setAttribute('score', 100);
-  player.setAttribute('avatar', 'https://example.com/avatar.png');
-  
-  // Send a message to the player
-  player.sendMessage({
-    type: 'gameUpdate',
-    data: { message: 'Your turn!' }
-  });
-}
+
+// Set custom attributes
+player.setAttribute('score', 100);
+player.setAttribute('avatar', 'https://example.com/avatar.png');
+
+// Send messages to players
+player.sendMessage({
+  type: 'gameUpdate',
+  data: { message: 'Your turn!' }
+});
+
+// Get player attributes
+const score = player.getAttribute('score'); // 100
 ```
 
 ### Tables
 
 Tables group players together and represent a specific game instance:
-- Tables have a unique ID
-- Tables have seats that players can occupy
-- Tables have a state (WAITING, ACTIVE, ENDED)
-- Tables can have card decks and player hands (for card games)
 
 ```typescript
-// Creating a table
-const table = gameServer.gameManager.createTable('game-id', { 
-  config: { totalSeats: 4, maxSeatsPerPlayer: 1 } 
+// Create a table
+const table = gameManager.createTable('game-id', { 
+  config: { 
+    totalSeats: 4,          // Number of seats at the table
+    maxSeatsPerPlayer: 1    // Maximum seats a single player can occupy 
+  } 
 });
 
-// Player joining a table
+// Add a player to the table
 table.addPlayer(player);
 
-// Player sitting at a seat
+// Seat a player at a specific position
 table.sitPlayerAtSeat(player.id, 0);
 
-// Getting table state
-const state = table.getState();
+// Set the table state
+table.setState(TableState.ACTIVE); // States: WAITING, ACTIVE, ENDED
+
+// Use table attributes for game-specific data
+table.setAttribute('roundNumber', 1);
+table.setAttribute('currentPlayerIndex', 0);
+table.setAttribute('pot', 100);
 ```
 
-### Events and Message Routing
+### Message Router
 
-Shoehive uses an event-based system for communication:
-- The EventBus handles internal events
-- The MessageRouter processes messages from clients
+The MessageRouter processes incoming messages from clients:
 
 ```typescript
-// Register a command handler
-gameServer.messageRouter.registerCommandHandler('makeMove', (player, data) => {
-  // Handle the player's move
-  console.log(`Player ${player.id} made move:`, data);
-});
-
-// Listen to an event
-gameServer.eventBus.on('playerSeated', (player, table, seatIndex) => {
-  console.log(`Player ${player.id} sat at seat ${seatIndex} in table ${table.id}`);
+// Register a command handler for "makeMove" messages
+messageRouter.registerCommandHandler('makeMove', (player, data) => {
+  const { row, col } = data;
+  const table = player.getTable();
+  
+  // Handle the command
+  console.log(`Player ${player.id} made move at ${row},${col}`);
+  
+  // Update game state
+  // ...
+  
+  // Notify players of the move
+  table.broadcastMessage({
+    type: 'moveUpdate',
+    playerId: player.id,
+    row,
+    col
+  });
 });
 ```
 
-## 🃏 Using Card Game Functionality
+## 📢 Event System
 
-Shoehive includes built-in support for card games, with card decks, hands, and dealing functionality.
+Shoehive uses an event-driven architecture with predefined event constants for type safety and consistency.
+
+### Using Event Constants
+
+Import and use the event constants when working with the event system:
+
+```typescript
+import { PLAYER_EVENTS, TABLE_EVENTS, GAME_EVENTS } from 'shoehive';
+
+// Listen for a player joining a table
+eventBus.on(TABLE_EVENTS.PLAYER_JOINED, (player, table) => {
+  console.log(`Player ${player.id} joined table ${table.id}`);
+});
+
+// Listen for game events
+eventBus.on(GAME_EVENTS.STARTED, (table) => {
+  console.log(`Game started on table ${table.id}`);
+});
+
+// Emit an event
+eventBus.emit(GAME_EVENTS.ROUND_STARTED, table, 1);
+```
+
+### Creating Game-Specific Events
+
+For your specific game, create custom event constants:
+
+```typescript
+// Define chess-specific events
+export const CHESS_EVENTS = {
+  PIECE_MOVED: "chess:piece:moved",
+  CHECK: "chess:check",
+  CHECKMATE: "chess:checkmate",
+  PROMOTION: "chess:promotion"
+} as const;
+
+// Then use these constants in your code
+eventBus.on(CHESS_EVENTS.PIECE_MOVED, (table, player, move) => {
+  console.log(`Player ${player.id} moved ${move.piece} from ${move.from} to ${move.to}`);
+});
+
+eventBus.emit(CHESS_EVENTS.PIECE_MOVED, table, player, {
+  piece: 'pawn',
+  from: 'e2',
+  to: 'e4'
+});
+```
+
+### Core Event Types
+
+Shoehive provides several event categories:
+
+#### Player Events
+- `PLAYER_EVENTS.CONNECTED` - When a player connects
+- `PLAYER_EVENTS.DISCONNECTED` - When a player disconnects
+- `PLAYER_EVENTS.RECONNECTED` - When a player reconnects
+
+#### Table Events
+- `TABLE_EVENTS.CREATED` - When a table is created
+- `TABLE_EVENTS.PLAYER_JOINED` - When a player joins a table
+- `TABLE_EVENTS.PLAYER_LEFT` - When a player leaves a table
+- `TABLE_EVENTS.PLAYER_SAT` - When a player sits at a seat
+- `TABLE_EVENTS.PLAYER_STOOD` - When a player stands up
+- `TABLE_EVENTS.STATE_CHANGED` - When the table state changes
+
+#### Game Events
+- `GAME_EVENTS.STARTED` - When a game starts
+- `GAME_EVENTS.ENDED` - When a game ends
+- `GAME_EVENTS.ROUND_STARTED` - When a game round starts
+- `GAME_EVENTS.ROUND_ENDED` - When a game round ends
+- `GAME_EVENTS.TURN_STARTED` - When a player's turn starts
+- `GAME_EVENTS.TURN_ENDED` - When a player's turn ends
+
+## 🎲 Creating a Simple Game
+
+Let's create a simple number guessing game:
+
+```typescript
+import { 
+  createGameServer, 
+  Player, 
+  Table, 
+  TableState, 
+  GAME_EVENTS 
+} from 'shoehive';
+
+// Define number guessing game-specific events
+const NUMBER_GUESS_EVENTS = {
+  GUESS_MADE: "numberguess:guess:made",
+  GAME_WON: "numberguess:game:won",
+  GAME_LOST: "numberguess:game:lost"
+} as const;
+
+// Setup the game server
+const server = http.createServer();
+const gameServer = createGameServer(server);
+const { messageRouter, gameManager, eventBus } = gameServer;
+
+// Register the game definition
+gameManager.registerGame({
+  id: 'number-guessing',
+  name: 'Number Guessing Game',
+  description: 'Guess a number between 1-100',
+  minPlayers: 1,
+  maxPlayers: 1,
+  defaultSeats: 1,
+  maxSeatsPerPlayer: 1,
+  options: {
+    setupTable: (table: Table) => {
+      // Initialize game state
+      table.setAttribute('targetNumber', Math.floor(Math.random() * 100) + 1);
+      table.setAttribute('attempts', 0);
+      table.setAttribute('maxAttempts', 10);
+    }
+  }
+});
+
+// Register command handlers
+messageRouter.registerCommandHandler('createGame', (player, data) => {
+  // Create a new table
+  const table = gameManager.createTable('number-guessing');
+  
+  if (!table) {
+    player.sendMessage({
+      type: 'error',
+      message: 'Failed to create game'
+    });
+    return;
+  }
+  
+  // Add player to table
+  table.addPlayer(player);
+  
+  // Notify player
+  player.sendMessage({
+    type: 'gameCreated',
+    tableId: table.id,
+    maxAttempts: table.getAttribute('maxAttempts')
+  });
+  
+  // Start the game
+  table.setState(TableState.ACTIVE);
+  eventBus.emit(GAME_EVENTS.STARTED, table);
+});
+
+messageRouter.registerCommandHandler('makeGuess', (player, data) => {
+  if (!data.guess || typeof data.guess !== 'number') return;
+  
+  const table = player.getTable();
+  if (!table) return;
+  
+  const targetNumber = table.getAttribute('targetNumber');
+  const attempts = table.getAttribute('attempts');
+  const maxAttempts = table.getAttribute('maxAttempts');
+  
+  // Increment attempts
+  table.setAttribute('attempts', attempts + 1);
+  
+  // Emit a guess event
+  eventBus.emit(NUMBER_GUESS_EVENTS.GUESS_MADE, table, player, {
+    guess: data.guess,
+    attempt: attempts + 1,
+    maxAttempts: maxAttempts
+  });
+  
+  // Check guess
+  if (data.guess === targetNumber) {
+    // Player won
+    player.sendMessage({
+      type: 'guessResult',
+      correct: true,
+      message: `Correct! The number was ${targetNumber}`,
+      attempts: attempts + 1
+    });
+    
+    // Emit game won event
+    eventBus.emit(NUMBER_GUESS_EVENTS.GAME_WON, table, player, {
+      targetNumber,
+      attempts: attempts + 1
+    });
+    
+    // End game
+    table.setState(TableState.ENDED);
+    eventBus.emit(GAME_EVENTS.ENDED, table, player);
+  } else {
+    // Incorrect guess
+    const hint = data.guess < targetNumber ? 'higher' : 'lower';
+    
+    player.sendMessage({
+      type: 'guessResult',
+      correct: false,
+      message: `Wrong! Try something ${hint}`,
+      attempts: attempts + 1,
+      attemptsLeft: maxAttempts - (attempts + 1)
+    });
+    
+    // Check if max attempts reached
+    if (attempts + 1 >= maxAttempts) {
+      player.sendMessage({
+        type: 'gameOver',
+        message: `Game over! The number was ${targetNumber}`
+      });
+      
+      // Emit game lost event
+      eventBus.emit(NUMBER_GUESS_EVENTS.GAME_LOST, table, player, {
+        targetNumber,
+        attempts: maxAttempts
+      });
+      
+      // End game
+      table.setState(TableState.ENDED);
+      eventBus.emit(GAME_EVENTS.ENDED, table, null);
+    }
+  }
+});
+
+// Start the server
+server.listen(3000, () => {
+  console.log('Number guessing game server running on port 3000');
+});
+```
+
+## 🃏 Card Game Functionality
+
+Shoehive includes built-in support for card games:
 
 ### Creating and Managing a Deck
 
 ```typescript
-// Create a deck for the table (single 52-card deck)
+// Create a single 52-card deck
 table.createDeck();
 
 // Create multiple decks (e.g., 6 decks for Blackjack)
@@ -135,7 +388,7 @@ table.createDeck(6);
 // Shuffle the deck
 table.shuffleDeck();
 
-// Draw a card from the deck (visible by default)
+// Draw a card (visible by default)
 const card = table.drawCard();
 
 // Draw a hidden card
@@ -144,8 +397,6 @@ const hiddenCard = table.drawCard(false);
 
 ### Managing Hands and Dealing Cards
 
-Each seat at a table has a default "main" hand, and you can add additional hands (e.g., for split hands in Blackjack):
-
 ```typescript
 // Deal a card to a player's main hand
 table.dealCardToSeat(seatIndex);
@@ -153,421 +404,410 @@ table.dealCardToSeat(seatIndex);
 // Deal a hidden card
 table.dealCardToSeat(seatIndex, false);
 
-// Add a new hand to a seat (e.g., for splitting)
+// Add a new hand to a seat (e.g., for splitting in Blackjack)
 table.addHandToSeat(seatIndex, 'split');
 
-// Deal to specific hand
+// Deal to a specific hand
 table.dealCardToSeat(seatIndex, true, 'split');
 
-// Get a specific hand
+// Get a hand
 const hand = table.getHandAtSeat(seatIndex, 'main');
 
 // Get all hands for a seat
 const allHands = table.getAllHandsAtSeat(seatIndex);
 
-// Clear a specific hand
+// Clear hands
 table.clearHandAtSeat(seatIndex, 'main');
-
-// Clear all hands on the table
 table.clearAllHands();
 ```
 
-### Working with Cards and Hands
-
-You can use the Hand and Card interfaces to manage card game states:
+### Example: Blackjack Deal Function
 
 ```typescript
-// Get cards from a hand
-const hand = table.getHandAtSeat(0);
-const allCards = hand.getCards();
-const visibleCards = hand.getVisibleCards();
-const hiddenCards = hand.getHiddenCards();
-
-// Get information about cards
-const firstCard = allCards[0];
-console.log(`Card: ${firstCard.rank} of ${firstCard.suit}`);
-console.log(`Value: ${firstCard.value}`);
-console.log(`Visible: ${firstCard.isVisible}`);
-
-// Use hand attributes to store game-specific values
-hand.setAttribute('value', 17);
-hand.setAttribute('busted', false);
-
-// Check for specific conditions
-if (hand.getAttribute('value') > 21) {
-  hand.setAttribute('busted', true);
-}
-```
-
-### Creating a Simple Blackjack Game
-
-Here's a simplified example of setting up Blackjack game logic:
-
-```typescript
-function initializeBlackjackTable(table) {
-  // Create a 6-deck shoe
+function dealInitialCards(table) {
+  // Reset all hands
+  table.clearAllHands();
+  
+  // Create a new shuffled deck
   table.createDeck(6);
   table.shuffleDeck();
   
-  // Deal initial cards
-  for (let i = 0; i < table.getSeatMap().length; i++) {
-    const seat = table.getSeatMap()[i];
-    if (seat.player) {
-      // Deal 2 cards to player - first visible, second visible
-      table.dealCardToSeat(i, true);
-      table.dealCardToSeat(i, true);
-      
-      // Calculate hand value
-      calculateHandValue(table, i);
+  // Get all active seats
+  const activeSeatIndexes = [];
+  for (let i = 0; i < table.getSeats().length; i++) {
+    if (table.getPlayerAtSeat(i)) {
+      activeSeatIndexes.push(i);
     }
   }
   
-  // Deal dealer cards - first visible, second hidden
-  const dealerSeatIndex = table.getSeatMap().length - 1;
+  // Add dealer seat
+  const dealerSeatIndex = table.getSeats().length - 1;
+  
+  // First round of cards (all visible)
+  for (const seatIndex of activeSeatIndexes) {
+    table.dealCardToSeat(seatIndex, true);
+  }
   table.dealCardToSeat(dealerSeatIndex, true);
+  
+  // Second round of cards (player visible, dealer hidden)
+  for (const seatIndex of activeSeatIndexes) {
+    table.dealCardToSeat(seatIndex, true);
+  }
   table.dealCardToSeat(dealerSeatIndex, false);
-}
-
-function calculateHandValue(table, seatIndex, handId = 'main') {
-  const hand = table.getHandAtSeat(seatIndex, handId);
-  if (!hand) return;
   
-  const cards = hand.getCards();
-  let value = 0;
-  let aces = 0;
-  
-  // Calculate value of hand
-  for (const card of cards) {
-    if (card.rank === 'ace') {
-      aces++;
-      value += 11;
-    } else {
-      value += card.value || 0;
-    }
+  // Calculate initial hand values
+  for (const seatIndex of [...activeSeatIndexes, dealerSeatIndex]) {
+    calculateHandValue(table, seatIndex);
   }
   
-  // Adjust for aces if bust
-  while (value > 21 && aces > 0) {
-    value -= 10;
-    aces--;
-  }
-  
-  hand.setAttribute('value', value);
-  
-  return value;
+  // Check for blackjacks
+  checkForBlackjacks(table, activeSeatIndexes, dealerSeatIndex);
 }
 ```
 
-### Card Game Architecture
+## 🔐 Player Authentication
 
-The card game functionality in Shoehive follows this structure:
-
-```mermaid
-flowchart TD
-  subgraph Table["Table"]
-    Deck["Deck"]
-    Seats["Seats"]
-  end
-  
-  subgraph Seats["Seats"]
-    Seat1["Seat 1"]
-    Seat2["Seat 2"]
-    SeatN["Seat N"]
-  end
-  
-  subgraph Seat1["Seat 1"]
-    S1MainHand["Main Hand"]
-    S1SplitHand["Split Hand"]
-  end
-  
-  subgraph S1MainHand["Main Hand"]
-    S1Card1["Card 1 (visible)"]
-    S1Card2["Card 2 (hidden)"]
-  end
-  
-  subgraph Deck["Deck"]
-    Cards["Cards"]
-    DiscardPile["Discard Pile"]
-  end
-  
-  Table -->|contains| Deck
-  Table -->|has| Seats
-  Deck -->|provides| S1Card1
-  Deck -->|provides| S1Card2
-  S1Card1 -->|belongs to| S1MainHand
-  S1Card2 -->|belongs to| S1MainHand
-  S1MainHand -->|belongs to| Seat1
-  S1SplitHand -->|belongs to| Seat1
-```
-
-## 🔌 Using Transport Modules
-
-Shoehive provides transport modules to handle authentication and server-side operations.
-
-### Authentication
-
-The `AuthModule` handles player authentication:
+Shoehive provides a flexible authentication system through the `AuthModule` interface:
 
 ```typescript
 import * as http from 'http';
 import { createGameServer, AuthModule } from 'shoehive';
 
 // Create a custom auth module
-class MyAuthModule implements AuthModule {
+class JwtAuthModule implements AuthModule {
+  private jwtSecret: string;
+  
+  constructor(jwtSecret: string) {
+    this.jwtSecret = jwtSecret;
+  }
+  
   async authenticatePlayer(request: http.IncomingMessage): Promise<string | null> {
-    // Example: extract token from query string
-    const url = new URL(request.url || '', `http://${request.headers.host}`);
-    const token = url.searchParams.get('token');
-    
-    // Validate token (in a real app, you'd verify against a database or service)
-    if (token === 'valid-token') {
-      return 'user-123'; // Return user ID if valid
+    try {
+      // Extract token from authorization header
+      const authHeader = request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return null;
+      }
+      
+      const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+      
+      // Verify token (using a JWT library)
+      const decoded = jwt.verify(token, this.jwtSecret) as { userId: string };
+      
+      // Return the user ID
+      return decoded.userId;
+    } catch (error) {
+      console.error('Authentication error:', error);
+      return null;
     }
-    
-    return null; // Return null if authentication fails
   }
 }
 
-// Create an HTTP server
-const server = http.createServer();
-
-// Create auth module instance
-const authModule = new MyAuthModule();
+// Create the auth module
+const authModule = new JwtAuthModule(process.env.JWT_SECRET || 'your-secret-key');
 
 // Create the game server with auth
 const gameServer = createGameServer(server, authModule);
+
+// Listen for authentication events
+gameServer.eventBus.on(PLAYER_EVENTS.AUTHENTICATION_FAILED, (requestData, reason) => {
+  console.warn(`Authentication failed: ${reason}`, requestData);
+});
+
+gameServer.eventBus.on(PLAYER_EVENTS.AUTHENTICATION_SUCCEEDED, (playerId, requestData) => {
+  console.log(`Player ${playerId} authenticated successfully`);
+});
 ```
 
-### Server Transport
+## 💰 Financial Operations
 
-The `ServerTransportModule` handles operations like player balances and bets:
+The `ServerTransportModule` handles financial operations:
 
 ```typescript
 import { createGameServer, ServerTransportModule, Player } from 'shoehive';
-import { BasicServerTransportModule } from 'shoehive';
 
-// Create server transport module instance
-// You can use the built-in BasicServerTransportModule or create your own
-const serverTransport = new BasicServerTransportModule();
+// Custom implementation connecting to your database
+class DatabaseServerTransportModule implements ServerTransportModule {
+  private db: any; // Your database service
+  
+  constructor(db: any) {
+    this.db = db;
+  }
+  
+  async getPlayerBalance(player: Player): Promise<number> {
+    const result = await this.db.query(
+      'SELECT balance FROM users WHERE id = ?', 
+      [player.id]
+    );
+    return result[0]?.balance || 0;
+  }
+  
+  async createBet(player: Player, amount: number, metadata?: Record<string, any>): Promise<string> {
+    // Check balance
+    const balance = await this.getPlayerBalance(player);
+    if (balance < amount) {
+      throw new Error('Insufficient balance');
+    }
+    
+    // Create transaction and deduct balance
+    const betId = await this.db.transaction(async (tx: any) => {
+      // Deduct from balance
+      await tx.query(
+        'UPDATE users SET balance = balance - ? WHERE id = ?',
+        [amount, player.id]
+      );
+      
+      // Create bet record
+      const result = await tx.query(
+        'INSERT INTO bets (player_id, amount, status, metadata) VALUES (?, ?, ?, ?)',
+        [player.id, amount, 'pending', JSON.stringify(metadata || {})]
+      );
+      
+      return result.insertId.toString();
+    });
+    
+    return betId;
+  }
+  
+  async markBetWon(betId: string, winAmount: number, metadata?: Record<string, any>): Promise<boolean> {
+    await this.db.transaction(async (tx: any) => {
+      // Get bet details
+      const bet = await tx.query('SELECT player_id FROM bets WHERE id = ?', [betId]);
+      if (!bet[0]) throw new Error('Bet not found');
+      
+      // Update bet status
+      await tx.query(
+        'UPDATE bets SET status = ?, win_amount = ?, metadata = JSON_MERGE_PATCH(metadata, ?) WHERE id = ?',
+        ['won', winAmount, JSON.stringify(metadata || {}), betId]
+      );
+      
+      // Add winnings to player balance
+      await tx.query(
+        'UPDATE users SET balance = balance + ? WHERE id = ?', 
+        [winAmount, bet[0].player_id]
+      );
+    });
+    
+    return true;
+  }
+  
+  async markBetLost(betId: string, metadata?: Record<string, any>): Promise<boolean> {
+    await this.db.query(
+      'UPDATE bets SET status = ?, metadata = JSON_MERGE_PATCH(metadata, ?) WHERE id = ?',
+      ['lost', JSON.stringify(metadata || {}), betId]
+    );
+    
+    return true;
+  }
+}
 
-// If using BasicServerTransportModule, you can set initial balances
-serverTransport.setPlayerBalance('player-123', 1000);
+// Create server transport module
+const db = createDatabaseConnection(); // Your database connection
+const serverTransport = new DatabaseServerTransportModule(db);
 
-// Create the game server with auth and server transport
+// Create the game server with auth and transport
 const gameServer = createGameServer(server, authModule, serverTransport);
 
-// Example of using server transport in game logic
-async function processBet(player: Player, amount: number) {
+// Example of using the transport in a game
+async function placeBet(player: Player, betAmount: number) {
   try {
-    // Check balance
-    const balance = await gameServer.transport.server?.getPlayerBalance(player);
-    console.log(`Player ${player.id} balance: ${balance}`);
+    // Create the bet
+    const betId = await gameServer.transport.server?.createBet(player, betAmount, {
+      gameType: 'poker',
+      hand: 'texas-holdem'
+    });
     
-    // Create bet
-    const betId = await gameServer.transport.server?.createBet(player, amount);
-    console.log(`Created bet ${betId}`);
+    // Store bet ID in player attributes
+    player.setAttribute('currentBetId', betId);
     
-    // Game logic to determine outcome...
-    const playerWon = Math.random() > 0.5;
-    
-    if (playerWon) {
-      // Mark bet as won
-      await gameServer.transport.server?.markBetWon(betId!, amount * 2);
-      console.log(`Player won ${amount * 2}`);
-    } else {
-      // Mark bet as lost
-      await gameServer.transport.server?.markBetLost(betId!);
-      console.log(`Player lost ${amount}`);
-    }
+    return betId;
   } catch (error) {
-    console.error(`Error processing bet:`, error);
+    console.error('Error placing bet:', error);
+    
+    // Send error to player
+    player.sendMessage({
+      type: 'error',
+      message: 'Failed to place bet. Insufficient balance.'
+    });
+    
+    return null;
   }
 }
 ```
 
-## 🎮 Creating Game Logic
-
-To create custom game logic, you'll typically:
-
-1. Define your game states and rules
-2. Register command handlers for player actions
-3. Use the event system to respond to changes
-
-Here's a simplified example of a number guessing game:
-
-```typescript
-import { createGameServer, Player, Table } from 'shoehive';
-
-// Define game-specific attributes and handlers
-function initializeNumberGuessingGame(gameServer) {
-  // Register a handler for creating a game
-  gameServer.messageRouter.registerCommandHandler('createGame', (player, data) => {
-    // Create a new table
-    const table = gameServer.gameManager.createTable('number-guessing', {
-      config: { totalSeats: 2, maxSeatsPerPlayer: 1 }
-    });
-    
-    // Add player to table
-    table.addPlayer(player);
-    
-    // Initialize game state
-    table.setAttribute('targetNumber', Math.floor(Math.random() * 100) + 1);
-    table.setAttribute('attempts', 0);
-    table.setAttribute('maxAttempts', 10);
-    
-    // Notify player
-    player.sendMessage({
-      type: 'gameCreated',
-      tableId: table.id
-    });
-  });
-  
-  // Register a handler for making a guess
-  gameServer.messageRouter.registerCommandHandler('makeGuess', (player, data) => {
-    if (!data.guess || typeof data.guess !== 'number') return;
-    
-    const table = player.getTable();
-    if (!table) return;
-    
-    const targetNumber = table.getAttribute('targetNumber');
-    const attempts = table.getAttribute('attempts');
-    const maxAttempts = table.getAttribute('maxAttempts');
-    
-    // Increment attempts
-    table.setAttribute('attempts', attempts + 1);
-    
-    // Check guess
-    if (data.guess === targetNumber) {
-      // Player won
-      player.sendMessage({
-        type: 'guessResult',
-        correct: true,
-        message: `Correct! The number was ${targetNumber}`
-      });
-      
-      // End game
-      table.setAttribute('state', 'ENDED');
-      gameServer.eventBus.emit('gameEnded', table, player.id);
-    } else {
-      // Incorrect guess
-      const hint = data.guess < targetNumber ? 'higher' : 'lower';
-      
-      player.sendMessage({
-        type: 'guessResult',
-        correct: false,
-        message: `Wrong! Try something ${hint}`,
-        attemptsLeft: maxAttempts - (attempts + 1)
-      });
-      
-      // Check if max attempts reached
-      if (attempts + 1 >= maxAttempts) {
-        player.sendMessage({
-          type: 'gameOver',
-          message: `Game over! The number was ${targetNumber}`
-        });
-        
-        // End game
-        table.setAttribute('state', 'ENDED');
-        gameServer.eventBus.emit('gameEnded', table);
-      }
-    }
-  });
-}
-```
-
-## 📢 Event Handling
-
-Shoehive provides an event system for handling game state changes and other events:
-
-```typescript
-// Listen for specific events
-gameServer.eventBus.on('playerJoinedTable', (player, table) => {
-  // Notify other players in the table
-  table.getPlayers().forEach(p => {
-    if (p.id !== player.id) {
-      p.sendMessage({
-        type: 'playerJoined',
-        playerId: player.id
-      });
-    }
-  });
-});
-
-// Emit custom events
-gameServer.eventBus.emit('roundStarted', table, {
-  roundNumber: 1,
-  startTime: Date.now()
-});
-```
-
-## 💡 Common Patterns
+## 🧠 Advanced Patterns
 
 ### Game State Management
 
-It's a good practice to define clear game states and transitions:
-
 ```typescript
 // Define game states
-enum GameState {
+enum PokerGameState {
   WAITING_FOR_PLAYERS = 'waitingForPlayers',
-  ROUND_STARTING = 'roundStarting',
-  ACTIVE = 'active',
-  ROUND_ENDED = 'roundEnded',
+  DEALING_CARDS = 'dealingCards',
+  BETTING_ROUND = 'bettingRound',
+  SHOWDOWN = 'showdown',
   GAME_OVER = 'gameOver'
 }
 
-// Set the state on the table
-table.setAttribute('gameState', GameState.WAITING_FOR_PLAYERS);
-
 // Function to transition states
-function transitionState(table, newState, data = {}) {
+function transitionState(table: Table, newState: PokerGameState, data = {}) {
   const previousState = table.getAttribute('gameState');
   table.setAttribute('gameState', newState);
   
-  // Emit state change event
-  gameServer.eventBus.emit('gameStateChanged', table, {
+  // Emit state change event using game-specific constant
+  eventBus.emit(POKER_EVENTS.STATE_CHANGED, table, {
     previousState,
     newState,
     ...data
   });
   
-  // Notify all players
-  table.getPlayers().forEach(player => {
-    player.sendMessage({
-      type: 'stateChanged',
-      state: newState,
-      data
-    });
+  // Broadcast to all players
+  table.broadcastMessage({
+    type: 'stateChanged',
+    state: newState,
+    data
   });
 }
 ```
 
 ### Player Reconnection Handling
 
-Handle player reconnections gracefully:
+```typescript
+// Handle player reconnections
+eventBus.on(PLAYER_EVENTS.RECONNECTED, (player) => {
+  const table = player.getTable();
+  if (!table) return;
+  
+  // Send the current game state
+  const gameState = table.getAttribute('gameState');
+  const gameData = getGameDataForPlayer(table, player);
+  
+  player.sendMessage({
+    type: 'gameState',
+    state: gameState,
+    data: gameData
+  });
+});
+
+function getGameDataForPlayer(table: Table, player: Player) {
+  // Get generic table data
+  const data = {
+    tableId: table.id,
+    players: table.getPlayers().map(p => ({
+      id: p.id,
+      seatIndex: getPlayerSeatIndex(table, p),
+      // Only include public attributes
+      avatar: p.getAttribute('avatar'),
+      username: p.getAttribute('username')
+    })),
+    // Add game-specific data
+    // ...
+  };
+  
+  // Add player-specific private data
+  if (table.getAttribute('gameType') === 'poker') {
+    // For poker, add the player's cards (but not other players' cards)
+    const seatIndex = getPlayerSeatIndex(table, player);
+    if (seatIndex !== -1) {
+      const hand = table.getHandAtSeat(seatIndex);
+      data.hand = hand ? hand.getCards() : [];
+    }
+  }
+  
+  return data;
+}
+
+function getPlayerSeatIndex(table: Table, player: Player): number {
+  for (let i = 0; i < table.getSeats().length; i++) {
+    if (table.getPlayerAtSeat(i)?.id === player.id) {
+      return i;
+    }
+  }
+  return -1;
+}
+```
+
+## 🔍 Debugging and Monitoring
+
+Shoehive provides built-in debugging tools for event monitoring:
 
 ```typescript
-gameServer.eventBus.on('playerReconnected', (player) => {
-  const table = player.getTable();
-  if (table) {
-    // Send the current game state to the reconnected player
-    const gameState = table.getAttribute('gameState');
-    const gameData = table.getAttribute('gameData');
-    
-    player.sendMessage({
-      type: 'gameState',
-      state: gameState,
-      data: gameData
-    });
+// Enable debug monitoring for all events
+gameServer.eventBus.debugMonitor(true);
+
+// Monitor only events with a specific prefix (e.g., poker events)
+gameServer.eventBus.debugMonitor(
+  true,
+  (eventName) => eventName.startsWith('poker:'),
+  (event, ...args) => {
+    console.log(`[POKER EVENT] ${event}`, JSON.stringify(args, null, 2));
   }
+);
+
+// Custom formatting for different event types
+gameServer.eventBus.debugMonitor(
+  true,
+  undefined,
+  (event, ...args) => {
+    // Different formatting for different event types
+    if (event.startsWith('player:')) {
+      console.log(`👤 [PLAYER] ${event}`, args[0]?.id || 'unknown');
+    } else if (event.startsWith('table:')) {
+      console.log(`🎲 [TABLE] ${event}`, args[0]?.id || 'unknown');
+    } else if (event.startsWith('game:')) {
+      console.log(`🎮 [GAME] ${event}`, args[0]?.id || 'unknown');
+    } else {
+      console.log(`🔄 [EVENT] ${event}`, ...args);
+    }
+  }
+);
+
+// Disable debug monitoring
+gameServer.eventBus.debugMonitor(false);
+```
+
+### Structured Logging
+
+Create more detailed logs with structured data:
+
+```typescript
+// Create a structured logger
+function createLogger(prefix: string) {
+  return {
+    info: (message: string, data?: any) => {
+      console.log(`[${prefix}] [INFO] ${message}`, data ? JSON.stringify(data) : '');
+    },
+    warn: (message: string, data?: any) => {
+      console.warn(`[${prefix}] [WARN] ${message}`, data ? JSON.stringify(data) : '');
+    },
+    error: (message: string, error?: any) => {
+      console.error(`[${prefix}] [ERROR] ${message}`, error);
+    },
+    debug: (message: string, data?: any) => {
+      if (process.env.DEBUG) {
+        console.debug(`[${prefix}] [DEBUG] ${message}`, data ? JSON.stringify(data) : '');
+      }
+    }
+  };
+}
+
+const logger = createLogger('POKER');
+
+// Use the logger with events
+eventBus.on(GAME_EVENTS.STARTED, (table) => {
+  logger.info('Game started', { 
+    tableId: table.id,
+    players: table.getPlayers().map(p => p.id)
+  });
 });
 ```
 
 ## 🔗 Additional Resources
+
+- [API Reference](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md)
+- [Creating Games Guide](https://github.com/jtay/shoehive/tree/main/docs/creating-games.md)
 - [Advanced Events](https://github.com/jtay/shoehive/tree/main/docs/advanced-events.md)
 - [Transport Modules](https://github.com/jtay/shoehive/tree/main/docs/transport-modules.md)
-- [Creating Custom Games](https://github.com/jtay/shoehive/tree/main/docs/creating-games.md)
 - [Player Attributes](https://github.com/jtay/shoehive/tree/main/docs/player-attributes.md)
-- [API Documentation](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md)
 
 Happy gaming with Shoehive! 🎮 

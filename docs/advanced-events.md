@@ -13,37 +13,197 @@ Shoehive's event system is built on an event-driven architecture that helps you 
 
 ## Beyond Basic Events
 
-### Custom Game Events
+### Using Predefined Event Constants
 
-While Shoehive provides standard events like `playerJoinedTable` and `tableStateChanged`, complex games often require custom events:
+Shoehive provides a set of predefined event constants in the `EventTypes.ts` file. Using these constants instead of string literals gives you type safety and better IDE support:
 
 ```typescript
-// Creating custom events
-gameServer.eventBus.emit('roundStarted', table, {
-  roundNumber: currentRound,
-  startTime: Date.now(),
-  turnOrder: playerIds
+import { PLAYER_EVENTS, TABLE_EVENTS, GAME_EVENTS, EVENTS } from 'shoehive';
+
+// Using predefined event constants
+eventBus.on(PLAYER_EVENTS.CONNECTED, (player) => {
+  console.log(`Player ${player.id} connected`);
 });
 
-// Handling custom events
-gameServer.eventBus.on('roundStarted', (table, roundData) => {
-  // Start countdown timer for first player's turn
-  startTurnTimer(table, roundData.turnOrder[0], 30);
+eventBus.on(TABLE_EVENTS.PLAYER_JOINED, (player, table) => {
+  console.log(`Player ${player.id} joined table ${table.id}`);
 });
+
+eventBus.on(GAME_EVENTS.STARTED, (table, options) => {
+  console.log(`Game started at table ${table.id} with options:`, options);
+});
+
+// You can also access all event groups through the EVENTS object
+eventBus.on(EVENTS.PLAYER.CONNECTED, playerConnectedHandler);
+eventBus.on(EVENTS.TABLE.CREATED, tableCreatedHandler);
+```
+
+### Creating Custom Event Constants
+
+For complex games, you should define your own event constants following the same pattern:
+
+```typescript
+// Define custom event constants in a separate file
+export const POKER_EVENTS = {
+  HAND_DEALT: "poker:hand:dealt",
+  BETTING_ROUND_STARTED: "poker:betting:started",
+  BETTING_ROUND_ENDED: "poker:betting:ended",
+  PLAYER_FOLDED: "poker:player:folded",
+  PLAYER_CALLED: "poker:player:called",
+  PLAYER_RAISED: "poker:player:raised",
+  SHOWDOWN: "poker:showdown",
+  WINNER_DETERMINED: "poker:winner:determined"
+} as const;
+
+// Create a type for your custom events
+export type PokerEventType = typeof POKER_EVENTS[keyof typeof POKER_EVENTS];
+
+// Use them with the EventBus
+import { EventBus } from 'shoehive';
+import { POKER_EVENTS } from './poker-events';
+
+const eventBus = new EventBus();
+
+eventBus.on(POKER_EVENTS.HAND_DEALT, (player, cards) => {
+  console.log(`Dealt ${cards.length} cards to player ${player.id}`);
+});
+
+eventBus.on(POKER_EVENTS.BETTING_ROUND_STARTED, (table, minBet) => {
+  console.log(`Betting round started at table ${table.id} with minimum bet ${minBet}`);
+});
+
+// Emit custom events
+eventBus.emit(POKER_EVENTS.HAND_DEALT, player, cards);
+eventBus.emit(POKER_EVENTS.BETTING_ROUND_STARTED, table, 10);
 ```
 
 ### Event Namespacing
 
-For complex games, consider using namespaced events to avoid collisions and improve organization:
+Shoehive follows a consistent event naming convention using namespaces with colon separators:
+
+```
+domain:action
+```
+
+or
+
+```
+domain:subdomain:action
+```
+
+For example:
+- `player:connected`
+- `table:player:joined`
+- `table:state:changed`
+
+When creating your own events, follow this same pattern with your game name as the domain:
+
+```
+poker:hand:dealt
+chess:piece:moved
+blackjack:card:dealt
+```
+
+### Using the Debug Monitor
+
+Shoehive's EventBus includes a debug monitor to help you track and analyze events during development. This is especially useful for complex event-driven games:
 
 ```typescript
-// Emit namespaced events
-gameServer.eventBus.emit('poker:hand:dealt', table, handData);
-gameServer.eventBus.emit('poker:betting:started', table, betData);
+import { EventBus, EVENTS } from 'shoehive';
 
-// Listen for namespaced events
-gameServer.eventBus.on('poker:hand:dealt', handleDealtHand);
-gameServer.eventBus.on('poker:betting:started', handleBettingStart);
+const eventBus = new EventBus();
+
+// Enable debug monitoring for all events
+eventBus.debugMonitor(true);
+
+// Emitting any event will now log it to the console
+eventBus.emit('game:started', { gameId: 'poker', players: 4 });
+// [EVENT] game:started { gameId: 'poker', players: 4 }
+
+// Filter events by name pattern
+eventBus.debugMonitor(true, (eventName) => eventName.startsWith('poker:'));
+
+// Now only poker: events will be logged
+eventBus.emit('poker:hand:dealt', player, cards); // Will be logged
+eventBus.emit('player:connected', player); // Won't be logged
+
+// Use a custom logger
+const myLogger = (event, ...args) => {
+  console.log(`Event "${event}" fired at ${new Date().toISOString()} with data:`, ...args);
+};
+
+eventBus.debugMonitor(true, undefined, myLogger);
+
+// Disable debug monitoring when done
+eventBus.debugMonitor(false);
+```
+
+## Game-Specific Event Wrappers
+
+For complex games, you might want to create a game-specific wrapper around the EventBus:
+
+```typescript
+import { EventBus } from 'shoehive';
+import { POKER_EVENTS } from './poker-events';
+
+class PokerEventBus {
+  private eventBus: EventBus;
+  
+  constructor(eventBus: EventBus) {
+    this.eventBus = eventBus;
+  }
+  
+  // Typed event listeners
+  public onHandDealt(listener: (player: Player, cards: Card[]) => void): void {
+    this.eventBus.on(POKER_EVENTS.HAND_DEALT, listener);
+  }
+  
+  public onBettingRoundStarted(listener: (table: Table, minBet: number) => void): void {
+    this.eventBus.on(POKER_EVENTS.BETTING_ROUND_STARTED, listener);
+  }
+  
+  // Typed event emitters
+  public emitHandDealt(player: Player, cards: Card[]): void {
+    this.eventBus.emit(POKER_EVENTS.HAND_DEALT, player, cards);
+  }
+  
+  public emitBettingRoundStarted(table: Table, minBet: number): void {
+    this.eventBus.emit(POKER_EVENTS.BETTING_ROUND_STARTED, table, minBet);
+  }
+}
+
+// Usage
+const pokerEvents = new PokerEventBus(eventBus);
+
+pokerEvents.onHandDealt((player, cards) => {
+  // Handle the event with proper typing
+});
+
+pokerEvents.emitHandDealt(player, cards);
+```
+
+## Combining Built-in and Custom Events
+
+You can combine built-in and custom events for better organization:
+
+```typescript
+import { EVENTS } from 'shoehive';
+import { POKER_EVENTS } from './poker-events';
+
+// Create an event combination for monitoring
+const combinedEvents = {
+  ...EVENTS,
+  POKER: POKER_EVENTS
+};
+
+// Use the combined events object
+eventBus.on(combinedEvents.PLAYER.CONNECTED, playerConnectedHandler);
+eventBus.on(combinedEvents.TABLE.CREATED, tableCreatedHandler);
+eventBus.on(combinedEvents.POKER.SHOWDOWN, pokerShowdownHandler);
+
+// Emit events using the combined object
+eventBus.emit(combinedEvents.PLAYER.CONNECTED, player);
+eventBus.emit(combinedEvents.POKER.SHOWDOWN, { players: [player] });
 ```
 
 ## Advanced Patterns
@@ -73,7 +233,7 @@ function transitionState(table: Table, newState: PokerGameState): void {
   table.setAttribute('gameState', newState);
   
   // Emit state change event
-  gameServer.eventBus.emit('poker:stateChanged', table, {
+  gameServer.eventBus.emit('poker:state:changed', table, {
     prevState,
     newState,
     timestamp: Date.now()
@@ -327,42 +487,42 @@ async function handlePlayerBet(table: Table, player: Player, betData: any) {
 gameServer.eventBus.on('player:bet', handlePlayerBet);
 ```
 
-## Debugging Events
-
-Implement an event listener for debugging:
-
-```typescript
-if (process.env.NODE_ENV === 'development') {
-  gameServer.eventBus.on('*', (eventName, ...args) => {
-    console.log(`[EVENT] ${eventName}`, JSON.stringify(args, (key, value) => {
-      // Avoid circular references
-      if (key === 'table' && value && typeof value === 'object') {
-        return { id: value.id, playerCount: value.getPlayerCount() };
-      }
-      if (key === 'player' && value && typeof value === 'object') {
-        return { id: value.id };
-      }
-      return value;
-    }, 2));
-  });
-}
-```
-
 ## Best Practices
 
-1. **Design your event system upfront**: Plan your event names and structures before implementation
-2. **Document your events**: Create a data dictionary of all events and their payloads
-3. **Keep events focused**: Each event should represent a single action or state change
-4. **Avoid circular events**: Be careful not to create event loops that trigger each other
-5. **Use meaningful event names**: Choose descriptive names with proper namespacing
-6. **Error handling**: Always handle errors in event listeners to avoid breaking the event chain
-7. **Clean up listeners**: Remove listeners when components are destroyed
-8. **Throttle high-frequency events**: For events that may fire rapidly, implement throttling
-9. **Separate UI events from game logic**: Keep a clear distinction between game state and UI events
-10. **Log important events**: Implement logging for critical events for debugging and auditing
+1. **Use predefined constants**: Always use the event constants from `EventTypes.ts` for built-in events
+2. **Design your event system upfront**: Plan your event names and structures before implementation
+3. **Follow the naming convention**: Use the `domain:action` pattern for all your custom events
+4. **Document your events**: Create a data dictionary of all events and their payloads
+5. **Keep events focused**: Each event should represent a single action or state change
+6. **Avoid circular events**: Be careful not to create event loops that trigger each other
+7. **Use debug monitoring**: Enable `eventBus.debugMonitor()` during development to track events
+8. **Error handling**: Always handle errors in event listeners to avoid breaking the event chain
+9. **Clean up listeners**: Remove listeners when components are destroyed
+10. **Throttle high-frequency events**: For events that may fire rapidly, implement throttling
 
-## Further Reading
+## Lifecycle Events
 
-- [Event-Driven Architecture Patterns](https://martinfowler.com/articles/201701-event-driven.html)
-- [State Machine Design Pattern](https://refactoring.guru/design-patterns/state)
-- [Command Pattern in Game Development](https://gameprogrammingpatterns.com/command.html) 
+Shoehive emits standard lifecycle events that you can leverage:
+
+```typescript
+// Lifecycle events for managing game resources
+gameServer.eventBus.on(TABLE_EVENTS.CREATED, (table) => {
+  // Initialize game resources for this table
+  initializeGameResources(table);
+});
+
+gameServer.eventBus.on(TABLE_EVENTS.EMPTY, (table) => {
+  // Clean up resources when table is removed
+  cleanupGameResources(table);
+});
+
+gameServer.eventBus.on(PLAYER_EVENTS.CONNECTED, (player) => {
+  // Initialize player-specific resources
+  initializePlayerResources(player);
+});
+
+gameServer.eventBus.on(PLAYER_EVENTS.DISCONNECTED, (player) => {
+  // Clean up player resources
+  cleanupPlayerResources(player);
+});
+``` 

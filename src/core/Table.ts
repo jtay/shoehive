@@ -1,6 +1,8 @@
 import { EventBus } from "../events/EventBus";
+import { TABLE_EVENTS } from "../events/EventTypes";
 import { Player } from "./Player";
 import { Card, Deck, Hand } from "./Card";
+import { Seat } from "./Seat";
 import crypto from "crypto";
 
 export enum TableState {
@@ -9,15 +11,16 @@ export enum TableState {
   ENDED = "ended"
 }
 
-export interface SeatData {
-  player: Player | null;
-  hands: Map<string, Hand>;
-}
-
+/**
+ * Represents a game table with players, seats, and game state.
+ * 
+ * The Table class manages a group of players and seats for a specific game.
+ * It emits various events to notify other components about changes in the table state.
+ */
 export class Table {
   public readonly id: string;
   private players: Map<string, Player> = new Map();
-  private seats: Array<SeatData>;
+  private seats: Array<Seat>;
   private eventBus: EventBus;
   private state: TableState = TableState.WAITING;
   private readonly totalSeats: number;
@@ -36,17 +39,14 @@ export class Table {
     this.totalSeats = totalSeats;
     this.maxSeatsPerPlayer = maxSeatsPerPlayer;
     
-    // Initialize seats with empty SeatData objects
-    this.seats = new Array(totalSeats).fill(null).map(() => ({
-      player: null,
-      hands: new Map<string, Hand>([["main", new Hand("main")]])
-    }));
+    // Initialize seats with Seat objects
+    this.seats = new Array(totalSeats).fill(null).map(() => new Seat());
   }
 
   // Card and deck related methods
   public createDeck(numberOfDecks: number = 1): void {
     this.deck = new Deck(numberOfDecks);
-    this.eventBus.emit("deckCreated", this, numberOfDecks);
+    this.eventBus.emit(TABLE_EVENTS.DECK_CREATED, this, numberOfDecks);
   }
 
   public getDeck(): Deck | null {
@@ -57,7 +57,7 @@ export class Table {
     if (!this.deck) return false;
     
     this.deck.shuffle();
-    this.eventBus.emit("deckShuffled", this);
+    this.eventBus.emit(TABLE_EVENTS.DECK_SHUFFLED, this);
     return true;
   }
 
@@ -66,7 +66,7 @@ export class Table {
     
     const card = this.deck.drawCard(isVisible);
     if (card) {
-      this.eventBus.emit("cardDrawn", this, card);
+      this.eventBus.emit(TABLE_EVENTS.DECK_CARD_DRAWN, this, card);
     }
     return card;
   }
@@ -88,13 +88,16 @@ export class Table {
     const seat = this.seats[seatIndex];
     
     // Create the hand if it doesn't exist
-    if (!seat.hands.has(handId)) {
-      seat.hands.set(handId, new Hand(handId));
+    if (!seat.getHand(handId)) {
+      seat.addHand(handId);
     }
     
-    seat.hands.get(handId)!.addCard(card);
+    const hand = seat.getHand(handId);
+    if (!hand) return false;
     
-    this.eventBus.emit("cardDealt", this, seatIndex, card, handId);
+    hand.addCard(card);
+    
+    this.eventBus.emit(TABLE_EVENTS.CARD_DEALT, this, seatIndex, card, handId);
     return true;
   }
 
@@ -103,7 +106,7 @@ export class Table {
       return null;
     }
     
-    return this.seats[seatIndex].hands.get(handId) || null;
+    return this.seats[seatIndex].getHand(handId);
   }
 
   public getAllHandsAtSeat(seatIndex: number): Map<string, Hand> | null {
@@ -111,7 +114,7 @@ export class Table {
       return null;
     }
     
-    return new Map(this.seats[seatIndex].hands);
+    return this.seats[seatIndex].getAllHands();
   }
 
   public clearHandAtSeat(seatIndex: number, handId: string = "main"): boolean {
@@ -119,22 +122,18 @@ export class Table {
       return false;
     }
     
-    const hand = this.seats[seatIndex].hands.get(handId);
-    if (!hand) return false;
-    
-    hand.clear();
-    this.eventBus.emit("handCleared", this, seatIndex, handId);
-    return true;
+    const result = this.seats[seatIndex].clearHand(handId);
+    if (result) {
+      this.eventBus.emit(TABLE_EVENTS.SEAT_HAND_CLEARED, this, seatIndex, handId);
+    }
+    return result;
   }
 
   public clearAllHands(): void {
     for (let i = 0; i < this.totalSeats; i++) {
-      const hands = this.seats[i].hands;
-      for (const [handId, hand] of hands) {
-        hand.clear();
-      }
+      this.seats[i].clearAllHands();
     }
-    this.eventBus.emit("allHandsCleared", this);
+    this.eventBus.emit(TABLE_EVENTS.SEATS_HANDS_CLEARED, this);
   }
 
   public addHandToSeat(seatIndex: number, handId: string): boolean {
@@ -142,13 +141,11 @@ export class Table {
       return false;
     }
     
-    if (this.seats[seatIndex].hands.has(handId)) {
-      return false;
+    const result = this.seats[seatIndex].addHand(handId);
+    if (result) {
+      this.eventBus.emit(TABLE_EVENTS.SEAT_HAND_ADDED, this, seatIndex, handId);
     }
-    
-    this.seats[seatIndex].hands.set(handId, new Hand(handId));
-    this.eventBus.emit("handAdded", this, seatIndex, handId);
-    return true;
+    return result;
   }
 
   public removeHandFromSeat(seatIndex: number, handId: string): boolean {
@@ -156,13 +153,9 @@ export class Table {
       return false;
     }
     
-    if (handId === "main") {
-      return false; // Cannot remove the main hand
-    }
-    
-    const result = this.seats[seatIndex].hands.delete(handId);
+    const result = this.seats[seatIndex].removeHand(handId);
     if (result) {
-      this.eventBus.emit("handRemoved", this, seatIndex, handId);
+      this.eventBus.emit(TABLE_EVENTS.SEAT_HAND_REMOVED, this, seatIndex, handId);
     }
     return result;
   }
@@ -175,7 +168,7 @@ export class Table {
 
     this.players.set(player.id, player);
     player.setTable(this);
-    this.eventBus.emit("playerJoinedTable", player, this);
+    this.eventBus.emit(TABLE_EVENTS.PLAYER_JOINED, player, this);
     return true;
   }
 
@@ -185,18 +178,18 @@ export class Table {
 
     // Remove player from all seats
     for (let i = 0; i < this.seats.length; i++) {
-      if (this.seats[i].player === player) {
-        this.seats[i].player = null;
+      if (this.seats[i].getPlayer()?.id === playerId) {
+        this.seats[i].setPlayer(null);
       }
     }
 
     this.players.delete(playerId);
     player.setTable(null);
-    this.eventBus.emit("playerLeftTable", player, this);
+    this.eventBus.emit(TABLE_EVENTS.PLAYER_LEFT, player, this);
 
     // Check if table is empty
     if (this.players.size === 0) {
-      this.eventBus.emit("tableEmpty", this);
+      this.eventBus.emit(TABLE_EVENTS.EMPTY, this);
     }
 
     return true;
@@ -209,7 +202,7 @@ export class Table {
     }
 
     // Check if seat is already taken
-    if (this.seats[seatIndex].player !== null) {
+    if (this.seats[seatIndex].getPlayer() !== null) {
       return false;
     }
 
@@ -222,8 +215,8 @@ export class Table {
       return false;
     }
 
-    this.seats[seatIndex].player = player;
-    this.eventBus.emit("playerSeated", player, this, seatIndex);
+    this.seats[seatIndex].setPlayer(player);
+    this.eventBus.emit(TABLE_EVENTS.PLAYER_SAT, player, this, seatIndex);
     return true;
   }
 
@@ -232,18 +225,18 @@ export class Table {
       return false;
     }
 
-    const player = this.seats[seatIndex].player;
+    const player = this.seats[seatIndex].getPlayer();
     if (!player) return false;
 
-    this.seats[seatIndex].player = null;
-    this.eventBus.emit("playerUnseated", player, this, seatIndex);
+    this.seats[seatIndex].setPlayer(null);
+    this.eventBus.emit(TABLE_EVENTS.PLAYER_STOOD, player, this, seatIndex);
     return true;
   }
 
   public getPlayerSeatCount(playerId: string): number {
     let count = 0;
     for (const seat of this.seats) {
-      if (seat.player && seat.player.id === playerId) {
+      if (seat.getPlayer()?.id === playerId) {
         count++;
       }
     }
@@ -256,7 +249,7 @@ export class Table {
 
   public setState(state: TableState): void {
     this.state = state;
-    this.eventBus.emit("tableStateChanged", this, state);
+    this.eventBus.emit(TABLE_EVENTS.STATE_CHANGED, this, state);
   }
 
   public getPlayerCount(): number {
@@ -267,7 +260,14 @@ export class Table {
     return Array.from(this.players.values());
   }
 
-  public getSeatMap(): SeatData[] {
+  public getSeat(seatIndex: number): Seat | null {
+    if (seatIndex < 0 || seatIndex >= this.totalSeats) {
+      return null;
+    }
+    return this.seats[seatIndex];
+  }
+  
+  public getSeats(): Seat[] {
     return [...this.seats];
   }
 
@@ -275,7 +275,7 @@ export class Table {
     if (seatIndex < 0 || seatIndex >= this.totalSeats) {
       return null;
     }
-    return this.seats[seatIndex].player;
+    return this.seats[seatIndex].getPlayer();
   }
 
   public broadcastMessage(message: any): void {

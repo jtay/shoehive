@@ -2,6 +2,7 @@ import { Player } from '../../src/core/Player';
 import { EventBus } from '../../src/events/EventBus';
 import * as WebSocket from 'ws';
 import { Table } from '../../src/core/Table';
+import { PLAYER_EVENTS } from '../../src/events/EventTypes';
 
 // Mock WebSocket constructor and methods
 jest.mock('ws', () => {
@@ -123,6 +124,6 @@ describe('Player', () => {
     const closeHandler = mockSocket.on.mock.calls.find((call: any[]) => call[0] === 'close')[1];
     closeHandler();
     
-    expect(spy).toHaveBeenCalledWith('playerDisconnected', player);
+    expect(spy).toHaveBeenCalledWith(PLAYER_EVENTS.DISCONNECTED, player);
   });
 }); 

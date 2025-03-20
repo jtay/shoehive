@@ -59,7 +59,7 @@ export class WebSocketManager {
         this.sendInitialState(player);
         
         // Emit player connected event
-        this.eventBus.emit("playerConnected", player);
+        this.eventBus.emit("player:connected", player);
         
       } catch (error) {
         console.error("Connection error:", error);
@@ -69,9 +69,9 @@ export class WebSocketManager {
   }
 
   private setupEventListeners(): void {
-    this.eventBus.on("lobbyUpdated", (lobbyState) => {
+    this.eventBus.on("lobby:state:changed", (lobbyState) => {
       const message = {
-        type: "lobbyUpdate",
+        type: "lobby:state",
         data: lobbyState
       };
       
@@ -81,19 +81,19 @@ export class WebSocketManager {
       });
     });
 
-    this.eventBus.on("playerJoinedTable", (player, table) => {
+    this.eventBus.on("player:joined:table", (player, table) => {
       player.sendMessage({
-        type: "tableJoined",
+        type: "table:joined",
         tableId: table.id,
         gameId: table.getAttribute("gameId")
       });
     });
 
     // Add listener for playerSeated event
-    this.eventBus.on("playerSeated", (player, table, seatIndex) => {
+    this.eventBus.on("player:seated", (player, table, seatIndex) => {
       // Notify the player they have been seated
       player.sendMessage({
-        type: "seated",
+        type: "table:seat:sit",
         tableId: table.id,
         seatIndex: seatIndex
       });
@@ -103,10 +103,10 @@ export class WebSocketManager {
     });
 
     // Add listener for playerUnseated event
-    this.eventBus.on("playerUnseated", (player, table, seatIndex) => {
+    this.eventBus.on("player:unseated", (player, table, seatIndex) => {
       // Notify the player they have stood up
       player.sendMessage({
-        type: "unseated",
+        type: "table:seat:stand",
         tableId: table.id,
         seatIndex: seatIndex
       });
@@ -119,20 +119,21 @@ export class WebSocketManager {
   private sendInitialState(player: Player): void {
     // Send player details
     player.sendMessage({
-      type: "playerInfo",
-      id: player.id
+      type: "player:state",
+      id: player.id,
+      attributes: player.getAttributes()
     });
 
     // Send available games and tables
     player.sendMessage({
-      type: "lobbyUpdate",
+      type: "lobby:state",
       data: {
         games: this.gameManager.getAvailableGames(),
         tables: this.gameManager.getAllTables().map(table => ({
           id: table.id,
           gameId: table.getAttribute("gameId"),
           playerCount: table.getPlayerCount(),
-          seats: table.getSeatMap().map(seatData => seatData.player?.id || null),
+          seats: table.getSeats().map(seat => seat.getPlayer()?.id || null),
           state: table.getState()
         }))
       }
@@ -156,7 +157,7 @@ export class WebSocketManager {
         player.setTable(previousTable);
       }
       
-      this.eventBus.emit("playerReconnected", player);
+      this.eventBus.emit("player:reconnected", player);
       return player;
     } else {
       // Create new player

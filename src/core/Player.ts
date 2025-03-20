@@ -1,8 +1,15 @@
 import { EventBus } from "../events/EventBus";
+import { PLAYER_EVENTS } from "../events/EventTypes";
 import { Table } from "./Table";
 import * as WebSocket from "ws";
 import crypto from "crypto";
 
+/**
+ * Represents a connected client in the game.
+ * 
+ * The Player class handles communication with the client and keeps track
+ * of the player's current table and custom attributes.
+ */
 export class Player {
   public readonly id: string;
   private socket: WebSocket.WebSocket;
@@ -19,7 +26,7 @@ export class Player {
 
   private setupSocketListeners(): void {
     this.socket.on("close", () => {
-      this.eventBus.emit("playerDisconnected", this);
+      this.eventBus.emit(PLAYER_EVENTS.DISCONNECTED, this);
     });
 
     this.socket.on("error", (error) => {
@@ -49,6 +56,10 @@ export class Player {
     return this.attributes.get(key);
   }
 
+  public getAttributes(): Record<string, any> {
+    return Object.fromEntries(this.attributes.entries());
+  }
+
   public hasAttribute(key: string): boolean {
     return this.attributes.has(key);
   }
@@ -58,4 +69,4 @@ export class Player {
       this.socket.close();
     }
   }
-} 
+}

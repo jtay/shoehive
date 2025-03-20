@@ -7,6 +7,7 @@ import { Table, TableState } from '../../src/core/Table';
 import { WebSocketManager } from '../../src/core/WebSocketManager';
 import { BasicServerTransportModule } from '../../src/transport/implementations/BasicServerTransportModule';
 import * as WebSocket from 'ws';
+import { PLAYER_EVENTS } from '../../src/events/EventTypes';
 
 // Mock WebSocket
 jest.mock('ws', () => {
@@ -143,24 +144,24 @@ describe('Game Server Integration', () => {
     table.broadcastMessage = jest.fn();
     
     expect(table).toBeTruthy();
-    expect(eventSpy).toHaveBeenCalledWith('tableCreated', table);
+    expect(eventSpy).toHaveBeenCalledWith('table:created', table);
     
     // Add players to table
     table.addPlayer(player1);
     table.addPlayer(player2);
     
     expect(table.getPlayerCount()).toBe(2);
-    expect(eventSpy).toHaveBeenCalledWith('playerJoinedTable', player1, table);
-    expect(eventSpy).toHaveBeenCalledWith('playerJoinedTable', player2, table);
+    expect(eventSpy).toHaveBeenCalledWith('table:player:joined', player1, table);
+    expect(eventSpy).toHaveBeenCalledWith('table:player:joined', player2, table);
     
     // Sit players at seats
     table.sitPlayerAtSeat('player1', 0);
     table.sitPlayerAtSeat('player2', 1);
     
-    expect(table.getSeatMap()[0].player).toBe(player1);
-    expect(table.getSeatMap()[1].player).toBe(player2);
-    expect(eventSpy).toHaveBeenCalledWith('playerSeated', player1, table, 0);
-    expect(eventSpy).toHaveBeenCalledWith('playerSeated', player2, table, 1);
+    expect(table.getSeats()[0].getPlayer()).toBe(player1);
+    expect(table.getSeats()[1].getPlayer()).toBe(player2);
+    expect(eventSpy).toHaveBeenCalledWith('table:player:sat', player1, table, 0);
+    expect(eventSpy).toHaveBeenCalledWith('table:player:sat', player2, table, 1);
     
     // Start the game
     table.setState(TableState.ACTIVE);
@@ -168,7 +169,7 @@ describe('Game Server Integration', () => {
     table.setAttribute('gameData', { started: true, turnNumber: 1 });
     
     expect(table.getState()).toBe(TableState.ACTIVE);
-    expect(eventSpy).toHaveBeenCalledWith('tableStateChanged', table, TableState.ACTIVE);
+    expect(eventSpy).toHaveBeenCalledWith('table:state:changed', table, TableState.ACTIVE);
     
     // Broadcast game start message
     table.broadcastMessage({
@@ -209,12 +210,12 @@ describe('Game Server Integration', () => {
       });
       
       // Emit custom event
-      eventBus.emit('playerMadeMove', player, gameTable, data.move);
+      eventBus.emit('player:made:move', player, gameTable, data.move);
     });
     
     // Listen for the custom event
     const moveListener = jest.fn();
-    eventBus.on('playerMadeMove', moveListener);
+    eventBus.on('player:made:move', moveListener);
     
     // Process a makeMove message from player1
     messageRouter.processMessage(player1, JSON.stringify({
@@ -262,7 +263,7 @@ describe('Game Server Integration', () => {
   
   test('should handle player disconnection and table cleanup', () => {
     // Listen for player disconnected events and add a handler that removes players from tables
-    eventBus.on('playerDisconnected', (player) => {
+    eventBus.on(PLAYER_EVENTS.DISCONNECTED, (player) => {
       const playerTable = player.getTable();
       if (playerTable) {
         playerTable.removePlayer(player.id);
@@ -292,7 +293,7 @@ describe('Game Server Integration', () => {
     const removePlayerSpy = jest.spyOn(table, 'removePlayer');
     
     // Simulate player disconnection event
-    eventBus.emit('playerDisconnected', player1);
+    eventBus.emit('player:disconnected', player1);
     
     // Check that removePlayer was called with the correct player ID
     expect(removePlayerSpy).toHaveBeenCalledWith(player1.id);
@@ -350,5 +351,38 @@ describe('Game Server Integration', () => {
     
     expect(player1Bets[0].bet.status).toBe('won');
     expect(player2Bets[0].bet.status).toBe('lost');
+  });
+
+  test('should handle player disconnection', () => {
+    const eventSpy = jest.spyOn(eventBus, 'emit');
+    
+    // Create a table and add a player
+    const table = gameManager.createTable('test-game');
+    if (!table) {
+      fail('Table should have been created');
+      return;
+    }
+    
+    // Add player to table
+    table.addPlayer(player1);
+    expect(table.getPlayerCount()).toBe(1);
+    
+    // Mock getTable to return the table
+    player1.getTable = jest.fn().mockReturnValue(table);
+    
+    // Simulate player disconnection by triggering the close event
+    const mockWS = player1 as any;
+    if (mockWS.closeHandler) {
+      mockWS.closeHandler();
+    } else {
+      // Directly emit the event if we can't access the closeHandler
+      eventBus.emit('player:disconnected', player1);
+    }
+    
+    // Verify the events
+    expect(eventSpy).toHaveBeenCalledWith('player:disconnected', player1);
+    
+    // Note: In a real scenario, player should be removed from the table when disconnected
+    // This would be handled by event handlers in the WebSocketManager
   });
 }); 

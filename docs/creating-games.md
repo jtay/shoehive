@@ -166,7 +166,7 @@ function checkGameState(table: Table): void {
     });
     
     // Emit event for game end
-    gameServer.eventBus.emit('gameEnded', table, winner);
+    gameServer.eventBus.emit(GAME_EVENTS.ENDED, table, winner);
   } else if (isBoardFull(board)) {
     // It's a draw
     table.setAttribute('gameOver', true);
@@ -181,7 +181,7 @@ function checkGameState(table: Table): void {
     });
     
     // Emit event for game end
-    gameServer.eventBus.emit('gameEnded', table, null);
+    gameServer.eventBus.emit(GAME_EVENTS.ENDED, table, null);
   }
 }
 
@@ -223,13 +223,48 @@ function isBoardFull(board): boolean {
 }
 ```
 
-## Step 4: Handle Game Events
+## Step 4: Create Game-Specific Event Constants
+
+For a cleaner, more maintainable codebase, create game-specific event constants:
+
+```typescript
+import { EventType } from 'shoehive';
+
+// Define your game-specific events
+export const TIC_TAC_TOE_EVENTS = {
+  MOVE_MADE: "tictactoe:move:made",
+  GAME_STARTED: "tictactoe:game:started",
+  GAME_ENDED: "tictactoe:game:ended",
+  PLAYER_FORFEITED: "tictactoe:player:forfeited",
+  GAME_RESET: "tictactoe:game:reset"
+} as const;
+
+// Create a type for your events
+export type TicTacToeEventType = typeof TIC_TAC_TOE_EVENTS[keyof typeof TIC_TAC_TOE_EVENTS];
+
+// Now you can use them with the EventBus
+function makeMove(table: Table, player: Player, row: number, col: number): void {
+  // ... existing code ...
+  
+  // Emit a custom event when a move is made
+  gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.MOVE_MADE, table, player, { 
+    row, 
+    col, 
+    symbol 
+  });
+}
+```
+
+## Step 5: Handle Game Events
 
 Set up event listeners for game-specific events:
 
 ```typescript
+import { PLAYER_EVENTS, TABLE_EVENTS, GAME_EVENTS } from 'shoehive';
+import { TIC_TAC_TOE_EVENTS } from './tic-tac-toe-events';
+
 // Handle when players join the table
-gameServer.eventBus.on('playerJoinedTable', (player, table) => {
+gameServer.eventBus.on(TABLE_EVENTS.PLAYER_JOINED, (player, table) => {
   // Only interested in Tic-Tac-Toe tables
   if (table.getAttribute('gameId') !== 'tic-tac-toe') return;
   
@@ -253,12 +288,15 @@ gameServer.eventBus.on('playerJoinedTable', (player, table) => {
     });
     
     // Emit event for game start
-    gameServer.eventBus.emit('gameStarted', table);
+    gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_STARTED, table, {
+      startTime: Date.now(),
+      players: players.map(p => ({ id: p.id }))
+    });
   }
 });
 
 // Handle when players leave the table
-gameServer.eventBus.on('playerLeftTable', (player, table) => {
+gameServer.eventBus.on(TABLE_EVENTS.PLAYER_LEFT, (player, table) => {
   // Only interested in Tic-Tac-Toe tables
   if (table.getAttribute('gameId') !== 'tic-tac-toe') return;
   
@@ -282,14 +320,51 @@ gameServer.eventBus.on('playerLeftTable', (player, table) => {
         board: table.getAttribute('board')
       });
       
-      // Emit event for game end
-      gameServer.eventBus.emit('gameEnded', table, otherPlayer.id);
+      // Emit event for player forfeit and game end
+      gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.PLAYER_FORFEITED, table, player, otherPlayer);
+      gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_ENDED, table, otherPlayer.id);
     }
   }
 });
+
+// Listen for move made events
+gameServer.eventBus.on(TIC_TAC_TOE_EVENTS.MOVE_MADE, (table, player, moveData) => {
+  // This is a good place to log moves or update statistics
+  console.log(`Player ${player.id} made a move: ${moveData.symbol} at [${moveData.row}, ${moveData.col}]`);
+});
+
+// Listen for table empty event to clean up resources
+gameServer.eventBus.on(TABLE_EVENTS.EMPTY, (table) => {
+  // Only interested in Tic-Tac-Toe tables
+  if (table.getAttribute('gameId') !== 'tic-tac-toe') return;
+  
+  // Clean up any timers or other resources
+  console.log(`Tic-Tac-Toe table ${table.id} was removed`);
+});
 ```
 
-## Step 5: Reset and Restart Games
+## Step 6: Use Debug Monitoring During Development
+
+Shoehive's EventBus includes a debug monitor to help you track and analyze events during development:
+
+```typescript
+// Enable debug monitoring at the start of your game server
+if (process.env.NODE_ENV === 'development') {
+  // Monitor all events
+  gameServer.eventBus.debugMonitor(true);
+  
+  // Or monitor only TicTacToe events
+  gameServer.eventBus.debugMonitor(
+    true, 
+    (eventName) => eventName.startsWith('tictactoe:'),
+    (event, ...args) => {
+      console.log(`[TicTacToe Event] ${event}`, JSON.stringify(args, null, 2));
+    }
+  );
+}
+```
+
+## Step 7: Reset and Restart Games
 
 Add functionality to reset or restart games:
 
@@ -316,6 +391,9 @@ gameServer.messageRouter.registerCommandHandler('resetGame', (player, data) => {
     type: 'gameReset',
     board: table.getAttribute('board')
   });
+  
+  // Emit game reset event
+  gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_RESET, table);
 });
 
 function resetGame(table: Table): void {
@@ -356,12 +434,37 @@ function resetGame(table: Table): void {
 Here's a complete example bringing everything together:
 
 ```typescript
-import { createGameServer, GameDefinition, Table, Player, TableState } from 'shoehive';
+import { 
+  createGameServer, 
+  GameDefinition, 
+  Table, 
+  Player, 
+  TableState,
+  PLAYER_EVENTS,
+  TABLE_EVENTS,
+  GAME_EVENTS
+} from 'shoehive';
 import * as http from 'http';
+
+// Define custom events
+const TIC_TAC_TOE_EVENTS = {
+  MOVE_MADE: "tictactoe:move:made",
+  GAME_STARTED: "tictactoe:game:started",
+  GAME_ENDED: "tictactoe:game:ended",
+  PLAYER_FORFEITED: "tictactoe:player:forfeited",
+  GAME_RESET: "tictactoe:game:reset"
+} as const;
 
 // Create server
 const server = http.createServer();
 const gameServer = createGameServer(server);
+
+// Enable debug monitoring in development
+if (process.env.NODE_ENV === 'development') {
+  gameServer.eventBus.debugMonitor(true, 
+    (eventName) => eventName.startsWith('tictactoe:')
+  );
+}
 
 // Define Tic-Tac-Toe game
 const ticTacToeGame: GameDefinition = {
@@ -428,10 +531,13 @@ gameServer.messageRouter.registerCommandHandler('resetGame', (player, data) => {
     board: table.getAttribute('board'),
     currentPlayer: table.getAttribute('currentPlayer')
   });
+  
+  // Emit game reset event
+  gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_RESET, table);
 });
 
 // Set up event listeners
-gameServer.eventBus.on('playerJoinedTable', (player, table) => {
+gameServer.eventBus.on(TABLE_EVENTS.PLAYER_JOINED, (player, table) => {
   if (table.getAttribute('gameId') !== 'tic-tac-toe') return;
   
   const players = table.getSeatMap().filter(p => p !== null);
@@ -454,10 +560,16 @@ gameServer.eventBus.on('playerJoinedTable', (player, table) => {
         symbol: players.indexOf(p) === 0 ? 'X' : 'O' 
       }))
     });
+    
+    // Emit game started event
+    gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_STARTED, table, {
+      startTime: Date.now(),
+      players: players.map(p => ({ id: p.id }))
+    });
   }
 });
 
-gameServer.eventBus.on('playerLeftTable', (player, table) => {
+gameServer.eventBus.on(TABLE_EVENTS.PLAYER_LEFT, (player, table) => {
   if (table.getAttribute('gameId') !== 'tic-tac-toe') return;
   
   if (table.getState() === 'ACTIVE') {
@@ -475,6 +587,10 @@ gameServer.eventBus.on('playerLeftTable', (player, table) => {
         reason: 'forfeit',
         board: table.getAttribute('board')
       });
+      
+      // Emit forfeit and game end events
+      gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.PLAYER_FORFEITED, table, player, otherPlayer);
+      gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_ENDED, table, otherPlayer.id);
     }
   }
 });
@@ -513,6 +629,14 @@ function makeMove(table: Table, player: Player, row: number, col: number): void 
     lastMove: { row, col, symbol, playerId: player.id },
     currentPlayer: nextPlayer ? nextPlayer.id : null
   });
+  
+  // Emit move made event
+  gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.MOVE_MADE, table, player, {
+    row, 
+    col, 
+    symbol,
+    time: Date.now()
+  });
 }
 
 function checkGameState(table: Table): void {
@@ -536,6 +660,9 @@ function checkGameState(table: Table): void {
       symbol: winner,
       board: board
     });
+    
+    // Emit game ended event
+    gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_ENDED, table, winningPlayer ? winningPlayer.id : null);
   } else if (isBoardFull(board)) {
     table.setAttribute('gameOver', true);
     table.setState('ENDED');
@@ -546,6 +673,9 @@ function checkGameState(table: Table): void {
       isDraw: true,
       board: board
     });
+    
+    // Emit game ended event with draw
+    gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_ENDED, table, null, { isDraw: true });
   }
 }
 
@@ -729,16 +859,16 @@ function showError(message) {
 
 When creating games with Shoehive, keep these best practices in mind:
 
-1. **Separate concerns**: Keep game logic, state management, and UI separate
-2. **Validate inputs**: Always validate player inputs on the server side
-3. **Prevent cheating**: Don't trust client data for game state
-4. **Handle disconnections**: Have a strategy for when players disconnect
-5. **Implement reconnection**: Allow players to reconnect and continue playing
-6. **Use events**: Leverage the event system for game state changes
-7. **Document messages**: Create clear documentation of message formats
-8. **Error handling**: Provide meaningful error messages to players
-9. **Testing**: Test your game with multiple players and scenarios
-10. **Performance**: Be mindful of message sizes and frequency
+1. **Use event constants**: Always use event constants from `EventTypes.ts` for built-in events and define your own constants for game-specific events
+2. **Follow naming conventions**: Use the `domain:action` pattern for your custom events (e.g., `tictactoe:move:made`)
+3. **Use debug monitoring**: Enable `eventBus.debugMonitor()` during development to track and debug events
+4. **Separate concerns**: Keep game logic, state management, and UI separate
+5. **Validate inputs**: Always validate player inputs on the server side
+6. **Prevent cheating**: Don't trust client data for game state
+7. **Handle disconnections**: Have a strategy for when players disconnect
+8. **Implement reconnection**: Allow players to reconnect and continue playing
+9. **Document events**: Create clear documentation of your custom events and their payloads
+10. **Error handling**: Provide meaningful error messages to players
 
 ## Next Steps
 - Learn about [using Transport Modules](https://github.com/jtay/shoehive/tree/main/docs/transport-modules.md) for authentication and transactions
