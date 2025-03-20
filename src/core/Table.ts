@@ -143,6 +143,22 @@ export class Table {
   }
 
   /**
+   * Deals a card to a hand. Emits TABLE_EVENTS.CARD_DEALT when a card is dealt.
+   * @param hand <Hand> - The hand to deal the card to.
+   * @returns True if the card was dealt, false if no seat or hand exists.
+   */
+  public dealCardToHand(hand: Hand): boolean {
+    if (!this.deck) return false;
+
+    const card = this.deck.drawCard(true);
+    if (!card) return false;
+
+    hand.addCard(card);
+    this.eventBus.emit(TABLE_EVENTS.CARD_DEALT, this, card, hand.getId());
+    return true;
+  }
+
+  /**
    * Gets all hands at a specific seat.
    * @param seatIndex - The index of the seat to get the hands from.
    * @returns A map of hand IDs to hand objects or null if no seat exists.

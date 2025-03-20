@@ -25,30 +25,31 @@ Creating a game with Shoehive involves:
 
 First, you need to define your game by creating a `GameDefinition`:
 ```typescript
-import { GameDefinition, Table, EventBus, TableOptions, GameConfig } from 'shoehive';
-
-// Define default configuration
-const ticTacToeConfig: GameConfig = {
-  totalSeats: 2,     // Two players for Tic-Tac-Toe
-  maxSeatsPerPlayer: 1  // One seat per player
-};
+import { GameDefinition, Table, EventBus } from 'shoehive';
 
 // Create game definition
 const ticTacToeGame: GameDefinition = {
+  id: "tic-tac-toe",
   name: "Tic-Tac-Toe",
-  defaultConfig: ticTacToeConfig,
-  
-  // Setup function is called when a table is created
-  setupTable: (table: Table) => {
-    // Initialize game-specific state
-    table.setAttribute('board', [
-      [null, null, null],
-      [null, null, null],
-      [null, null, null]
-    ]);
-    table.setAttribute('currentPlayer', null);
-    table.setAttribute('winner', null);
-    table.setAttribute('gameOver', false);
+  description: "Classic two-player game of X and O",
+  minPlayers: 2,
+  maxPlayers: 2,
+  defaultSeats: 2,
+  maxSeatsPerPlayer: 1,
+  // Setup function should be included in the options object
+  options: {
+    // This function will be called when a new table is created
+    setupTable: (table: Table) => {
+      // Initialize game-specific state
+      table.setAttribute('board', [
+        [null, null, null],
+        [null, null, null],
+        [null, null, null]
+      ]);
+      table.setAttribute('currentPlayer', null);
+      table.setAttribute('winner', null);
+      table.setAttribute('gameOver', false);
+    }
   }
 };
 ```
@@ -66,7 +67,7 @@ const server = http.createServer();
 const gameServer = createGameServer(server);
 
 // Register your game
-gameServer.gameManager.registerGame('tic-tac-toe', ticTacToeGame);
+gameServer.gameManager.registerGame(ticTacToeGame);
 
 // Start the server
 server.listen(3000, () => {
