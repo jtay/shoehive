@@ -48,8 +48,45 @@ export class Player {
     return this.table;
   }
 
-  public setAttribute(key: string, value: any): void {
+  /**
+   * Set a single attribute on the player and emit an event for the change.
+   * 
+   * @param key The attribute name
+   * @param value The attribute value
+   * @param notify Whether to emit an event (defaults to true)
+   */
+  public setAttribute(key: string, value: any, notify: boolean = true): void {
     this.attributes.set(key, value);
+    
+    if (notify) {
+      this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, this, key, value);
+    }
+  }
+
+  /**
+   * Set multiple attributes at once and emit a single event.
+   * This is more efficient than calling setAttribute multiple times.
+   * 
+   * @param attributes Object containing attribute key-value pairs
+   */
+  public setAttributes(attributes: Record<string, any>): void {
+    const changedKeys: string[] = [];
+    
+    // Set all attributes first
+    for (const [key, value] of Object.entries(attributes)) {
+      this.attributes.set(key, value);
+      changedKeys.push(key);
+    }
+    
+    // Then emit a single event for all changes
+    if (changedKeys.length > 0) {
+      this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTES_CHANGED, this, changedKeys, attributes);
+      
+      // Also emit individual events for backward compatibility
+      for (const key of changedKeys) {
+        this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, this, key, attributes[key]);
+      }
+    }
   }
 
   public getAttribute(key: string): any {

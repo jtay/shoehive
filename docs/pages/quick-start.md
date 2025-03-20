@@ -134,8 +134,8 @@ table.setAttribute('pot', 100);
 The MessageRouter processes incoming messages from clients:
 
 ```typescript
-// Register a command handler for "makeMove" messages
-messageRouter.registerCommandHandler('makeMove', (player, data) => {
+// Register a command handler for "game:move:make" messages
+messageRouter.registerCommandHandler('game:move:make', (player, data) => {
   const { row, col } = data;
   const table = player.getTable();
   
@@ -147,7 +147,7 @@ messageRouter.registerCommandHandler('makeMove', (player, data) => {
   
   // Notify players of the move
   table.broadcastMessage({
-    type: 'moveUpdate',
+    type: 'game:move:update',
     playerId: player.id,
     row,
     col
@@ -213,6 +213,8 @@ Shoehive provides several event categories:
 - `PLAYER_EVENTS.CONNECTED` - When a player connects
 - `PLAYER_EVENTS.DISCONNECTED` - When a player disconnects
 - `PLAYER_EVENTS.RECONNECTED` - When a player reconnects
+- `PLAYER_EVENTS.ATTRIBUTE_CHANGED` - When a player attribute changes
+- `PLAYER_EVENTS.ATTRIBUTES_CHANGED` - When multiple player attributes change
 
 #### Table Events
 - `TABLE_EVENTS.CREATED` - When a table is created
@@ -220,7 +222,7 @@ Shoehive provides several event categories:
 - `TABLE_EVENTS.PLAYER_LEFT` - When a player leaves a table
 - `TABLE_EVENTS.PLAYER_SAT` - When a player sits at a seat
 - `TABLE_EVENTS.PLAYER_STOOD` - When a player stands up
-- `TABLE_EVENTS.STATE_CHANGED` - When the table state changes
+- `TABLE_EVENTS.STATE_UPDATED` - When the table state updates
 
 #### Game Events
 - `GAME_EVENTS.STARTED` - When a game starts
@@ -264,6 +266,10 @@ gameManager.registerGame({
   maxPlayers: 1,
   defaultSeats: 1,
   maxSeatsPerPlayer: 1,
+  // Define which player attributes should trigger table state updates
+  tableRelevantPlayerAttributes: ['name', 'score', 'isReady'],
+  // Define which player attributes should trigger lobby updates
+  lobbyRelevantPlayerAttributes: ['name', 'status'],
   options: {
     setupTable: (table: Table) => {
       // Initialize game state
@@ -289,14 +295,7 @@ messageRouter.registerCommandHandler('createGame', (player, data) => {
   
   // Add player to table
   table.addPlayer(player);
-  
-  // Notify player
-  player.sendMessage({
-    type: 'gameCreated',
-    tableId: table.id,
-    maxAttempts: table.getAttribute('maxAttempts')
-  });
-  
+
   // Start the game
   table.setState(TableState.ACTIVE);
   eventBus.emit(GAME_EVENTS.STARTED, table);
@@ -662,7 +661,7 @@ function transitionState(table: Table, newState: PokerGameState, data = {}) {
   table.setAttribute('gameState', newState);
   
   // Emit state change event using game-specific constant
-  eventBus.emit(POKER_EVENTS.STATE_CHANGED, table, {
+  eventBus.emit(POKER_EVENTS.STATE_UPDATED, table, {
     previousState,
     newState,
     ...data

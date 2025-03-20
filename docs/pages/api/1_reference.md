@@ -35,6 +35,46 @@ class GameManager {
 }
 ```
 
+#### GameDefinition Interface
+
+The `GameDefinition` interface defines the properties of a game that can be registered with the GameManager.
+
+```typescript
+interface GameDefinition {
+  // Unique identifier for the game
+  id: string;
+  
+  // Display name for the game
+  name: string;
+  
+  // Game description
+  description: string;
+  
+  // Minimum number of players required
+  minPlayers: number;
+  
+  // Maximum number of players allowed
+  maxPlayers: number;
+  
+  // Default number of seats at a table
+  defaultSeats: number;
+  
+  // Maximum number of seats a player can occupy
+  maxSeatsPerPlayer: number;
+  
+  // Additional game-specific options
+  options?: Record<string, any>;
+  
+  // Define which player attributes should trigger a table state update when changed
+  // If not specified, defaults to ["name", "avatar", "chips", "status", "isReady", "role", "team"]
+  tableRelevantPlayerAttributes?: string[];
+  
+  // Define which player attributes should trigger a lobby update when changed
+  // If not specified, defaults to ["name", "avatar", "isReady", "status"]
+  lobbyRelevantPlayerAttributes?: string[];
+}
+```
+
 ### 🧍 Player
 
 The Player class represents a connected client.
@@ -290,9 +330,10 @@ Shoehive emits the following standard events:
 | `table:player:sat` | `TABLE_EVENTS.PLAYER_SAT` | `(player: Player, table: Table, seatIndex: number)` | Fired when a player sits at a seat |
 | `table:player:stood` | `TABLE_EVENTS.PLAYER_STOOD` | `(player: Player, table: Table, seatIndex: number)` | Fired when a player stands up from a seat |
 | `table:created` | `TABLE_EVENTS.CREATED` | `(table: Table)` | Fired when a table is created |
-| `table:state:changed` | `TABLE_EVENTS.STATE_CHANGED` | `(table: Table, oldState: TableState, newState: TableState)` | Fired when a table's state changes |
+| `table:state:updated` | `TABLE_EVENTS.STATE_UPDATED` | `(table: Table, tableState: any)` | Fired when a table's state changes or is updated |
 | `table:empty` | `TABLE_EVENTS.EMPTY` | `(table: Table)` | Fired when the last player leaves a table |
 | `lobby:updated` | `LOBBY_EVENTS.UPDATED` | `(lobbyState: any)` | Fired when the lobby state is updated |
+| `lobby:state` | `LOBBY_EVENTS.STATE` | `(lobbyState: any)` | Fired when the lobby state changes or updates |
 | `game:started` | `GAME_EVENTS.STARTED` | `(table: Table)` | Fired when a game starts |
 | `game:ended` | `GAME_EVENTS.ENDED` | `(table: Table, winner: Player | null)` | Fired when a game ends |
 
@@ -314,7 +355,7 @@ const PLAYER_EVENTS = {
 const TABLE_EVENTS = {
   CREATED: "table:created",
   EMPTY: "table:empty",
-  STATE_CHANGED: "table:state:changed",
+  STATE_UPDATED: "table:state:updated",
   PLAYER_JOINED: "table:player:joined",
   PLAYER_LEFT: "table:player:left",
   PLAYER_SAT: "table:player:sat",
@@ -457,7 +498,7 @@ eventBus.on(TABLE_EVENTS.PLAYER_JOINED, (player: Player, table: Table) => { /* .
 eventBus.on(TABLE_EVENTS.PLAYER_LEFT, (player: Player, table: Table) => { /* ... */ });
 eventBus.on(TABLE_EVENTS.PLAYER_SAT, (player: Player, table: Table, seatIndex: number) => { /* ... */ });
 eventBus.on(TABLE_EVENTS.PLAYER_STOOD, (player: Player, table: Table, seatIndex: number) => { /* ... */ });
-eventBus.on(TABLE_EVENTS.STATE_CHANGED, (table: Table, newState: TableState) => { /* ... */ });
+eventBus.on(TABLE_EVENTS.STATE_UPDATED, (table: Table, tableState: any) => { /* ... */ });
 eventBus.on(TABLE_EVENTS.EMPTY, (table: Table) => { /* ... */ });
 
 // Card/deck events
@@ -476,6 +517,7 @@ eventBus.on(GAME_EVENTS.ROUND_ENDED, (table: Table, roundNumber: number) => { /*
 
 // Lobby events
 eventBus.on(LOBBY_EVENTS.UPDATED, (lobbyState: LobbyState) => { /* ... */ });
+eventBus.on(LOBBY_EVENTS.STATE, (lobbyState: LobbyState) => { /* ... */ });
 
 // Game-specific events (example for Tic-Tac-Toe)
 eventBus.on(TIC_TAC_TOE_EVENTS.MOVE_MADE, (table: Table, player: Player, moveData: any) => { /* ... */ });
