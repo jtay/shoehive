@@ -10,7 +10,7 @@ export class TableFactory {
 
   public createTable(totalSeats: number, maxSeatsPerPlayer: number): Table {
     const table = new Table(this.eventBus, totalSeats, maxSeatsPerPlayer);
-    this.eventBus.emit("tableCreated", table);
+    this.eventBus.emit("table:created", table);
     return table;
   }
 } 

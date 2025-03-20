@@ -36,8 +36,25 @@ export function createGameServer(
   const gameManager = new GameManager(eventBus, tableFactory);
   const wsManager = new WebSocketManager(server, eventBus, messageRouter, gameManager, authModule);
   
-  // Register default message handlers
-  messageRouter.registerCommandHandler("joinTable", (player, data) => {
+  // Register default Lobby message handlers
+
+  /**
+   * Table commands
+   */
+
+  messageRouter.registerCommandHandler("table:getState", (player, data) => {
+    if (!data.tableId) return;
+    
+    const table = gameManager.getAllTables().find(t => t.id === data.tableId);
+    if (table) {
+      player.sendMessage({
+        type: "table:state",
+        state: table.getState()
+      });
+    }
+  });
+
+  messageRouter.registerCommandHandler("table:join", (player, data) => {
     if (!data.tableId) return;
     
     const table = gameManager.getAllTables().find(t => t.id === data.tableId);
@@ -46,7 +63,7 @@ export function createGameServer(
     }
   });
   
-  messageRouter.registerCommandHandler("createTable", (player, data) => {
+  messageRouter.registerCommandHandler("table:create", (player, data) => {
     if (!data.gameId) return;
     
     const table = gameManager.createTable(data.gameId, data.options);
@@ -55,14 +72,18 @@ export function createGameServer(
     }
   });
   
-  messageRouter.registerCommandHandler("leaveTable", (player, data) => {
+  messageRouter.registerCommandHandler("table:leave", (player, data) => {
     const table = player.getTable();
     if (table) {
       table.removePlayer(player.id);
     }
   });
+
+  /**
+   * Seat commands
+   */
   
-  messageRouter.registerCommandHandler("sitDown", (player, data) => {
+  messageRouter.registerCommandHandler("table:seat:sit", (player, data) => {
     if (typeof data.seatIndex !== 'number') return;
     
     const table = player.getTable();
@@ -71,7 +92,7 @@ export function createGameServer(
     }
   });
   
-  messageRouter.registerCommandHandler("standUp", (player, data) => {
+  messageRouter.registerCommandHandler("table:seat:stand", (player, data) => {
     if (typeof data.seatIndex !== 'number') return;
     
     const table = player.getTable();

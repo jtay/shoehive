@@ -27,7 +27,7 @@ export class GameManager {
   }
 
   private setupEventListeners(): void {
-    this.eventBus.on("tableCreated", (table: Table) => {
+    this.eventBus.on("table:created", (table: Table) => {
       this.tables.set(table.id, table);
       
       const gameId = table.getAttribute("gameId");
@@ -41,7 +41,7 @@ export class GameManager {
       this.broadcastLobbyUpdate();
     });
 
-    this.eventBus.on("tableEmpty", (table: Table) => {
+    this.eventBus.on("table:empty", (table: Table) => {
       this.removeTable(table.id);
     });
   }
@@ -114,12 +114,12 @@ export class GameManager {
         id: table.id,
         gameId: table.getAttribute("gameId"),
         playerCount: table.getPlayerCount(),
-        seats: table.getSeatMap().map(seatData => seatData.player?.id || null),
+        seats: table.getSeats().map(seat => seat.getPlayer()?.id || null),
         state: table.getState()
       }))
     };
 
-    this.eventBus.emit("lobbyUpdated", lobbyState);
+    this.eventBus.emit("lobby:state", lobbyState);
   }
   
   public updateLobbyState(): void {

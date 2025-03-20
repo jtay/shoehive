@@ -79,6 +79,13 @@ class EventBus {
   
   // Get the number of listeners for an event
   listenerCount(event: string): number;
+  
+  // Enable/disable debug monitoring for events
+  debugMonitor(
+    enabled: boolean = true, 
+    filter?: (event: string) => boolean,
+    logger?: (event: string, ...args: any[]) => void
+  ): void;
 }
 ```
 
@@ -265,19 +272,121 @@ enum TableState {
 
 Shoehive emits the following standard events:
 
-| Event Name | Parameters | Description |
-|------------|------------|-------------|
-| `playerConnected` | `(player: Player)` | Fired when a player connects |
-| `playerDisconnected` | `(player: Player)` | Fired when a player disconnects |
-| `playerReconnected` | `(player: Player)` | Fired when a player reconnects |
-| `playerJoinedTable` | `(player: Player, table: Table)` | Fired when a player joins a table |
-| `playerLeftTable` | `(player: Player, table: Table)` | Fired when a player leaves a table |
-| `playerSeated` | `(player: Player, table: Table, seatIndex: number)` | Fired when a player sits at a seat |
-| `playerUnseated` | `(player: Player, table: Table, seatIndex: number)` | Fired when a player stands up from a seat |
-| `tableCreated` | `(table: Table)` | Fired when a table is created |
-| `tableStateChanged` | `(table: Table, oldState: TableState, newState: TableState)` | Fired when a table's state changes |
-| `tableEmpty` | `(table: Table)` | Fired when the last player leaves a table |
-| `lobbyUpdated` | `(lobbyState: any)` | Fired when the lobby state is updated |
+| Event Name | Constant | Parameters | Description |
+|------------|----------|------------|-------------|
+| `player:connected` | `PLAYER_EVENTS.CONNECTED` | `(player: Player)` | Fired when a player connects |
+| `player:disconnected` | `PLAYER_EVENTS.DISCONNECTED` | `(player: Player)` | Fired when a player disconnects |
+| `player:reconnected` | `PLAYER_EVENTS.RECONNECTED` | `(player: Player)` | Fired when a player reconnects |
+| `table:player:joined` | `TABLE_EVENTS.PLAYER_JOINED` | `(player: Player, table: Table)` | Fired when a player joins a table |
+| `table:player:left` | `TABLE_EVENTS.PLAYER_LEFT` | `(player: Player, table: Table)` | Fired when a player leaves a table |
+| `table:player:sat` | `TABLE_EVENTS.PLAYER_SAT` | `(player: Player, table: Table, seatIndex: number)` | Fired when a player sits at a seat |
+| `table:player:stood` | `TABLE_EVENTS.PLAYER_STOOD` | `(player: Player, table: Table, seatIndex: number)` | Fired when a player stands up from a seat |
+| `table:created` | `TABLE_EVENTS.CREATED` | `(table: Table)` | Fired when a table is created |
+| `table:state:changed` | `TABLE_EVENTS.STATE_CHANGED` | `(table: Table, oldState: TableState, newState: TableState)` | Fired when a table's state changes |
+| `table:empty` | `TABLE_EVENTS.EMPTY` | `(table: Table)` | Fired when the last player leaves a table |
+| `lobby:updated` | `LOBBY_EVENTS.UPDATED` | `(lobbyState: any)` | Fired when the lobby state is updated |
+| `game:started` | `GAME_EVENTS.STARTED` | `(table: Table)` | Fired when a game starts |
+| `game:ended` | `GAME_EVENTS.ENDED` | `(table: Table, winner: Player | null)` | Fired when a game ends |
+
+## Event Constants
+
+Shoehive provides a set of predefined event constants in `EventTypes.ts` to ensure consistent event naming across the application.
+
+```typescript
+// Player events
+const PLAYER_EVENTS = {
+  CONNECTED: "player:connected",
+  DISCONNECTED: "player:disconnected",
+  RECONNECTED: "player:reconnected",
+  AUTHENTICATION_FAILED: "player:authentication:failed",
+  AUTHENTICATION_SUCCEEDED: "player:authentication:succeeded"
+} as const;
+
+// Table events
+const TABLE_EVENTS = {
+  CREATED: "table:created",
+  EMPTY: "table:empty",
+  STATE_CHANGED: "table:state:changed",
+  PLAYER_JOINED: "table:player:joined",
+  PLAYER_LEFT: "table:player:left",
+  PLAYER_SAT: "table:player:sat",
+  PLAYER_STOOD: "table:player:stood",
+  // ...and more
+} as const;
+
+// Game events
+const GAME_EVENTS = {
+  STARTED: "game:started",
+  ENDED: "game:ended",
+  PAUSED: "game:paused",
+  RESUMED: "game:resumed",
+  ROUND_STARTED: "game:round:started",
+  ROUND_ENDED: "game:round:ended",
+  TURN_STARTED: "game:turn:started",
+  TURN_ENDED: "game:turn:ended"
+} as const;
+
+// Lobby events
+const LOBBY_EVENTS = {
+  UPDATED: "lobby:updated",
+  STATE: "lobby:state"
+} as const;
+```
+
+### Using Event Constants
+
+Always use event constants instead of string literals for better type safety and maintainability:
+
+```typescript
+// Good: Using event constants
+eventBus.on(TABLE_EVENTS.PLAYER_JOINED, (player, table) => {
+  console.log(`Player ${player.id} joined table ${table.id}`);
+});
+
+// Bad: Using string literals
+eventBus.on("table:player:joined", (player, table) => {
+  console.log(`Player ${player.id} joined table ${table.id}`);
+});
+```
+
+### Creating Game-Specific Event Constants
+
+For a cleaner, more maintainable codebase, create game-specific event constants:
+
+```typescript
+// Define your game-specific events
+export const TIC_TAC_TOE_EVENTS = {
+  MOVE_MADE: "tictactoe:move:made",
+  GAME_STARTED: "tictactoe:game:started",
+  GAME_ENDED: "tictactoe:game:ended",
+  PLAYER_FORFEITED: "tictactoe:player:forfeited",
+  GAME_RESET: "tictactoe:game:reset"
+} as const;
+
+// Create a type for your events
+export type TicTacToeEventType = typeof TIC_TAC_TOE_EVENTS[keyof typeof TIC_TAC_TOE_EVENTS];
+
+// Then use them with the EventBus
+eventBus.emit(TIC_TAC_TOE_EVENTS.MOVE_MADE, table, player, { row, col, symbol });
+```
+
+### Using Debug Monitoring
+
+The `debugMonitor` method is a powerful tool for event debugging during development:
+
+```typescript
+// Enable debug monitoring for all events
+eventBus.debugMonitor(true);
+
+// Enable debug monitoring only for specific events
+eventBus.debugMonitor(
+  true,
+  (eventName) => eventName.startsWith('tictactoe:'),
+  (event, ...args) => {
+    console.log(`[DEBUG] ${event}`, JSON.stringify(args, null, 2));
+  }
+);
+```
 
 ## Helper Functions
 
@@ -322,4 +431,45 @@ You can register additional commands for your specific game logic.
 For implementation examples, please refer to:
 
 - [Transport Modules Implementation](https://github.com/jtay/shoehive/tree/main/docs/transport-modules.md)
-- [Creating Custom Game Logic](https://github.com/jtay/shoehive/tree/main/docs/creating-games.md) 
+- [Creating Custom Game Logic](https://github.com/jtay/shoehive/tree/main/docs/creating-games.md)
+
+### Common Events
+
+Shoehive emits various events that you can listen for:
+
+```typescript
+// Player events
+eventBus.on(PLAYER_EVENTS.CONNECTED, (player: Player) => { /* ... */ });
+eventBus.on(PLAYER_EVENTS.DISCONNECTED, (player: Player) => { /* ... */ });
+eventBus.on(PLAYER_EVENTS.RECONNECTED, (player: Player) => { /* ... */ });
+
+// Table events
+eventBus.on(TABLE_EVENTS.CREATED, (table: Table) => { /* ... */ });
+eventBus.on(TABLE_EVENTS.PLAYER_JOINED, (player: Player, table: Table) => { /* ... */ });
+eventBus.on(TABLE_EVENTS.PLAYER_LEFT, (player: Player, table: Table) => { /* ... */ });
+eventBus.on(TABLE_EVENTS.PLAYER_SAT, (player: Player, table: Table, seatIndex: number) => { /* ... */ });
+eventBus.on(TABLE_EVENTS.PLAYER_STOOD, (player: Player, table: Table, seatIndex: number) => { /* ... */ });
+eventBus.on(TABLE_EVENTS.STATE_CHANGED, (table: Table, newState: TableState) => { /* ... */ });
+eventBus.on(TABLE_EVENTS.EMPTY, (table: Table) => { /* ... */ });
+
+// Card/deck events
+eventBus.on(TABLE_EVENTS.DECK_CREATED, (table: Table, numberOfDecks: number) => { /* ... */ });
+eventBus.on(TABLE_EVENTS.DECK_SHUFFLED, (table: Table) => { /* ... */ });
+eventBus.on(TABLE_EVENTS.DECK_CARD_DRAWN, (table: Table, card: Card) => { /* ... */ });
+eventBus.on(TABLE_EVENTS.CARD_DEALT, (table: Table, seatIndex: number, card: Card, handId: string) => { /* ... */ });
+eventBus.on(TABLE_EVENTS.SEAT_HAND_CLEARED, (table: Table, seatIndex: number, handId: string) => { /* ... */ });
+eventBus.on(TABLE_EVENTS.SEATS_HANDS_CLEARED, (table: Table) => { /* ... */ });
+
+// Game events
+eventBus.on(GAME_EVENTS.STARTED, (table: Table) => { /* ... */ });
+eventBus.on(GAME_EVENTS.ENDED, (table: Table, winner: Player | null) => { /* ... */ });
+eventBus.on(GAME_EVENTS.ROUND_STARTED, (table: Table, roundNumber: number) => { /* ... */ });
+eventBus.on(GAME_EVENTS.ROUND_ENDED, (table: Table, roundNumber: number) => { /* ... */ });
+
+// Lobby events
+eventBus.on(LOBBY_EVENTS.UPDATED, (lobbyState: LobbyState) => { /* ... */ });
+
+// Game-specific events (example for Tic-Tac-Toe)
+eventBus.on(TIC_TAC_TOE_EVENTS.MOVE_MADE, (table: Table, player: Player, moveData: any) => { /* ... */ });
+eventBus.on(TIC_TAC_TOE_EVENTS.GAME_ENDED, (table: Table, winnerId: string | null) => { /* ... */ });
+``` 

@@ -441,4 +441,18 @@ if (pokerState && !pokerState.hasFolded) {
 
 - [Transport Modules](https://github.com/jtay/shoehive/tree/main/docs/transport-modules.md)
 - [Creating Custom Games](https://github.com/jtay/shoehive/tree/main/docs/creating-games.md)
-- [API Reference](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md) 
+- [API Reference](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md)
+
+## Add event listener for when players disconnect
+gameServer.eventBus.on('player:disconnected', (player) => {
+  // Get player's last active time
+  const connectionInfo = player.getAttribute('connectionInfo');
+  if (connectionInfo) {
+    // Calculate session duration
+    const sessionDuration = Date.now() - connectionInfo.connectedAt;
+    console.log(`Player ${player.id} disconnected after ${sessionDuration}ms`);
+    
+    // Store in database for analytics
+    storePlayerSession(player.id, connectionInfo, sessionDuration);
+  }
+}); 
