@@ -89,18 +89,35 @@ export class Player {
     }
   }
 
+  /**
+   * Get a single attribute from the player.
+   * @param key - The key of the attribute to get
+   * @returns The value of the attribute, or undefined if it doesn't exist
+   */
   public getAttribute(key: string): any {
     return this.attributes.get(key);
   }
 
+  /**
+   * Get all attributes from the player.
+   * @returns An object containing all player attributes
+   */
   public getAttributes(): Record<string, any> {
     return Object.fromEntries(this.attributes.entries());
   }
 
+  /**
+   * Check if the player has an attribute.
+   * @param key - The key of the attribute to check
+   * @returns True if the attribute exists, false otherwise
+   */
   public hasAttribute(key: string): boolean {
     return this.attributes.has(key);
   }
 
+  /**
+   * Disconnect the player from the server.
+   */
   public disconnect(): void {
     if (this.socket.readyState === WebSocket.WebSocket.OPEN) {
       this.socket.close();
