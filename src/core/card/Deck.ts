@@ -1,7 +1,9 @@
 import { Card, CardSuit, CardRank } from './types';
 
 /**
- * A deck of cards.
+ * A deck of [Card](/core/card/types#card)s.
+ * 
+ * Supports shuffling, drawing cards, and resetting from the discard pile.
  */
 export class Deck {
   private cards: Card[] = [];

@@ -6,9 +6,13 @@
   "excludePrivate": true,
   "excludeProtected": true,
   "excludeExternals": true,
+  "categorizeByGroup": false,
+  "categoryOrder": ["classes", "enums", "interfaces", "types", "variables", "functions", "references", "*"],
+  "excludeReferences": false,
   "excludeNotDocumented": false,
   "readme": "none",
   "hidePageTitle": false,
   "hideBreadcrumbs": true,
+  "allReflectionsHaveOwnDocument": true,
   "logLevel": "Info"
 } 

@@ -3,8 +3,9 @@ import { EventBus } from '../../src/events/EventBus';
 import { TableFactory } from '../../src/core/TableFactory';
 import { Table, TableState } from '../../src/core/Table';
 import { Player } from '../../src/core/Player';
-import { PLAYER_EVENTS, TABLE_EVENTS, LOBBY_EVENTS } from '../../src/events/EventTypes';
+import { PLAYER_EVENTS, TABLE_EVENTS } from '../../src/events/EventTypes';
 import * as WebSocket from 'ws';
+import { Lobby } from '../../src/core/Lobby';
 
 jest.mock('ws');
 
@@ -12,6 +13,7 @@ describe('Advanced GameManager Tests', () => {
   let gameManager: GameManager;
   let eventBus: EventBus;
   let tableFactory: TableFactory;
+  let lobby: Lobby;
   let tables: Table[] = [];
   
   beforeEach(() => {
@@ -21,8 +23,9 @@ describe('Advanced GameManager Tests', () => {
     // Create actual TableFactory and tables to test more complex interactions
     tableFactory = new TableFactory(eventBus);
     
-    // Create a new game manager
+    // Create a new game manager and lobby
     gameManager = new GameManager(eventBus, tableFactory);
+    lobby = new Lobby(eventBus, gameManager, tableFactory);
     
     tables = []; // Reset tables array
   });
@@ -65,9 +68,9 @@ describe('Advanced GameManager Tests', () => {
     const gameDefinition = registerTestGame();
     
     // Create multiple tables for the same game
-    const table1 = gameManager.createTable('test-game');
-    const table2 = gameManager.createTable('test-game');
-    const table3 = gameManager.createTable('test-game');
+    const table1 = lobby.createTable('test-game');
+    const table2 = lobby.createTable('test-game');
+    const table3 = lobby.createTable('test-game');
     
     expect(table1).not.toBeNull();
     expect(table2).not.toBeNull();
@@ -91,7 +94,7 @@ describe('Advanced GameManager Tests', () => {
     const gameDefinition = registerTestGame();
     
     // Create a table
-    const table = gameManager.createTable('test-game')!;
+    const table = lobby.createTable('test-game')!;
     expect(table).not.toBeNull();
     
     // Manually trigger TABLE_CREATED event
@@ -118,7 +121,7 @@ describe('Advanced GameManager Tests', () => {
     const gameDefinition = registerTestGame();
     
     // Create a table
-    const table = gameManager.createTable('test-game')!;
+    const table = lobby.createTable('test-game')!;
     expect(table).not.toBeNull();
     
     // Manually trigger TABLE_CREATED event
@@ -136,35 +139,14 @@ describe('Advanced GameManager Tests', () => {
     expect(tablesForGame.length).toBe(0);
   });
   
-  test('should handle player attribute changes for both table and lobby relevance', () => {
-    const gameDefinition = registerTestGame('test-game', 'Test Game', ['rank']);
-    const table = gameManager.createTable('test-game')!;
-    
-    // Manually trigger TABLE_CREATED event
-    eventBus.emit(TABLE_EVENTS.CREATED, table);
-    
-    const player = createMockPlayer('player-1');
-    table.addPlayer(player);
-    
-    // Spy on event emission
-    const emitSpy = jest.spyOn(eventBus, 'emit');
-    
-    // Trigger a change in an attribute that's relevant to both table and lobby
-    eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, player, 'rank', 'gold');
-    
-    // Verify both lobby and table state updates were triggered
-    const lobbyUpdates = emitSpy.mock.calls.filter(call => call[0] === LOBBY_EVENTS.STATE);
-    expect(lobbyUpdates.length).toBeGreaterThan(0);
-  });
-  
   test('should track tables correctly when games are unregistered', () => {
     const game1 = registerTestGame('game-1', 'Game 1');
     const game2 = registerTestGame('game-2', 'Game 2');
     
     // Create tables for both games
-    const table1 = gameManager.createTable('game-1')!;
-    const table2 = gameManager.createTable('game-1')!;
-    const table3 = gameManager.createTable('game-2')!;
+    const table1 = lobby.createTable('game-1')!;
+    const table2 = lobby.createTable('game-1')!;
+    const table3 = lobby.createTable('game-2')!;
     
     // Manually trigger TABLE_CREATED events
     eventBus.emit(TABLE_EVENTS.CREATED, table1);

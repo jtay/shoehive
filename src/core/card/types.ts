@@ -1,3 +1,7 @@
+
+/**
+ * Represents the suit of a card.
+ */
 export enum CardSuit {
   HEARTS = "H",
   DIAMONDS = "D",
@@ -5,6 +9,9 @@ export enum CardSuit {
   SPADES = "S"
 }
 
+/**
+ * Represents the rank of a card.
+ */
 export enum CardRank {
   ACE = "A",
   TWO = "2",
@@ -21,6 +28,9 @@ export enum CardRank {
   KING = "K"
 }
 
+/**
+ * Represents a card.
+ */
 export interface Card {
   suit: CardSuit;
   rank: CardRank;

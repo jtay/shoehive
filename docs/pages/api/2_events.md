@@ -30,11 +30,12 @@ Events related to player connections and state changes.
 
 ## Lobby Events
 
-Events related to the game lobby.
+Events related to the game lobby. These events are primarily managed by the `Lobby` class, which is responsible for handling lobby state updates and broadcasting changes to all connected players.
 
 | Event | Description | Payload |
 |-------|-------------|---------|
 | `lobby:state` | Emitted when the lobby state changes or updates | Object containing available games and tables |
+| `lobby:table:created` | Emitted when a new table is created through the lobby | Table object, Game definition |
 
 ## Table Events
 

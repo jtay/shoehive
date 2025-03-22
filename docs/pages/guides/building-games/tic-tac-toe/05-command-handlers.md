@@ -25,7 +25,7 @@ Let's create our command handlers in `src/command-handlers.ts`:
 
 ```typescript
 // src/command-handlers.ts
-import { Player, Table, TableState, EventBus, MessageRouter, GameManager } from 'shoehive';
+import { Player, Table, TableState, EventBus, MessageRouter, GameManager, Lobby } from 'shoehive';
 import { TIC_TAC_TOE_EVENTS, GameState, MovePayload, GameEndedPayload } from './events';
 import { 
   setupTicTacToeTable, 
@@ -42,7 +42,8 @@ import {
 export function registerTicTacToeCommandHandlers(
   messageRouter: MessageRouter,
   gameManager: GameManager,
-  eventBus: EventBus
+  eventBus: EventBus,
+  lobby: Lobby
 ): void {
   // Command handlers will be added here
 }
@@ -57,7 +58,7 @@ First, let's implement the handler for creating a new game:
 // Create a new Tic-Tac-Toe game
 messageRouter.registerCommandHandler('tictactoe:create', (player, data) => {
   // Create a new table
-  const table = gameManager.createTable('tic-tac-toe', {
+  const table = lobby.createTable('tic-tac-toe', {
     config: { totalSeats: 2, maxSeatsPerPlayer: 1 }
   });
   
@@ -492,7 +493,7 @@ The complete `src/command-handlers.ts` file looks like this:
 
 ```typescript
 // src/command-handlers.ts
-import { Player, Table, TableState, EventBus, MessageRouter, GameManager } from 'shoehive';
+import { Player, Table, TableState, EventBus, MessageRouter, GameManager, Lobby } from 'shoehive';
 import { TIC_TAC_TOE_EVENTS, GameState, MovePayload, GameEndedPayload } from './events';
 import { 
   setupTicTacToeTable, 
@@ -509,12 +510,13 @@ import {
 export function registerTicTacToeCommandHandlers(
   messageRouter: MessageRouter,
   gameManager: GameManager,
-  eventBus: EventBus
+  eventBus: EventBus,
+  lobby: Lobby
 ): void {
   // Create a new Tic-Tac-Toe game
   messageRouter.registerCommandHandler('tictactoe:create', (player, data) => {
     // Create a new table
-    const table = gameManager.createTable('tic-tac-toe', {
+    const table = lobby.createTable('tic-tac-toe', {
       config: { totalSeats: 2, maxSeatsPerPlayer: 1 }
     });
     

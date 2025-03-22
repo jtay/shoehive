@@ -70,7 +70,7 @@ gameManager.registerGame({
 
 1. **Table Relevance**: When a player's attribute changes and that player is seated at a table, the system checks if the attribute is in the `tableRelevantPlayerAttributes` list. If it is, the table state is broadcast to all players at the table.
 
-2. **Lobby Relevance**: When a player's attribute changes and that attribute is in the `lobbyRelevantPlayerAttributes` list, the lobby state is updated and broadcast to all connected players.
+2. **Lobby Relevance**: When a player's attribute changes and that attribute is in the `lobbyRelevantPlayerAttributes` list, the Lobby class updates the lobby state and broadcasts it to all connected players.
 
 ### Default Values
 

@@ -167,6 +167,30 @@ function fixLinks(content, basePath) {
     }
   );
   
+  // Handle links to type aliases
+  processedContent = processedContent.replace(
+    /\[([^\]]+)\]\(types\/([^)]+)\.md\)/g,
+    (match, linkText, typeName) => {
+      return `[${linkText}](/api/types/${typeName.toLowerCase()}/)`;
+    }
+  );
+  
+  // Handle links to variables
+  processedContent = processedContent.replace(
+    /\[([^\]]+)\]\(variables\/([^)]+)\.md\)/g,
+    (match, linkText, varName) => {
+      return `[${linkText}](/api/variables/${varName.toLowerCase()}/)`;
+    }
+  );
+  
+  // Handle links to functions
+  processedContent = processedContent.replace(
+    /\[([^\]]+)\]\(functions\/([^)]+)\.md\)/g,
+    (match, linkText, fnName) => {
+      return `[${linkText}](/api/functions/${fnName.toLowerCase()}/)`;
+    }
+  );
+  
   // General relative path links (catches ../ and ./ prefixes)
   processedContent = processedContent.replace(
     /\[([^\]]+)\]\(((?:\.\.\/)+|\.\/)([\w\/-]+)\.md\)/g, 
@@ -474,6 +498,12 @@ function removeTitlePrefix(str) {
 
   // Remove "Function: " prefix if present
   str = str.replace(/^"Function: /, '"');
+
+  // Remove "Variable: " prefix if present
+  str = str.replace(/^"Variable: /, '"');
+
+  // Remove "Type alias: " prefix if present
+  str = str.replace(/^"Type alias: /, '"');
 
   return str;
 }

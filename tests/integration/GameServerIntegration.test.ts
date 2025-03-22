@@ -9,6 +9,7 @@ import { BasicServerTransportModule } from '../../src/transport/implementations/
 import * as WebSocket from 'ws';
 import { PLAYER_EVENTS, TABLE_EVENTS } from '../../src/events/EventTypes';
 import * as http from 'http';
+import { Lobby } from '../../src/core/Lobby';
 
 // Mock WebSocket
 jest.mock('ws', () => {
@@ -76,6 +77,8 @@ describe('Game Server Integration', () => {
   let messageRouter: MessageRouter;
   let tableFactory: TableFactory;
   let gameManager: GameManager;
+  let wsManager: WebSocketManager;
+  let lobby: Lobby;
   let serverTransport: BasicServerTransportModule;
   
   // Mock players
@@ -92,6 +95,17 @@ describe('Game Server Integration', () => {
     messageRouter = new MessageRouter(eventBus);
     tableFactory = new TableFactory(eventBus);
     gameManager = new GameManager(eventBus, tableFactory);
+    lobby = new Lobby(eventBus, gameManager, tableFactory);
+    wsManager = new WebSocketManager(
+      {} as http.Server,
+      eventBus,
+      messageRouter,
+      gameManager,
+      undefined,
+      600000,
+      lobby,
+      tableFactory
+    );
     serverTransport = new BasicServerTransportModule();
     
     // Create mock sockets
@@ -132,7 +146,7 @@ describe('Game Server Integration', () => {
     const eventSpy = jest.spyOn(eventBus, 'emit');
     
     // Create a table - using non-null assertion as we know this shouldn't be null
-    const table = gameManager.createTable('test-game');
+    const table = lobby.createTable('test-game');
     // Add null check
     if (!table) {
       fail('Table should have been created');
@@ -275,7 +289,7 @@ describe('Game Server Integration', () => {
     });
     
     // Create a table
-    const table = gameManager.createTable('test-game');
+    const table = lobby.createTable('test-game');
     if (!table) {
       fail('Table should have been created');
       return;
@@ -305,7 +319,7 @@ describe('Game Server Integration', () => {
   
   test('should handle bet creation and resolution using transport module', async () => {
     // Create a table
-    const table = gameManager.createTable('test-game');
+    const table = lobby.createTable('test-game');
     if (!table) {
       fail('Table should have been created');
       return;
@@ -361,7 +375,7 @@ describe('Game Server Integration', () => {
     const eventSpy = jest.spyOn(eventBus, 'emit');
     
     // Create a table and add a player
-    const table = gameManager.createTable('test-game');
+    const table = lobby.createTable('test-game');
     if (!table) {
       fail('Table should have been created');
       return;

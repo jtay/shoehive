@@ -7,6 +7,7 @@ import { WebSocketManager } from "./core/WebSocketManager";
 import { EventBus } from "./events/EventBus";
 import { MessageRouter } from "./events/MessageRouter";
 import { GameManager, GameDefinition } from "./core/GameManager";
+import { Lobby } from "./core/Lobby";
 import { AuthModule, ServerTransportModule, TransportModule } from "./transport";
 import { CLIENT_COMMAND_TYPES, CLIENT_MESSAGE_TYPES } from "./core/commands/index";
 import * as http from "http";
@@ -24,7 +25,6 @@ import {
   CustomEventMap,
   EventType,
   EventPayloadMap,
-  DefaultEventPayloadMap
 } from "./events";
 
 // Export all the classes
@@ -39,6 +39,7 @@ export {
   MessageRouter,
   GameManager,
   GameDefinition,
+  Lobby,
   // Export new transport modules
   AuthModule,
   ServerTransportModule,
@@ -58,7 +59,6 @@ export {
   CustomEventMap,
   EventType,
   EventPayloadMap,
-  DefaultEventPayloadMap,
   // Deck of cards
   Card,
   CardSuit,
@@ -70,13 +70,33 @@ export {
 export function createGameServer(
   server: http.Server,
   authModule?: AuthModule,
-  serverTransportModule?: ServerTransportModule
+  serverTransportModule?: ServerTransportModule,
+  options?: {
+    /**
+     * Optional timeout in milliseconds for player reconnection.
+     * When a player disconnects, their game state is preserved for this duration.
+     * If they reconnect within this time, they continue from where they left off.
+     * If they don't reconnect within this time, they are removed from the game.
+     * Default is 600000 (10 minutes). Set to 0 to disable reconnection.
+     */
+    reconnectionTimeoutMs?: number;
+  }
 ) {
   const eventBus = new EventBus();
   const messageRouter = new MessageRouter(eventBus);
   const tableFactory = new TableFactory(eventBus);
   const gameManager = new GameManager(eventBus, tableFactory);
-  const wsManager = new WebSocketManager(server, eventBus, messageRouter, gameManager, authModule);
+  const lobby = new Lobby(eventBus, gameManager, tableFactory);
+  const wsManager = new WebSocketManager(
+    server, 
+    eventBus, 
+    messageRouter, 
+    gameManager, 
+    authModule, 
+    options?.reconnectionTimeoutMs || 600000,
+    lobby,
+    tableFactory
+  );
   
   // Register default Lobby message handlers
 
@@ -108,7 +128,7 @@ export function createGameServer(
   messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.CREATE, (player, data) => {
     if (!data.gameId) return;
     
-    const table = gameManager.createTable(data.gameId, data.options);
+    const table = lobby.createTable(data.gameId, data.options);
     if (table) {
       table.addPlayer(player);
     }
@@ -148,6 +168,7 @@ export function createGameServer(
     messageRouter,
     tableFactory,
     gameManager,
+    lobby,
     wsManager,
     // Add transport modules to the returned object
     transport: {

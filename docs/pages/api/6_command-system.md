@@ -79,12 +79,40 @@ On the server side, the MessageRouter processes incoming commands:
 
 ```typescript
 import { MessageRouter } from 'shoehive';
-import { Player } from 'shoehive';
+import { Player, Lobby } from 'shoehive';
 
 // Create a message router connected to the event bus
 const messageRouter = new MessageRouter(eventBus);
 
-// Register a command handler
+// Register a command handler for table creation 
+messageRouter.registerCommandHandler(
+  'lobby:table:create',
+  (player: Player, data: any) => {
+    const { gameId, options } = data;
+    const table = gameServer.lobby.createTable(gameId, options);
+    
+    if (table) {
+      // Add the player to the new table
+      table.addPlayer(player);
+      
+      // Notify the player
+      player.sendMessage({
+        type: 'table:created',
+        tableId: table.id
+      });
+      
+      // Send current table state
+      table.sendState(player);
+    } else {
+      player.sendMessage({
+        type: 'error',
+        message: 'Failed to create table'
+      });
+    }
+  }
+);
+
+// Register a game-specific command handler
 messageRouter.registerCommandHandler(
   'game:choice:make',
   (player: Player, data: any) => {
@@ -211,9 +239,30 @@ const server = http.createServer();
 
 // Create game server
 const gameServer = createGameServer(server);
-const { messageRouter } = gameServer;
+const { messageRouter, lobby } = gameServer;
 
-// Register command handlers
+// Register command handler for table creation
+messageRouter.registerCommandHandler('lobby:table:create', (player, data) => {
+  const { gameId, options } = data;
+  
+  // Create the table using the lobby
+  const table = lobby.createTable(gameId, options);
+  
+  if (table) {
+    // Notify player of success
+    player.sendMessage({
+      type: 'table:created',
+      tableId: table.id
+    });
+  } else {
+    player.sendMessage({
+      type: 'error',
+      message: 'Failed to create table'
+    });
+  }
+});
+
+// Register command handlers for table joining
 messageRouter.registerCommandHandler('table:join', (player, data) => {
   const { tableId } = data;
   const table = gameServer.tableManager.getTable(tableId);

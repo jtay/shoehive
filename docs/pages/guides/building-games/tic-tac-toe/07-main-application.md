@@ -78,7 +78,7 @@ Now, let's register our command handlers:
 
 ```typescript
 // Register command handlers
-registerTicTacToeCommandHandlers(messageRouter, gameManager, eventBus);
+registerTicTacToeCommandHandlers(messageRouter, gameManager, eventBus, lobby);
 ```
 
 This calls our function from `command-handlers.ts` that registers all the command handlers for our game.
@@ -168,7 +168,7 @@ gameManager.registerGame({
 });
 
 // Register command handlers
-registerTicTacToeCommandHandlers(messageRouter, gameManager, eventBus);
+registerTicTacToeCommandHandlers(messageRouter, gameManager, eventBus, lobby);
 
 // Enable debug monitoring for development
 if (process.env.NODE_ENV !== 'production') {

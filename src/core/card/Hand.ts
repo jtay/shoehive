@@ -1,7 +1,13 @@
 import { Card } from './types';
+import { Deck } from './Deck';
 
 /**
- * A hand of cards.
+ * A hand of [Card](/api/interfaces/card/)s.
+ * 
+ * ✅ Attribute Support
+ * 
+ * This class manages a player's hand of cards, including their cards and attributes.
+ * It provides methods for adding and removing cards, clearing the hand, and managing hand attributes.
  */
 export class Hand {
   private cards: Card[] = [];
@@ -63,8 +69,16 @@ export class Hand {
 
   /**
    * Clears the hand.
+   * 
+   * @param deck Optional deck to discard cards to when clearing the hand
    */
-  public clear(): void {
+  public clear(deck?: Deck): void {
+    if (deck) {
+      // Add all cards to the discard pile
+      for (const card of this.cards) {
+        deck.addToDiscard(card);
+      }
+    }
     this.cards = [];
   }
 

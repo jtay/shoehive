@@ -1,6 +1,15 @@
 import { Player } from "./Player";
 import { Hand } from "./card";
 
+/**
+ * Represents a seat at a table.
+ * 
+ * ✅ Attribute Support
+ * 
+ * This class manages a player's seat at a table, including their hands and attributes.
+ * It provides methods for setting and getting player information, adding and removing hands,
+ * clearing hands, and managing seat attributes.
+ */
 export class Seat {
   private player: Player | null = null;
   private hands: Map<string, Hand> = new Map();

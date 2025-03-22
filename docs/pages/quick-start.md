@@ -72,6 +72,7 @@ const {
   messageRouter,     // Handles incoming client messages and routes them to handlers
   tableFactory,      // Creates tables with specific configurations
   gameManager,       // Manages game definitions and tables
+  lobby,             // Manages table creation and lobby state broadcasts
   wsManager,         // Manages WebSocket connections and players
   transport          // Handles authentication and financial operations
 } = gameServer;
@@ -111,7 +112,7 @@ Tables group players together and represent a single game instance:
 
 ```typescript
 // Create a table for a specific game
-const table = gameManager.createTable('tic-tac-toe', { 
+const table = lobby.createTable('tic-tac-toe', { 
   // Optional table configuration
 });
 
@@ -134,6 +135,18 @@ table.broadcastMessage({
   type: 'gameUpdate',
   message: 'Round 1 started'
 });
+```
+
+### Lobby
+
+The Lobby manages available games and tables, handling the creation of new tables and broadcasting lobby updates:
+
+```typescript
+// Create a table for a game
+const table = lobby.createTable('tic-tac-toe');
+
+// Force a lobby state update broadcast
+lobby.updateLobbyState();
 ```
 
 ### Message Router

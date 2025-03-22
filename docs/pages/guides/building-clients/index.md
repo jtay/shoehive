@@ -190,6 +190,11 @@ client.on('connected', () => {
 client.on('lobbyState', (state) => {
   console.log('Available games:', state.games);
   console.log('Available tables:', state.tables);
+  
+  // Example of creating a new table through the Lobby
+  if (state.games.includes('tic-tac-toe')) {
+    client.createTable('tic-tac-toe', { public: true });
+  }
 });
 
 client.connect();

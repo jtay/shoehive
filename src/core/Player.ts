@@ -7,8 +7,11 @@ import crypto from "crypto";
 /**
  * Represents a connected client in the game.
  * 
+ * ✅ Attribute Support
+ * 
  * The Player class handles communication with the client and keeps track
  * of the player's current table and custom attributes.
+ * 
  */
 export class Player {
   public readonly id: string;
@@ -16,6 +19,7 @@ export class Player {
   private table: Table | null = null;
   private eventBus: EventBus;
   private attributes: Map<string, any> = new Map();
+  private disconnectCallbacks: Array<() => void> = [];
 
   constructor(socket: WebSocket.WebSocket, eventBus: EventBus, id?: string) {
     this.id = id || crypto.randomUUID();
@@ -27,11 +31,22 @@ export class Player {
   private setupSocketListeners(): void {
     this.socket.on("close", () => {
       this.eventBus.emit(PLAYER_EVENTS.DISCONNECTED, this);
+      
+      // Call all disconnect callbacks
+      this.disconnectCallbacks.forEach(callback => callback());
     });
 
     this.socket.on("error", (error) => {
       console.error(`Socket error for player ${this.id}:`, error);
     });
+  }
+
+  /**
+   * Register a callback to be called when the player disconnects
+   * @param callback The function to call when the player disconnects
+   */
+  public onDisconnect(callback: () => void): void {
+    this.disconnectCallbacks.push(callback);
   }
 
   public sendMessage(message: any): void {

@@ -15,8 +15,16 @@ export enum TableState {
 /**
  * Represents a game table with players, seats, and game state.
  * 
+ * ✅ Attribute Support
+ * 
  * The Table class manages a group of players and seats for a specific game.
  * It emits various events to notify other components about changes in the table state.
+ * 
+ * This class is responsible for:
+ * - Managing player connections and disconnections
+ * - Handling player messages and commands
+ * - Distributing game events to all players
+ * - Maintaining the game state and rules
  */
 export class Table {
   public readonly id: string;

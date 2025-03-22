@@ -5,6 +5,9 @@ import { TABLE_EVENTS } from "../events/EventTypes";
 /**
  * Factory class for creating tables.
  * This class is responsible for creating new tables and emitting events when tables are created.
+ * 
+ * It is exposed as part of the createGameServer function in the index.ts file, and can be used to create new tables.
+ * Client functionality for this is already natively handled by the `lobby` command namespace. ([Client Commands](/api/generated/#client_command_types))
  */
 export class TableFactory {
   private eventBus: EventBus;

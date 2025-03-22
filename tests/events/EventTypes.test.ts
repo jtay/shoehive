@@ -19,7 +19,8 @@ describe('EventTypes', () => {
       ATTRIBUTE_CHANGED: "player:attribute:changed",
       ATTRIBUTES_CHANGED: "player:attributes:changed",
       AUTHENTICATION_FAILED: "player:authentication:failed",
-      AUTHENTICATION_SUCCEEDED: "player:authentication:succeeded"
+      AUTHENTICATION_SUCCEEDED: "player:authentication:succeeded",
+      REMOVED: "player:removed"
     });
   });
 
@@ -46,7 +47,8 @@ describe('EventTypes', () => {
   test('LOBBY_EVENTS should have all expected event names', () => {
     expect(LOBBY_EVENTS).toEqual({
       UPDATED: "lobby:updated",
-      STATE: "lobby:state"
+      ATTRIBUTE_CHANGED: "lobby:attribute:changed",
+      ATTRIBUTES_CHANGED: "lobby:attributes:changed"
     });
   });
 
@@ -77,13 +79,17 @@ describe('EventTypes', () => {
     const eventTypes: EventType[] = [
       PLAYER_EVENTS.CONNECTED,
       TABLE_EVENTS.CREATED,
-      LOBBY_EVENTS.UPDATED
+      LOBBY_EVENTS.UPDATED,
+      LOBBY_EVENTS.ATTRIBUTE_CHANGED,
+      LOBBY_EVENTS.ATTRIBUTES_CHANGED
     ];
     
     expect(eventTypes).toEqual([
       'player:connected',
       'table:created',
       'lobby:updated',
+      'lobby:attribute:changed',
+      'lobby:attributes:changed'
     ]);
   });
   

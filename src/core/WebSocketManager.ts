@@ -4,30 +4,42 @@ import { EventBus } from "../events/EventBus";
 import { MessageRouter } from "../events/MessageRouter";
 import { Player } from "./Player";
 import { GameManager } from "./GameManager";
+import { Lobby } from "./Lobby";
 import { AuthModule } from "../transport/AuthModule";
 import { PLAYER_EVENTS, TABLE_EVENTS, LOBBY_EVENTS } from "../events/EventTypes";
-import { CLIENT_COMMAND_TYPES, CLIENT_MESSAGE_TYPES } from "./commands/index";
+import { CLIENT_MESSAGE_TYPES } from "./commands/index";
+import { TableFactory } from "./TableFactory";
 
 export class WebSocketManager {
   private wss: WebSocket.Server;
   private eventBus: EventBus;
   private messageRouter: MessageRouter;
   private gameManager: GameManager;
+  private lobby: Lobby;
   private players: Map<string, Player> = new Map();
   private authModule?: AuthModule;
+  private disconnectionTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  private reconnectionTimeoutMs: number;
 
   constructor(
     server: http.Server,
     eventBus: EventBus,
     messageRouter: MessageRouter,
     gameManager: GameManager,
-    authModule?: AuthModule
+    authModule?: AuthModule,
+    reconnectionTimeoutMs: number = 0,
+    lobby?: Lobby,
+    tableFactory?: TableFactory
   ) {
     this.wss = new WebSocket.Server({ server });
     this.eventBus = eventBus;
     this.messageRouter = messageRouter;
     this.gameManager = gameManager;
     this.authModule = authModule;
+    this.reconnectionTimeoutMs = reconnectionTimeoutMs;
+    
+    // Create a new Lobby if not provided
+    this.lobby = lobby || new Lobby(eventBus, gameManager, tableFactory!);
     
     this.setupConnectionHandler();
     this.setupEventListeners();
@@ -81,9 +93,9 @@ export class WebSocketManager {
    * and sends the appropriate messages to all players.
    */
   private setupEventListeners(): void {
-    this.eventBus.on(LOBBY_EVENTS.STATE, (lobbyState) => {
+    this.eventBus.on(LOBBY_EVENTS.UPDATED, (lobbyState) => {
       const message = {
-        type: LOBBY_EVENTS.STATE,
+        type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
         data: lobbyState
       };
       
@@ -107,7 +119,7 @@ export class WebSocketManager {
       table.broadcastTableState();
       
       // Update lobby for all players to see seat changes
-      this.gameManager.updateLobbyState();
+      this.lobby.updateLobbyState();
     });
 
     // Add listener for playerUnseated event
@@ -116,7 +128,7 @@ export class WebSocketManager {
       table.broadcastTableState();
       
       // Update lobby for all players to see seat changes
-      this.gameManager.updateLobbyState();
+      this.lobby.updateLobbyState();
     });
     
     // Handle table state updates
@@ -145,7 +157,7 @@ export class WebSocketManager {
       // Update lobby if this is a metadata attribute that would affect the lobby display
       const metadataAttributes = ["gameId", "gameName", "options"];
       if (metadataAttributes.includes(key)) {
-        this.gameManager.updateLobbyState();
+        this.lobby.updateLobbyState();
       }
     });
     
@@ -157,7 +169,7 @@ export class WebSocketManager {
       const shouldUpdateLobby = changedKeys.some((key: string) => metadataAttributes.includes(key));
       
       if (shouldUpdateLobby) {
-        this.gameManager.updateLobbyState();
+        this.lobby.updateLobbyState();
       }
     });
   }
@@ -178,7 +190,7 @@ export class WebSocketManager {
 
     // Send available games and tables (lobby state)
     player.sendMessage({
-      type: LOBBY_EVENTS.STATE,
+      type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
       data: {
         games: this.gameManager.getAvailableGames(),
         tables: this.gameManager.getAllTables().map(table => table.getTableMetadata())
@@ -304,14 +316,77 @@ export class WebSocketManager {
         player.setTable(previousTable);
       }
       
+      // Clear any existing disconnect timeout for this player
+      if (this.disconnectionTimeouts.has(playerId)) {
+        clearTimeout(this.disconnectionTimeouts.get(playerId)!);
+        this.disconnectionTimeouts.delete(playerId);
+      }
+      
       this.eventBus.emit(PLAYER_EVENTS.RECONNECTED, player);
       return player;
     } else {
       // Create new player
       const player = new Player(socket, this.eventBus, playerId || undefined);
       this.players.set(player.id, player);
+      
+      // Setup disconnect handler for the new player
+      this.setupPlayerDisconnectHandler(player);
+      
       return player;
     }
+  }
+
+  /**
+   * Setup disconnect handler for a player to manage reconnection timeout
+   * 
+   * @param player The player to set up disconnect handler for
+   */
+  private setupPlayerDisconnectHandler(player: Player): void {
+    player.onDisconnect(() => {
+      // Only set timeout if reconnection timeout is enabled
+      if (this.reconnectionTimeoutMs > 0) {
+        // Mark player as temporarily disconnected
+        player.setAttribute('connectionStatus', 'disconnected');
+        
+        // Set timeout to remove player if they don't reconnect
+        const timeout = setTimeout(() => {
+          this.removePlayerPermanently(player.id);
+        }, this.reconnectionTimeoutMs);
+        
+        this.disconnectionTimeouts.set(player.id, timeout);
+      } else {
+        // If timeout is disabled, remove player immediately
+        this.removePlayerPermanently(player.id);
+      }
+    });
+  }
+
+  /**
+   * Permanently remove a player from the game server
+   * 
+   * @param playerId The ID of the player to remove
+   */
+  private removePlayerPermanently(playerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    
+    // If player is at a table, remove them
+    const table = player.getTable();
+    if (table) {
+      table.removePlayer(playerId);
+    }
+    
+    // Remove player from the game server
+    this.players.delete(playerId);
+    
+    // Clean up any stored timeout
+    if (this.disconnectionTimeouts.has(playerId)) {
+      clearTimeout(this.disconnectionTimeouts.get(playerId)!);
+      this.disconnectionTimeouts.delete(playerId);
+    }
+    
+    // Emit a player removed event
+    this.eventBus.emit(PLAYER_EVENTS.REMOVED, player);
   }
 
   /**
@@ -325,15 +400,79 @@ export class WebSocketManager {
   }
 
   /**
-   * Disconnects a player by their ID.
+   * Disconnects a player by their ID without waiting for timeout.
+   * This bypasses the reconnection timeout and immediately removes the player.
    * 
    * @param playerId The ID of the player to disconnect.
    */
   public disconnectPlayer(playerId: string): void {
     const player = this.players.get(playerId);
     if (player) {
+      // Close the socket connection
       player.disconnect();
-      this.players.delete(playerId);
+      
+      // Remove any timeout and immediately remove the player
+      if (this.disconnectionTimeouts.has(playerId)) {
+        clearTimeout(this.disconnectionTimeouts.get(playerId)!);
+        this.disconnectionTimeouts.delete(playerId);
+      }
+      
+      this.removePlayerPermanently(playerId);
     }
+  }
+  
+  /**
+   * Gets the current reconnection timeout in milliseconds
+   */
+  public getReconnectionTimeout(): number {
+    return this.reconnectionTimeoutMs;
+  }
+  
+  /**
+   * Sets the reconnection timeout in milliseconds
+   * 
+   * @param timeoutMs The timeout in milliseconds (0 to disable reconnection)
+   */
+  public setReconnectionTimeout(timeoutMs: number): void {
+    this.reconnectionTimeoutMs = timeoutMs;
+  }
+
+  /**
+   * Gets information about temporarily disconnected players.
+   * This is useful for monitoring and debugging connection issues.
+   * 
+   * @returns Array of objects containing information about disconnected players
+   */
+  public getDisconnectedPlayers(): Array<{
+    id: string;
+    disconnectedAt: number;
+    reconnectionAvailableUntil: number;
+    timeLeftMs: number;
+  }> {
+    const now = Date.now();
+    const result: Array<{
+      id: string;
+      disconnectedAt: number;
+      reconnectionAvailableUntil: number;
+      timeLeftMs: number;
+    }> = [];
+    
+    this.players.forEach(player => {
+      if (player.getAttribute('connectionStatus') === 'disconnected') {
+        const disconnectedAt = player.getAttribute('disconnectedAt');
+        const reconnectionAvailableUntil = player.getAttribute('reconnectionAvailableUntil');
+        
+        if (disconnectedAt && reconnectionAvailableUntil) {
+          result.push({
+            id: player.id,
+            disconnectedAt,
+            reconnectionAvailableUntil,
+            timeLeftMs: Math.max(0, reconnectionAvailableUntil - now)
+          });
+        }
+      }
+    });
+    
+    return result;
   }
 }
