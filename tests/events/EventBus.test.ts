@@ -1,5 +1,5 @@
 import { EventBus } from '../../src/events/EventBus';
-import { PLAYER_EVENTS, TABLE_EVENTS, GAME_EVENTS } from '../../src/events/EventTypes';
+import { PLAYER_EVENTS, TABLE_EVENTS } from '../../src/events/EventTypes';
 
 describe('EventBus', () => {
   let eventBus: EventBus;
@@ -78,22 +78,18 @@ describe('EventBus', () => {
   test('should handle predefined event constants', () => {
     const playerConnectedListener = jest.fn();
     const tableCreatedListener = jest.fn();
-    const gameStartedListener = jest.fn();
     
     eventBus.on(PLAYER_EVENTS.CONNECTED, playerConnectedListener);
     eventBus.on(TABLE_EVENTS.CREATED, tableCreatedListener);
-    eventBus.on(GAME_EVENTS.STARTED, gameStartedListener);
     
     const player = { id: 'player1' };
     const table = { id: 'table1' };
     
     eventBus.emit(PLAYER_EVENTS.CONNECTED, player);
     eventBus.emit(TABLE_EVENTS.CREATED, table);
-    eventBus.emit(GAME_EVENTS.STARTED, table, { roundCount: 1 });
     
     expect(playerConnectedListener).toHaveBeenCalledWith(player);
     expect(tableCreatedListener).toHaveBeenCalledWith(table);
-    expect(gameStartedListener).toHaveBeenCalledWith(table, { roundCount: 1 });
   });
   
   test('should handle custom events', () => {

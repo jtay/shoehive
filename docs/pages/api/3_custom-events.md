@@ -1,3 +1,11 @@
+---
+layout: default
+title: Custom Events
+permalink: /api/custom-events
+parent: Components
+nav_order: 3
+---
+
 # Extending the Shoehive Event System
 
 This guide explains how to extend the Shoehive event system with your own custom events for your specific game implementations.
@@ -23,7 +31,7 @@ domain:subdomain:action
 For example:
 - `player:connected`
 - `table:player:joined`
-- `table:state:changed`
+- `table:state:updated`
 
 When creating your own events, it's recommended to follow this same pattern with your game name as the domain:
 
@@ -103,7 +111,7 @@ export class PokerModule {
       this.initializePlayerState(player, table);
     });
     
-    this.eventBus.on('table:state:changed', (table, state) => {
+    this.eventBus.on('table:state:updated', (table, state) => {
       if (state === 'ACTIVE') {
         // Start a new poker hand when the table becomes active
         this.startNewHand(table);

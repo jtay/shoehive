@@ -13,7 +13,7 @@ Thank you for considering contributing to Shoehive! This document provides guide
 ## Development Setup
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/shoehive.git`
+2. Clone your fork: `git clone https://github.com/jtay/shoehive.git`
 3. Install dependencies: `npm install`
 4. Build the project: `npm run build`
 5. Run tests: `npm test`

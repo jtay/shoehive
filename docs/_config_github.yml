@@ -1,0 +1,11 @@
+# GitHub Pages specific settings
+github:
+  is_project_page: true
+  repository_url: "https://github.com/jtay/shoehive"
+  
+# Ensure plugins are GitHub Pages compatible
+plugins:
+  - jekyll-feed
+
+# Keep the same theme
+theme: just-the-docs

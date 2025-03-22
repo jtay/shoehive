@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import { EventType, DefaultEventPayloadMap, EventPayloadMap, CustomEventMap } from "./EventTypes";
+import { EventType } from "./EventTypes";
 
 /**
  * EventBus
@@ -43,7 +43,6 @@ export class EventBus {
 
   constructor() {
     this.emitter = new EventEmitter();
-    // Increase max listeners to avoid memory leak warnings
     this.emitter.setMaxListeners(100);
     
     // Store the original emit method

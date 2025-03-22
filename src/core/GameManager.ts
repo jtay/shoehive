@@ -1,6 +1,8 @@
 import { EventBus } from "../events/EventBus";
 import { Table } from "./Table";
 import { TableFactory } from "./TableFactory";
+import { Player } from "./Player";
+import { TABLE_EVENTS } from "../events/EventTypes";
 
 export interface GameDefinition {
   id: string;
@@ -11,6 +13,10 @@ export interface GameDefinition {
   defaultSeats: number;
   maxSeatsPerPlayer: number;
   options?: Record<string, any>;
+  // Define which player attributes should trigger a table state update when changed
+  tableRelevantPlayerAttributes?: string[];
+  // Define which player attributes should trigger a lobby update when changed
+  lobbyRelevantPlayerAttributes?: string[];
 }
 
 export class GameManager {
@@ -26,8 +32,12 @@ export class GameManager {
     this.setupEventListeners();
   }
 
+  /**
+   * Sets up event listeners for the game manager.
+   * This listens for table creation and table emptying.
+   */
   private setupEventListeners(): void {
-    this.eventBus.on("table:created", (table: Table) => {
+    this.eventBus.on(TABLE_EVENTS.CREATED, (table: Table) => {
       this.tables.set(table.id, table);
       
       const gameId = table.getAttribute("gameId");
@@ -37,48 +47,41 @@ export class GameManager {
         }
         this.tablesByGame.get(gameId)?.add(table.id);
       }
-      
-      this.broadcastLobbyUpdate();
     });
 
-    this.eventBus.on("table:empty", (table: Table) => {
+    this.eventBus.on(TABLE_EVENTS.EMPTY, (table: Table) => {
       this.removeTable(table.id);
     });
   }
 
+  /**
+   * Registers a game definition.
+   * 
+   * @param gameDefinition The game definition to register.
+   */
   public registerGame(gameDefinition: GameDefinition): void {
     this.games.set(gameDefinition.id, gameDefinition);
     this.tablesByGame.set(gameDefinition.id, new Set());
-    this.broadcastLobbyUpdate();
   }
 
+  /**
+   * Unregisters a game definition.
+   * 
+   * @param gameId The ID of the game to unregister.
+   */
   public unregisterGame(gameId: string): void {
     this.games.delete(gameId);
     // Remove all tables for this game
     const tablesToRemove = this.tablesByGame.get(gameId) || new Set();
     tablesToRemove.forEach(tableId => this.removeTable(tableId));
     this.tablesByGame.delete(gameId);
-    this.broadcastLobbyUpdate();
   }
 
-  public createTable(gameId: string, options?: Record<string, any>): Table | null {
-    const gameDefinition = this.games.get(gameId);
-    if (!gameDefinition) return null;
-
-    const table = this.tableFactory.createTable(
-      gameDefinition.defaultSeats,
-      gameDefinition.maxSeatsPerPlayer
-    );
-    
-    table.setAttribute("gameId", gameId);
-    table.setAttribute("gameName", gameDefinition.name);
-    if (options) {
-      table.setAttribute("options", options);
-    }
-
-    return table;
-  }
-
+  /**
+   * Removes a table from the game manager.
+   * 
+   * @param tableId The ID of the table to remove.
+   */
   public removeTable(tableId: string): void {
     const table = this.tables.get(tableId);
     if (!table) return;
@@ -89,13 +92,33 @@ export class GameManager {
     }
 
     this.tables.delete(tableId);
-    this.broadcastLobbyUpdate();
   }
 
+  /**
+   * Gets all available games.
+   * 
+   * @returns An array of all game definitions.
+   */
   public getAvailableGames(): GameDefinition[] {
     return Array.from(this.games.values());
   }
 
+  /**
+   * Gets a game definition by its ID.
+   * 
+   * @param gameId The ID of the game
+   * @returns The game definition, or undefined if not found
+   */
+  public getGameDefinition(gameId: string): GameDefinition | undefined {
+    return this.games.get(gameId);
+  }
+
+  /**
+   * Gets all tables for a game.
+   * 
+   * @param gameId The ID of the game.
+   * @returns An array of tables for the game.
+   */
   public getTablesForGame(gameId: string): Table[] {
     const tableIds = this.tablesByGame.get(gameId) || new Set();
     return Array.from(tableIds)
@@ -103,26 +126,12 @@ export class GameManager {
       .filter(table => table !== undefined) as Table[];
   }
 
+  /**
+   * Gets all tables in the game manager.
+   * 
+   * @returns An array of all tables.
+   */
   public getAllTables(): Table[] {
     return Array.from(this.tables.values());
-  }
-
-  private broadcastLobbyUpdate(): void {
-    const lobbyState = {
-      games: this.getAvailableGames(),
-      tables: this.getAllTables().map(table => ({
-        id: table.id,
-        gameId: table.getAttribute("gameId"),
-        playerCount: table.getPlayerCount(),
-        seats: table.getSeats().map(seat => seat.getPlayer()?.id || null),
-        state: table.getState()
-      }))
-    };
-
-    this.eventBus.emit("lobby:state", lobbyState);
-  }
-  
-  public updateLobbyState(): void {
-    this.broadcastLobbyUpdate();
   }
 } 

@@ -7,7 +7,9 @@ import { Table, TableState } from '../../src/core/Table';
 import { WebSocketManager } from '../../src/core/WebSocketManager';
 import { BasicServerTransportModule } from '../../src/transport/implementations/BasicServerTransportModule';
 import * as WebSocket from 'ws';
-import { PLAYER_EVENTS } from '../../src/events/EventTypes';
+import { PLAYER_EVENTS, TABLE_EVENTS } from '../../src/events/EventTypes';
+import * as http from 'http';
+import { Lobby } from '../../src/core/Lobby';
 
 // Mock WebSocket
 jest.mock('ws', () => {
@@ -52,6 +54,7 @@ jest.mock('../../src/core/Player', () => {
         setAttribute: jest.fn(),
         getAttribute: jest.fn(),
         hasAttribute: jest.fn(),
+        getAttributes: jest.fn().mockReturnValue({}),
         disconnect: jest.fn()
       };
     })
@@ -74,6 +77,8 @@ describe('Game Server Integration', () => {
   let messageRouter: MessageRouter;
   let tableFactory: TableFactory;
   let gameManager: GameManager;
+  let wsManager: WebSocketManager;
+  let lobby: Lobby;
   let serverTransport: BasicServerTransportModule;
   
   // Mock players
@@ -90,6 +95,17 @@ describe('Game Server Integration', () => {
     messageRouter = new MessageRouter(eventBus);
     tableFactory = new TableFactory(eventBus);
     gameManager = new GameManager(eventBus, tableFactory);
+    lobby = new Lobby(eventBus, gameManager, tableFactory);
+    wsManager = new WebSocketManager(
+      {} as http.Server,
+      eventBus,
+      messageRouter,
+      gameManager,
+      undefined,
+      600000,
+      lobby,
+      tableFactory
+    );
     serverTransport = new BasicServerTransportModule();
     
     // Create mock sockets
@@ -113,6 +129,8 @@ describe('Game Server Integration', () => {
       maxPlayers: 2,
       defaultSeats: 2,
       maxSeatsPerPlayer: 1,
+      tableRelevantPlayerAttributes: ["name", "score", "isReady"],
+      lobbyRelevantPlayerAttributes: ["name", "status"],
       options: {
         setupTable: (table: Table) => {
           table.setAttribute('gameId', 'test-game');
@@ -128,7 +146,7 @@ describe('Game Server Integration', () => {
     const eventSpy = jest.spyOn(eventBus, 'emit');
     
     // Create a table - using non-null assertion as we know this shouldn't be null
-    const table = gameManager.createTable('test-game');
+    const table = lobby.createTable('test-game');
     // Add null check
     if (!table) {
       fail('Table should have been created');
@@ -169,7 +187,7 @@ describe('Game Server Integration', () => {
     table.setAttribute('gameData', { started: true, turnNumber: 1 });
     
     expect(table.getState()).toBe(TableState.ACTIVE);
-    expect(eventSpy).toHaveBeenCalledWith('table:state:changed', table, TableState.ACTIVE);
+    expect(eventSpy).toHaveBeenCalledWith(TABLE_EVENTS.STATE_UPDATED, table, TableState.ACTIVE);
     
     // Broadcast game start message
     table.broadcastMessage({
@@ -271,7 +289,7 @@ describe('Game Server Integration', () => {
     });
     
     // Create a table
-    const table = gameManager.createTable('test-game');
+    const table = lobby.createTable('test-game');
     if (!table) {
       fail('Table should have been created');
       return;
@@ -301,7 +319,7 @@ describe('Game Server Integration', () => {
   
   test('should handle bet creation and resolution using transport module', async () => {
     // Create a table
-    const table = gameManager.createTable('test-game');
+    const table = lobby.createTable('test-game');
     if (!table) {
       fail('Table should have been created');
       return;
@@ -357,7 +375,7 @@ describe('Game Server Integration', () => {
     const eventSpy = jest.spyOn(eventBus, 'emit');
     
     // Create a table and add a player
-    const table = gameManager.createTable('test-game');
+    const table = lobby.createTable('test-game');
     if (!table) {
       fail('Table should have been created');
       return;
@@ -384,5 +402,45 @@ describe('Game Server Integration', () => {
     
     // Note: In a real scenario, player should be removed from the table when disconnected
     // This would be handled by event handlers in the WebSocketManager
+  });
+  
+  test('should support configurable player attribute relevance', () => {
+    // Create a game definition with custom relevant attributes
+    const customGame = {
+      id: 'custom-game',
+      name: 'Custom Game',
+      description: 'A game with custom attribute relevance',
+      minPlayers: 1,
+      maxPlayers: 2,
+      defaultSeats: 2,
+      maxSeatsPerPlayer: 1,
+      tableRelevantPlayerAttributes: ['customAttr1', 'customAttr2'],
+      lobbyRelevantPlayerAttributes: ['customAttr3', 'customAttr4']
+    };
+    gameManager.registerGame(customGame);
+    
+    // Verify that the game definition has the custom attributes
+    const retrievedGame = gameManager.getGameDefinition('custom-game');
+    expect(retrievedGame).toBeTruthy();
+    expect(retrievedGame?.tableRelevantPlayerAttributes).toEqual(['customAttr1', 'customAttr2']);
+    expect(retrievedGame?.lobbyRelevantPlayerAttributes).toEqual(['customAttr3', 'customAttr4']);
+    
+    // Create a simple test function that checks if an attribute is relevant
+    const isTableRelevant = (gameId: string, attributeName: string): boolean => {
+      const game = gameManager.getGameDefinition(gameId);
+      if (!game || !game.tableRelevantPlayerAttributes) return false;
+      return game.tableRelevantPlayerAttributes.includes(attributeName);
+    };
+    
+    // Test with the custom attributes
+    expect(isTableRelevant('custom-game', 'customAttr1')).toBe(true);
+    expect(isTableRelevant('custom-game', 'customAttr2')).toBe(true);
+    expect(isTableRelevant('custom-game', 'irrelevantAttr')).toBe(false);
+    
+    // Test with the default game
+    expect(isTableRelevant('test-game', 'score')).toBe(true);
+    expect(isTableRelevant('test-game', 'name')).toBe(true);
+    expect(isTableRelevant('test-game', 'isReady')).toBe(true);
+    expect(isTableRelevant('test-game', 'irrelevantAttr')).toBe(false);
   });
 }); 

@@ -1,18 +1,27 @@
-import { Card, CardRank, CardSuit, Deck, Hand } from '../../src/core/Card';
+import { Card, CardRank, CardSuit, Deck, Hand } from '../../src/core/card';
 
 describe('Card Types', () => {
   test('CardSuit should have correct values', () => {
-    expect(CardSuit.HEARTS).toBe('hearts');
-    expect(CardSuit.DIAMONDS).toBe('diamonds');
-    expect(CardSuit.CLUBS).toBe('clubs');
-    expect(CardSuit.SPADES).toBe('spades');
+    expect(CardSuit.HEARTS).toBe('H');
+    expect(CardSuit.DIAMONDS).toBe('D');
+    expect(CardSuit.CLUBS).toBe('C');
+    expect(CardSuit.SPADES).toBe('S');
   });
 
   test('CardRank should have correct values', () => {
-    expect(CardRank.ACE).toBe('ace');
+    expect(CardRank.ACE).toBe('A');
     expect(CardRank.TWO).toBe('2');
     expect(CardRank.THREE).toBe('3');
-    expect(CardRank.KING).toBe('king');
+    expect(CardRank.FOUR).toBe('4');
+    expect(CardRank.FIVE).toBe('5');
+    expect(CardRank.SIX).toBe('6');
+    expect(CardRank.SEVEN).toBe('7');
+    expect(CardRank.EIGHT).toBe('8');
+    expect(CardRank.NINE).toBe('9');
+    expect(CardRank.TEN).toBe('T');
+    expect(CardRank.JACK).toBe('J');
+    expect(CardRank.QUEEN).toBe('Q');
+    expect(CardRank.KING).toBe('K');
   });
 });
 

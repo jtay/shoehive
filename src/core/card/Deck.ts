@@ -1,86 +1,10 @@
-export enum CardSuit {
-  HEARTS = "hearts",
-  DIAMONDS = "diamonds",
-  CLUBS = "clubs",
-  SPADES = "spades"
-}
+import { Card, CardSuit, CardRank } from './types';
 
-export enum CardRank {
-  ACE = "ace",
-  TWO = "2",
-  THREE = "3",
-  FOUR = "4",
-  FIVE = "5",
-  SIX = "6",
-  SEVEN = "7",
-  EIGHT = "8",
-  NINE = "9",
-  TEN = "10",
-  JACK = "jack",
-  QUEEN = "queen",
-  KING = "king"
-}
-
-export interface Card {
-  suit: CardSuit;
-  rank: CardRank;
-  value?: number;
-  isVisible: boolean;
-}
-
-export class Hand {
-  private cards: Card[] = [];
-  private id: string;
-  private attributes: Map<string, any> = new Map();
-
-  constructor(id: string = "main") {
-    this.id = id;
-  }
-
-  public addCard(card: Card): void {
-    this.cards.push(card);
-  }
-
-  public removeCard(index: number): Card | null {
-    if (index < 0 || index >= this.cards.length) {
-      return null;
-    }
-    return this.cards.splice(index, 1)[0];
-  }
-
-  public getCards(): Card[] {
-    return [...this.cards];
-  }
-
-  public getVisibleCards(): Card[] {
-    return this.cards.filter(card => card.isVisible);
-  }
-
-  public getHiddenCards(): Card[] {
-    return this.cards.filter(card => !card.isVisible);
-  }
-
-  public clear(): void {
-    this.cards = [];
-  }
-
-  public getId(): string {
-    return this.id;
-  }
-
-  public setAttribute(key: string, value: any): void {
-    this.attributes.set(key, value);
-  }
-
-  public getAttribute(key: string): any {
-    return this.attributes.get(key);
-  }
-
-  public hasAttribute(key: string): boolean {
-    return this.attributes.has(key);
-  }
-}
-
+/**
+ * A deck of [Card](/core/card/types#card)s.
+ * 
+ * Supports shuffling, drawing cards, and resetting from the discard pile.
+ */
 export class Deck {
   private cards: Card[] = [];
   private discardPile: Card[] = [];
@@ -89,6 +13,11 @@ export class Deck {
     this.initialize(numberOfDecks);
   }
 
+  /**
+   * Initializes the deck.
+   * 
+   * @param numberOfDecks The number of decks to initialize.
+   */
   private initialize(numberOfDecks: number): void {
     this.cards = [];
     for (let d = 0; d < numberOfDecks; d++) {
@@ -120,6 +49,9 @@ export class Deck {
     }
   }
 
+  /**
+   * Shuffles the deck.
+   */
   public shuffle(): void {
     // Fisher-Yates shuffle algorithm
     for (let i = this.cards.length - 1; i > 0; i--) {
@@ -128,6 +60,12 @@ export class Deck {
     }
   }
 
+  /**
+   * Draws a card from the deck.
+   * 
+   * @param isVisible Whether the card should be visible.
+   * @returns The drawn card or null if the deck is empty.
+   */
   public drawCard(isVisible: boolean = true): Card | null {
     if (this.cards.length === 0) {
       return null;
@@ -137,6 +75,13 @@ export class Deck {
     return card;
   }
 
+  /**
+   * Draws multiple cards from the deck.
+   * 
+   * @param count The number of cards to draw.
+   * @param isVisible Whether the cards should be visible.
+   * @returns An array of drawn cards or an empty array if the deck is empty.
+   */
   public drawCards(count: number, isVisible: boolean = true): Card[] {
     const cards: Card[] = [];
     for (let i = 0; i < count; i++) {
@@ -150,20 +95,38 @@ export class Deck {
     return cards;
   }
 
+  /**
+   * Adds a card to the discard pile.
+   * 
+   * @param card The card to add to the discard pile.
+   */
   public addToDiscard(card: Card): void {
     this.discardPile.push(card);
   }
 
+  /**
+   * Resets the deck from the discard pile.
+   */
   public resetFromDiscard(): void {
     this.cards = [...this.cards, ...this.discardPile];
     this.discardPile = [];
     this.shuffle();
   }
 
+  /**
+   * Gets the number of remaining cards in the deck.
+   * 
+   * @returns The number of remaining cards in the deck.
+   */
   public getRemainingCards(): number {
     return this.cards.length;
   }
 
+  /**
+   * Gets the number of discarded cards.
+   * 
+   * @returns The number of discarded cards.
+   */
   public getDiscardedCards(): number {
     return this.discardPile.length;
   }

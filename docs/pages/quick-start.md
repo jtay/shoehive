@@ -1,22 +1,35 @@
+---
+layout: default
+title: Quick Start
+permalink: /quick-start
+nav_order: 2
+---
+
 # 🐝 Shoehive Quick Start Guide
 
-Welcome to Shoehive, the flexible WebSocket-based multiplayer game framework. This quick start guide will help you set up your first Shoehive game server and understand the core concepts.
+Welcome to Shoehive, the flexible WebSocket-based multiplayer game framework. This guide will help you set up a basic game server and understand the core concepts of Shoehive.
 
-## 📋 Table of Contents
+## Table of Contents
 
-1. [Installation](#-installation)
-2. [Basic Server Setup](#-basic-server-setup)
-3. [Core Concepts Overview](#-core-concepts-overview)
-4. [Event System](#-event-system)
-5. [Creating a Simple Game](#-creating-a-simple-game)
-6. [Card Game Functionality](#-card-game-functionality)
-7. [Player Authentication](#-player-authentication)
-8. [Financial Operations](#-financial-operations)
-9. [Advanced Patterns](#-advanced-patterns)
-10. [Debugging and Monitoring](#-debugging-and-monitoring)
-11. [Additional Resources](#-additional-resources)
+1. [Installation](#installation)
+2. [Basic Server Setup](#basic-server-setup)
+3. [Core Concepts Overview](#core-concepts-overview)
+   - [Players](#players)
+   - [Tables](#tables)
+   - [Message Router](#message-router)
+4. [Event System](#event-system)
+   - [Using Event Constants](#using-event-constants)
+   - [Creating Game-Specific Events](#creating-game-specific-events)
+   - [Core Event Types](#core-event-types)
+5. [Creating a Simple Game](#creating-a-simple-game)
+6. [Card Game Functionality](#card-game-functionality)
+7. [Player Authentication](#player-authentication)
+8. [Financial Operations](#financial-operations)
+9. [Advanced Patterns](#advanced-patterns)
+10. [Debugging and Monitoring](#debugging-and-monitoring)
+11. [Additional Resources](#additional-resources)
 
-## 🛠️ Installation
+## Installation
 
 Install Shoehive using npm:
 
@@ -30,7 +43,7 @@ Or using yarn:
 yarn add shoehive
 ```
 
-## 🚀 Basic Server Setup
+## Basic Server Setup
 
 Here's a minimal example to set up a Shoehive game server:
 
@@ -51,30 +64,29 @@ server.listen(PORT, () => {
 });
 ```
 
-This creates a WebSocket server that will handle connections from game clients. The `createGameServer` function returns several important objects:
+The `createGameServer` function returns several important objects that you'll use to build your game:
 
 ```typescript
 const {
-  eventBus,          // Central event system
-  messageRouter,     // Handles incoming client messages
+  eventBus,          // Central event system for communication between components
+  messageRouter,     // Handles incoming client messages and routes them to handlers
   tableFactory,      // Creates tables with specific configurations
   gameManager,       // Manages game definitions and tables
+  lobby,             // Manages table creation and lobby state broadcasts
   wsManager,         // Manages WebSocket connections and players
   transport          // Handles authentication and financial operations
 } = gameServer;
 ```
 
-## 🧩 Core Concepts Overview
-
-Shoehive is built around several core concepts:
+## Core Concepts Overview
 
 ### Players
 
-Players represent connected clients. Each player:
+Players represent connected clients in your game. Each player:
 - Has a unique ID
 - Can join tables
 - Can sit at seats within tables
-- Can have custom attributes
+- Can have custom attributes for game-specific data
 
 ```typescript
 // Get a player
@@ -84,7 +96,7 @@ const player = gameServer.wsManager.getPlayer('player-id');
 player.setAttribute('score', 100);
 player.setAttribute('avatar', 'https://example.com/avatar.png');
 
-// Send messages to players
+// Send messages to a specific player
 player.sendMessage({
   type: 'gameUpdate',
   data: { message: 'Your turn!' }
@@ -96,15 +108,12 @@ const score = player.getAttribute('score'); // 100
 
 ### Tables
 
-Tables group players together and represent a specific game instance:
+Tables group players together and represent a single game instance:
 
 ```typescript
-// Create a table
-const table = gameManager.createTable('game-id', { 
-  config: { 
-    totalSeats: 4,          // Number of seats at the table
-    maxSeatsPerPlayer: 1    // Maximum seats a single player can occupy 
-  } 
+// Create a table for a specific game
+const table = lobby.createTable('tic-tac-toe', { 
+  // Optional table configuration
 });
 
 // Add a player to the table
@@ -113,18 +122,36 @@ table.addPlayer(player);
 // Seat a player at a specific position
 table.sitPlayerAtSeat(player.id, 0);
 
-// Set the table state
+// Set the table state 
 table.setState(TableState.ACTIVE); // States: WAITING, ACTIVE, ENDED
 
 // Use table attributes for game-specific data
 table.setAttribute('roundNumber', 1);
 table.setAttribute('currentPlayerIndex', 0);
 table.setAttribute('pot', 100);
+
+// Broadcast a message to all players at the table
+table.broadcastMessage({
+  type: 'gameUpdate',
+  message: 'Round 1 started'
+});
+```
+
+### Lobby
+
+The Lobby manages available games and tables, handling the creation of new tables and broadcasting lobby updates:
+
+```typescript
+// Create a table for a game
+const table = lobby.createTable('tic-tac-toe');
+
+// Force a lobby state update broadcast
+lobby.updateLobbyState();
 ```
 
 ### Message Router
 
-The MessageRouter processes incoming messages from clients:
+The MessageRouter processes incoming messages from clients and routes them to appropriate handlers:
 
 ```typescript
 // Register a command handler for "makeMove" messages
@@ -132,13 +159,21 @@ messageRouter.registerCommandHandler('makeMove', (player, data) => {
   const { row, col } = data;
   const table = player.getTable();
   
+  if (!table) {
+    player.sendMessage({
+      type: 'error',
+      message: 'You are not at a table'
+    });
+    return;
+  }
+  
   // Handle the command
   console.log(`Player ${player.id} made move at ${row},${col}`);
   
   // Update game state
   // ...
   
-  // Notify players of the move
+  // Notify all players of the move
   table.broadcastMessage({
     type: 'moveUpdate',
     playerId: player.id,
@@ -148,13 +183,13 @@ messageRouter.registerCommandHandler('makeMove', (player, data) => {
 });
 ```
 
-## 📢 Event System
+## Event System
 
-Shoehive uses an event-driven architecture with predefined event constants for type safety and consistency.
+Shoehive uses an event-driven architecture for communication between components. This provides a flexible and decoupled way to handle game logic.
 
 ### Using Event Constants
 
-Import and use the event constants when working with the event system:
+Import and use the predefined event constants for type safety and consistency:
 
 ```typescript
 import { PLAYER_EVENTS, TABLE_EVENTS, GAME_EVENTS } from 'shoehive';
@@ -198,188 +233,14 @@ eventBus.emit(CHESS_EVENTS.PIECE_MOVED, table, player, {
 });
 ```
 
-### Core Event Types
+## Card Game Functionality
 
-Shoehive provides several event categories:
-
-#### Player Events
-- `PLAYER_EVENTS.CONNECTED` - When a player connects
-- `PLAYER_EVENTS.DISCONNECTED` - When a player disconnects
-- `PLAYER_EVENTS.RECONNECTED` - When a player reconnects
-
-#### Table Events
-- `TABLE_EVENTS.CREATED` - When a table is created
-- `TABLE_EVENTS.PLAYER_JOINED` - When a player joins a table
-- `TABLE_EVENTS.PLAYER_LEFT` - When a player leaves a table
-- `TABLE_EVENTS.PLAYER_SAT` - When a player sits at a seat
-- `TABLE_EVENTS.PLAYER_STOOD` - When a player stands up
-- `TABLE_EVENTS.STATE_CHANGED` - When the table state changes
-
-#### Game Events
-- `GAME_EVENTS.STARTED` - When a game starts
-- `GAME_EVENTS.ENDED` - When a game ends
-- `GAME_EVENTS.ROUND_STARTED` - When a game round starts
-- `GAME_EVENTS.ROUND_ENDED` - When a game round ends
-- `GAME_EVENTS.TURN_STARTED` - When a player's turn starts
-- `GAME_EVENTS.TURN_ENDED` - When a player's turn ends
-
-## 🎲 Creating a Simple Game
-
-Let's create a simple number guessing game:
-
-```typescript
-import { 
-  createGameServer, 
-  Player, 
-  Table, 
-  TableState, 
-  GAME_EVENTS 
-} from 'shoehive';
-
-// Define number guessing game-specific events
-const NUMBER_GUESS_EVENTS = {
-  GUESS_MADE: "numberguess:guess:made",
-  GAME_WON: "numberguess:game:won",
-  GAME_LOST: "numberguess:game:lost"
-} as const;
-
-// Setup the game server
-const server = http.createServer();
-const gameServer = createGameServer(server);
-const { messageRouter, gameManager, eventBus } = gameServer;
-
-// Register the game definition
-gameManager.registerGame({
-  id: 'number-guessing',
-  name: 'Number Guessing Game',
-  description: 'Guess a number between 1-100',
-  minPlayers: 1,
-  maxPlayers: 1,
-  defaultSeats: 1,
-  maxSeatsPerPlayer: 1,
-  options: {
-    setupTable: (table: Table) => {
-      // Initialize game state
-      table.setAttribute('targetNumber', Math.floor(Math.random() * 100) + 1);
-      table.setAttribute('attempts', 0);
-      table.setAttribute('maxAttempts', 10);
-    }
-  }
-});
-
-// Register command handlers
-messageRouter.registerCommandHandler('createGame', (player, data) => {
-  // Create a new table
-  const table = gameManager.createTable('number-guessing');
-  
-  if (!table) {
-    player.sendMessage({
-      type: 'error',
-      message: 'Failed to create game'
-    });
-    return;
-  }
-  
-  // Add player to table
-  table.addPlayer(player);
-  
-  // Notify player
-  player.sendMessage({
-    type: 'gameCreated',
-    tableId: table.id,
-    maxAttempts: table.getAttribute('maxAttempts')
-  });
-  
-  // Start the game
-  table.setState(TableState.ACTIVE);
-  eventBus.emit(GAME_EVENTS.STARTED, table);
-});
-
-messageRouter.registerCommandHandler('makeGuess', (player, data) => {
-  if (!data.guess || typeof data.guess !== 'number') return;
-  
-  const table = player.getTable();
-  if (!table) return;
-  
-  const targetNumber = table.getAttribute('targetNumber');
-  const attempts = table.getAttribute('attempts');
-  const maxAttempts = table.getAttribute('maxAttempts');
-  
-  // Increment attempts
-  table.setAttribute('attempts', attempts + 1);
-  
-  // Emit a guess event
-  eventBus.emit(NUMBER_GUESS_EVENTS.GUESS_MADE, table, player, {
-    guess: data.guess,
-    attempt: attempts + 1,
-    maxAttempts: maxAttempts
-  });
-  
-  // Check guess
-  if (data.guess === targetNumber) {
-    // Player won
-    player.sendMessage({
-      type: 'guessResult',
-      correct: true,
-      message: `Correct! The number was ${targetNumber}`,
-      attempts: attempts + 1
-    });
-    
-    // Emit game won event
-    eventBus.emit(NUMBER_GUESS_EVENTS.GAME_WON, table, player, {
-      targetNumber,
-      attempts: attempts + 1
-    });
-    
-    // End game
-    table.setState(TableState.ENDED);
-    eventBus.emit(GAME_EVENTS.ENDED, table, player);
-  } else {
-    // Incorrect guess
-    const hint = data.guess < targetNumber ? 'higher' : 'lower';
-    
-    player.sendMessage({
-      type: 'guessResult',
-      correct: false,
-      message: `Wrong! Try something ${hint}`,
-      attempts: attempts + 1,
-      attemptsLeft: maxAttempts - (attempts + 1)
-    });
-    
-    // Check if max attempts reached
-    if (attempts + 1 >= maxAttempts) {
-      player.sendMessage({
-        type: 'gameOver',
-        message: `Game over! The number was ${targetNumber}`
-      });
-      
-      // Emit game lost event
-      eventBus.emit(NUMBER_GUESS_EVENTS.GAME_LOST, table, player, {
-        targetNumber,
-        attempts: maxAttempts
-      });
-      
-      // End game
-      table.setState(TableState.ENDED);
-      eventBus.emit(GAME_EVENTS.ENDED, table, null);
-    }
-  }
-});
-
-// Start the server
-server.listen(3000, () => {
-  console.log('Number guessing game server running on port 3000');
-});
-```
-
-## 🃏 Card Game Functionality
-
-Shoehive includes built-in support for card games:
+Shoehive includes built-in support for card games with a straightforward API:
 
 ### Creating and Managing a Deck
 
 ```typescript
-// Create a single 52-card deck
+// Create a standard 52-card deck
 table.createDeck();
 
 // Create multiple decks (e.g., 6 decks for Blackjack)
@@ -429,10 +290,10 @@ function dealInitialCards(table) {
   table.clearAllHands();
   
   // Create a new shuffled deck
-  table.createDeck(6);
+  table.createDeck(6); // Using 6 decks
   table.shuffleDeck();
   
-  // Get all active seats
+  // Get all active seats (seats with players)
   const activeSeatIndexes = [];
   for (let i = 0; i < table.getSeats().length; i++) {
     if (table.getPlayerAtSeat(i)) {
@@ -465,7 +326,7 @@ function dealInitialCards(table) {
 }
 ```
 
-## 🔐 Player Authentication
+## Player Authentication
 
 Shoehive provides a flexible authentication system through the `AuthModule` interface:
 
@@ -519,9 +380,9 @@ gameServer.eventBus.on(PLAYER_EVENTS.AUTHENTICATION_SUCCEEDED, (playerId, reques
 });
 ```
 
-## 💰 Financial Operations
+## Financial Operations
 
-The `ServerTransportModule` handles financial operations:
+The `ServerTransportModule` interface allows you to implement bet handling and financial operations:
 
 ```typescript
 import { createGameServer, ServerTransportModule, Player } from 'shoehive';
@@ -635,9 +496,15 @@ async function placeBet(player: Player, betAmount: number) {
 }
 ```
 
-## 🧠 Advanced Patterns
+## Creating a Simple Game
+
+Take a look at our [Tic Tac Toe Example](/guides/tic-tac-toe) to see a simple game implementation using Shoehive.
+
+## Advanced Patterns
 
 ### Game State Management
+
+Managing game state transitions in a clear, organized way:
 
 ```typescript
 // Define game states
@@ -655,7 +522,7 @@ function transitionState(table: Table, newState: PokerGameState, data = {}) {
   table.setAttribute('gameState', newState);
   
   // Emit state change event using game-specific constant
-  eventBus.emit(POKER_EVENTS.STATE_CHANGED, table, {
+  eventBus.emit(POKER_EVENTS.STATE_UPDATED, table, {
     previousState,
     newState,
     ...data
@@ -671,6 +538,8 @@ function transitionState(table: Table, newState: PokerGameState, data = {}) {
 ```
 
 ### Player Reconnection Handling
+
+Handling player reconnections with game state synchronization:
 
 ```typescript
 // Handle player reconnections
@@ -701,7 +570,8 @@ function getGameDataForPlayer(table: Table, player: Player) {
       username: p.getAttribute('username')
     })),
     // Add game-specific data
-    // ...
+    gameState: table.getAttribute('gameState'),
+    roundNumber: table.getAttribute('roundNumber')
   };
   
   // Add player-specific private data
@@ -727,9 +597,9 @@ function getPlayerSeatIndex(table: Table, player: Player): number {
 }
 ```
 
-## 🔍 Debugging and Monitoring
+## Debugging and Monitoring
 
-Shoehive provides built-in debugging tools for event monitoring:
+Shoehive provides built-in debugging tools to help during development:
 
 ```typescript
 // Enable debug monitoring for all events
@@ -762,7 +632,7 @@ gameServer.eventBus.debugMonitor(
   }
 );
 
-// Disable debug monitoring
+// Disable debug monitoring when no longer needed
 gameServer.eventBus.debugMonitor(false);
 ```
 
@@ -802,12 +672,11 @@ eventBus.on(GAME_EVENTS.STARTED, (table) => {
 });
 ```
 
-## 🔗 Additional Resources
+## Additional Resources
 
-- [API Reference](https://github.com/jtay/shoehive/tree/main/docs/api-reference.md)
-- [Creating Games Guide](https://github.com/jtay/shoehive/tree/main/docs/creating-games.md)
-- [Advanced Events](https://github.com/jtay/shoehive/tree/main/docs/advanced-events.md)
-- [Transport Modules](https://github.com/jtay/shoehive/tree/main/docs/transport-modules.md)
-- [Player Attributes](https://github.com/jtay/shoehive/tree/main/docs/player-attributes.md)
-
-Happy gaming with Shoehive! 🎮 
+- [API Reference](/api/reference)
+- [Creating Games Guide](/guides/creating-games)
+- [Custom Events](/api/custom-events)
+- [Transport Modules](/api/transport-modules)
+- [Object Attributes](/api/object-attributes)
+- [Build a Tic Tac Toe Game](/guides/tic-tac-toe)

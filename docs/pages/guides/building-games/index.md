@@ -1,3 +1,12 @@
+---
+layout: default
+title: Building Games
+permalink: /guides/building-games/
+parent: Guides
+has_children: true
+nav_order: 3
+---
+
 # Creating Custom Games with Shoehive
 
 This guide will walk you through the process of building a custom game using the Shoehive framework.
@@ -9,38 +18,39 @@ Creating a game with Shoehive involves:
 1. Defining your game state and rules
 2. Registering your game with the GameManager
 3. Handling player actions via command handlers
-4. Managing game state changes through events
-5. Implementing game-specific logic
+4. Creating game-specific event constants
+5. Handling game events
+6. Resetting and restarting games
 
 ## Step 1: Define Your Game
 
 First, you need to define your game by creating a `GameDefinition`:
-
 ```typescript
-import { GameDefinition, Table, EventBus, TableOptions, GameConfig } from 'shoehive';
-
-// Define default configuration
-const ticTacToeConfig: GameConfig = {
-  totalSeats: 2,     // Two players for Tic-Tac-Toe
-  maxSeatsPerPlayer: 1  // One seat per player
-};
+import { GameDefinition, Table, EventBus } from 'shoehive';
 
 // Create game definition
 const ticTacToeGame: GameDefinition = {
+  id: "tic-tac-toe",
   name: "Tic-Tac-Toe",
-  defaultConfig: ticTacToeConfig,
-  
-  // Setup function is called when a table is created
-  setupTable: (table: Table) => {
-    // Initialize game-specific state
-    table.setAttribute('board', [
-      [null, null, null],
-      [null, null, null],
-      [null, null, null]
-    ]);
-    table.setAttribute('currentPlayer', null);
-    table.setAttribute('winner', null);
-    table.setAttribute('gameOver', false);
+  description: "Classic two-player game of X and O",
+  minPlayers: 2,
+  maxPlayers: 2,
+  defaultSeats: 2,
+  maxSeatsPerPlayer: 1,
+  // Setup function should be included in the options object
+  options: {
+    // This function will be called when a new table is created
+    setupTable: (table: Table) => {
+      // Initialize game-specific state
+      table.setAttribute('board', [
+        [null, null, null],
+        [null, null, null],
+        [null, null, null]
+      ]);
+      table.setAttribute('currentPlayer', null);
+      table.setAttribute('winner', null);
+      table.setAttribute('gameOver', false);
+    }
   }
 };
 ```
@@ -58,7 +68,7 @@ const server = http.createServer();
 const gameServer = createGameServer(server);
 
 // Register your game
-gameServer.gameManager.registerGame('tic-tac-toe', ticTacToeGame);
+gameServer.gameManager.registerGame(ticTacToeGame);
 
 // Start the server
 server.listen(3000, () => {
@@ -426,432 +436,6 @@ function resetGame(table: Table): void {
     table.setAttribute('currentPlayer', null);
     table.setState('WAITING');
   }
-}
-```
-
-## Complete Game Example
-
-Here's a complete example bringing everything together:
-
-```typescript
-import { 
-  createGameServer, 
-  GameDefinition, 
-  Table, 
-  Player, 
-  TableState,
-  PLAYER_EVENTS,
-  TABLE_EVENTS,
-  GAME_EVENTS
-} from 'shoehive';
-import * as http from 'http';
-
-// Define custom events
-const TIC_TAC_TOE_EVENTS = {
-  MOVE_MADE: "tictactoe:move:made",
-  GAME_STARTED: "tictactoe:game:started",
-  GAME_ENDED: "tictactoe:game:ended",
-  PLAYER_FORFEITED: "tictactoe:player:forfeited",
-  GAME_RESET: "tictactoe:game:reset"
-} as const;
-
-// Create server
-const server = http.createServer();
-const gameServer = createGameServer(server);
-
-// Enable debug monitoring in development
-if (process.env.NODE_ENV === 'development') {
-  gameServer.eventBus.debugMonitor(true, 
-    (eventName) => eventName.startsWith('tictactoe:')
-  );
-}
-
-// Define Tic-Tac-Toe game
-const ticTacToeGame: GameDefinition = {
-  name: "Tic-Tac-Toe",
-  defaultConfig: {
-    totalSeats: 2,
-    maxSeatsPerPlayer: 1
-  },
-  setupTable: (table: Table) => {
-    table.setAttribute('board', [
-      [null, null, null],
-      [null, null, null],
-      [null, null, null]
-    ]);
-    table.setAttribute('currentPlayer', null);
-    table.setAttribute('winner', null);
-    table.setAttribute('gameOver', false);
-    table.setAttribute('lastStarter', null);
-  }
-};
-
-// Register the game
-gameServer.gameManager.registerGame('tic-tac-toe', ticTacToeGame);
-
-// Register command handlers
-gameServer.messageRouter.registerCommandHandler('makeMove', (player, data) => {
-  if (!data.row || !data.col || 
-      typeof data.row !== 'number' || 
-      typeof data.col !== 'number') {
-    return;
-  }
-  
-  const table = player.getTable();
-  if (!table) return;
-  
-  if (!isValidMove(table, player, data.row, data.col)) {
-    player.sendMessage({
-      type: 'error',
-      message: 'Invalid move'
-    });
-    return;
-  }
-  
-  makeMove(table, player, data.row, data.col);
-  checkGameState(table);
-});
-
-gameServer.messageRouter.registerCommandHandler('resetGame', (player, data) => {
-  const table = player.getTable();
-  if (!table) return;
-  
-  if (!table.getAttribute('gameOver')) {
-    player.sendMessage({
-      type: 'error',
-      message: 'Cannot reset an active game'
-    });
-    return;
-  }
-  
-  resetGame(table);
-  
-  table.broadcastToAll({
-    type: 'gameReset',
-    board: table.getAttribute('board'),
-    currentPlayer: table.getAttribute('currentPlayer')
-  });
-  
-  // Emit game reset event
-  gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_RESET, table);
-});
-
-// Set up event listeners
-gameServer.eventBus.on(TABLE_EVENTS.PLAYER_JOINED, (player, table) => {
-  if (table.getAttribute('gameId') !== 'tic-tac-toe') return;
-  
-  const players = table.getSeatMap().filter(p => p !== null);
-  
-  if (players.length === 2 && table.getState() === 'WAITING') {
-    // Decide who goes first
-    const starterIndex = Math.round(Math.random()); // Random first player
-    const starter = players[starterIndex];
-    
-    table.setAttribute('currentPlayer', starter.id);
-    table.setAttribute('lastStarter', starter.id);
-    table.setState('ACTIVE');
-    
-    table.broadcastToAll({
-      type: 'gameStart',
-      board: table.getAttribute('board'),
-      currentPlayer: starter.id,
-      players: players.map(p => ({ 
-        id: p.id, 
-        symbol: players.indexOf(p) === 0 ? 'X' : 'O' 
-      }))
-    });
-    
-    // Emit game started event
-    gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_STARTED, table, {
-      startTime: Date.now(),
-      players: players.map(p => ({ id: p.id }))
-    });
-  }
-});
-
-gameServer.eventBus.on(TABLE_EVENTS.PLAYER_LEFT, (player, table) => {
-  if (table.getAttribute('gameId') !== 'tic-tac-toe') return;
-  
-  if (table.getState() === 'ACTIVE') {
-    const players = table.getPlayers();
-    const otherPlayer = players.find(p => p.id !== player.id);
-    
-    if (otherPlayer) {
-      table.setAttribute('winner', otherPlayer.id);
-      table.setAttribute('gameOver', true);
-      table.setState('ENDED');
-      
-      table.broadcastToAll({
-        type: 'gameOver',
-        winner: otherPlayer.id,
-        reason: 'forfeit',
-        board: table.getAttribute('board')
-      });
-      
-      // Emit forfeit and game end events
-      gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.PLAYER_FORFEITED, table, player, otherPlayer);
-      gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_ENDED, table, otherPlayer.id);
-    }
-  }
-});
-
-// Helper functions
-function isValidMove(table: Table, player: Player, row: number, col: number): boolean {
-  const board = table.getAttribute('board');
-  const currentPlayerId = table.getAttribute('currentPlayer');
-  const gameOver = table.getAttribute('gameOver');
-  
-  if (gameOver) return false;
-  if (currentPlayerId !== player.id) return false;
-  if (row < 0 || row > 2 || col < 0 || col > 2) return false;
-  if (board[row][col] !== null) return false;
-  
-  return true;
-}
-
-function makeMove(table: Table, player: Player, row: number, col: number): void {
-  const board = table.getAttribute('board');
-  const players = table.getSeatMap().filter(p => p !== null);
-  
-  const playerIndex = players.findIndex(p => p && p.id === player.id);
-  const symbol = playerIndex === 0 ? 'X' : 'O';
-  
-  board[row][col] = symbol;
-  table.setAttribute('board', board);
-  
-  const nextPlayerIndex = (playerIndex + 1) % players.length;
-  const nextPlayer = players[nextPlayerIndex];
-  table.setAttribute('currentPlayer', nextPlayer ? nextPlayer.id : null);
-  
-  table.broadcastToAll({
-    type: 'boardUpdate',
-    board: board,
-    lastMove: { row, col, symbol, playerId: player.id },
-    currentPlayer: nextPlayer ? nextPlayer.id : null
-  });
-  
-  // Emit move made event
-  gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.MOVE_MADE, table, player, {
-    row, 
-    col, 
-    symbol,
-    time: Date.now()
-  });
-}
-
-function checkGameState(table: Table): void {
-  const board = table.getAttribute('board');
-  
-  const winner = checkWinner(board);
-  
-  if (winner) {
-    // Find winning player
-    const players = table.getSeatMap().filter(p => p !== null);
-    const winningPlayerIndex = winner === 'X' ? 0 : 1;
-    const winningPlayer = players[winningPlayerIndex];
-    
-    table.setAttribute('winner', winningPlayer ? winningPlayer.id : null);
-    table.setAttribute('gameOver', true);
-    table.setState('ENDED');
-    
-    table.broadcastToAll({
-      type: 'gameOver',
-      winner: winningPlayer ? winningPlayer.id : null,
-      symbol: winner,
-      board: board
-    });
-    
-    // Emit game ended event
-    gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_ENDED, table, winningPlayer ? winningPlayer.id : null);
-  } else if (isBoardFull(board)) {
-    table.setAttribute('gameOver', true);
-    table.setState('ENDED');
-    
-    table.broadcastToAll({
-      type: 'gameOver',
-      winner: null,
-      isDraw: true,
-      board: board
-    });
-    
-    // Emit game ended event with draw
-    gameServer.eventBus.emit(TIC_TAC_TOE_EVENTS.GAME_ENDED, table, null, { isDraw: true });
-  }
-}
-
-function checkWinner(board): string | null {
-  // Check rows
-  for (let i = 0; i < 3; i++) {
-    if (board[i][0] && board[i][0] === board[i][1] && board[i][0] === board[i][2]) {
-      return board[i][0];
-    }
-  }
-  
-  // Check columns
-  for (let i = 0; i < 3; i++) {
-    if (board[0][i] && board[0][i] === board[1][i] && board[0][i] === board[2][i]) {
-      return board[0][i];
-    }
-  }
-  
-  // Check diagonals
-  if (board[0][0] && board[0][0] === board[1][1] && board[0][0] === board[2][2]) {
-    return board[0][0];
-  }
-  if (board[0][2] && board[0][2] === board[1][1] && board[0][2] === board[2][0]) {
-    return board[0][2];
-  }
-  
-  return null;
-}
-
-function isBoardFull(board): boolean {
-  for (let i = 0; i < 3; i++) {
-    for (let j = 0; j < 3; j++) {
-      if (board[i][j] === null) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-function resetGame(table: Table): void {
-  table.setAttribute('board', [
-    [null, null, null],
-    [null, null, null],
-    [null, null, null]
-  ]);
-  
-  table.setAttribute('winner', null);
-  table.setAttribute('gameOver', false);
-  
-  const players = table.getSeatMap().filter(p => p !== null);
-  
-  if (players.length === 2) {
-    const lastStarterId = table.getAttribute('lastStarter');
-    const newStarterIndex = lastStarterId === players[0].id ? 1 : 0;
-    
-    table.setAttribute('currentPlayer', players[newStarterIndex].id);
-    table.setAttribute('lastStarter', players[newStarterIndex].id);
-    
-    table.setState('ACTIVE');
-  } else {
-    table.setAttribute('currentPlayer', null);
-    table.setState('WAITING');
-  }
-}
-
-// Start the server
-server.listen(3000, () => {
-  console.log('Game server running on port 3000');
-});
-```
-
-## Building a Client
-
-The client side would typically be a web application that connects to your Shoehive server via WebSocket:
-
-```javascript
-// Example client-side code (using browser WebSocket)
-const socket = new WebSocket('ws://localhost:3000?userId=player123');
-
-socket.onopen = function() {
-  console.log('Connected to game server');
-  
-  // Join or create a Tic-Tac-Toe table
-  socket.send(JSON.stringify({
-    action: 'createTable',
-    gameId: 'tic-tac-toe'
-  }));
-};
-
-socket.onmessage = function(event) {
-  const message = JSON.parse(event.data);
-  
-  // Handle different message types
-  switch (message.type) {
-    case 'gameCreated':
-      console.log('Game created with table ID:', message.tableId);
-      break;
-      
-    case 'gameStart':
-      console.log('Game started!');
-      renderBoard(message.board);
-      highlightCurrentPlayer(message.currentPlayer);
-      break;
-      
-    case 'boardUpdate':
-      renderBoard(message.board);
-      highlightCurrentPlayer(message.currentPlayer);
-      break;
-      
-    case 'gameOver':
-      renderBoard(message.board);
-      if (message.isDraw) {
-        showGameResult("It's a draw!");
-      } else {
-        showGameResult(`Player ${message.winner} wins!`);
-      }
-      showResetButton();
-      break;
-      
-    case 'gameReset':
-      renderBoard(message.board);
-      highlightCurrentPlayer(message.currentPlayer);
-      hideGameResult();
-      hideResetButton();
-      break;
-      
-    case 'error':
-      showError(message.message);
-      break;
-  }
-};
-
-// Make a move
-function makeMove(row, col) {
-  socket.send(JSON.stringify({
-    action: 'makeMove',
-    row: row,
-    col: col
-  }));
-}
-
-// Reset the game
-function resetGame() {
-  socket.send(JSON.stringify({
-    action: 'resetGame'
-  }));
-}
-
-// UI helper functions
-function renderBoard(board) {
-  // Update UI to show the current board state
-}
-
-function highlightCurrentPlayer(playerId) {
-  // Highlight the current player's turn
-}
-
-function showGameResult(message) {
-  // Display game result message
-}
-
-function hideGameResult() {
-  // Hide game result message
-}
-
-function showResetButton() {
-  // Show the reset game button
-}
-
-function hideResetButton() {
-  // Hide the reset game button
-}
-
-function showError(message) {
-  // Show error message
 }
 ```
 
