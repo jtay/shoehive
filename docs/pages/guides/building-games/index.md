@@ -1,9 +1,10 @@
 ---
 layout: default
-title: Creating Custom Games with Shoehive
-permalink: /guides/creating-games
+title: Building Games
+permalink: /guides/building-games/
 parent: Guides
-nav_order: 1
+has_children: true
+nav_order: 3
 ---
 
 # Creating Custom Games with Shoehive

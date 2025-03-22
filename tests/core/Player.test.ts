@@ -126,4 +126,59 @@ describe('Player', () => {
     
     expect(spy).toHaveBeenCalledWith(PLAYER_EVENTS.DISCONNECTED, player);
   });
+  
+  test('should get all attributes', () => {
+    player.setAttribute('name', 'Player1');
+    player.setAttribute('score', 100);
+    player.setAttribute('avatar', 'avatar1.png');
+    
+    const attributes = player.getAttributes();
+    expect(attributes).toEqual({
+      name: 'Player1',
+      score: 100,
+      avatar: 'avatar1.png'
+    });
+  });
+  
+  test('should emit ATTRIBUTE_CHANGED event when attribute is set', () => {
+    const spy = jest.spyOn(eventBus, 'emit');
+    
+    player.setAttribute('status', 'ready');
+    
+    expect(spy).toHaveBeenCalledWith(
+      PLAYER_EVENTS.ATTRIBUTE_CHANGED,
+      player,
+      'status',
+      'ready'
+    );
+  });
+  
+  test('should not emit ATTRIBUTE_CHANGED event if notify is false', () => {
+    // Set initial attribute
+    player.setAttribute('status', 'ready');
+    
+    // Clear previous spy calls
+    jest.clearAllMocks();
+    const spy = jest.spyOn(eventBus, 'emit');
+    
+    // Set the same value but with notify=false
+    player.setAttribute('status', 'ready', false);
+    
+    // Event should not be emitted
+    expect(spy).not.toHaveBeenCalled();
+  });
+  
+  test('should set multiple attributes at once', () => {
+    const attributesObject = {
+      name: 'Player1',
+      score: 100,
+      isReady: true
+    };
+    
+    player.setAttributes(attributesObject);
+    
+    expect(player.getAttribute('name')).toBe('Player1');
+    expect(player.getAttribute('score')).toBe(100);
+    expect(player.getAttribute('isReady')).toBe(true);
+  });
 }); 

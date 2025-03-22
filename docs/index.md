@@ -9,6 +9,9 @@ nav_order: 1
 
 Welcome to the Shoehive documentation. This guide will help you learn about the Shoehive framework and build your own real-time multiplayer games.
 
+[![Tests](https://github.com/jtay/shoehive/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/jtay/shoehive/actions/workflows/test.yml) [![NPM Publish](https://github.com/jtay/shoehive/actions/workflows/publish.yml/badge.svg)](https://github.com/jtay/shoehive/actions/workflows/publish.yml) [![Docs](https://github.com/jtay/shoehive/actions/workflows/docs-deploy.yml/badge.svg?branch=main)](https://github.com/jtay/shoehive/actions/workflows/docs-deploy.yml)
+#### [**🐙&nbsp;GitHub**](https://github.com/jtay/shoehive) | [**📦&nbsp;Releases**](https://github.com/jtay/shoehive/releases) | [**⚡️&nbsp;Quick Start&nbsp;Guide**](https://shoehive.jtay.co.uk/quick-start) | [**📖&nbsp;Docs**](https://shoehive.jtay.co.uk) | [**🔍&nbsp;API&nbsp;Reference**](https://shoehive.jtay.co.uk/api/generated) | [**🤝&nbsp;Contributing**](https://github.com/jtay/shoehive/tree/main/CONTRIBUTING.md)
+
 ## Contents
 
 ### Getting Started
@@ -17,17 +20,11 @@ Welcome to the Shoehive documentation. This guide will help you learn about the 
 - [Basic Setup](/quick-start#basic-server-setup) - Setting up your first Shoehive server
 
 ### Core Concepts
-- [Understanding Core Concepts](/quick-start#players) - Learn about Players, Tables, and Events
-- [API Reference](/api/reference) - Detailed documentation of all classes and methods
-- [Custom Player Attributes](/api/object-attributes) - Managing player data and state
-- [Custom Events](/api/custom-events) - Event-driven architecture for complex games
-
-### Building Games
-- [Creating Custom Games](/guides/creating-games) - A step-by-step guide to creating games with Shoehive
-- [Transport Modules](/api/transport-modules) - Working with authentication and server-side operations
-
-### Examples
-- [Tic-Tac-Toe Example](/guides/tic-tac-toe) - A complete example of a simple game
+- [Native Events](/api/default-events) - The core internal events that are available in Shoehive
+- [Custom Events](/api/custom-events) - How to create your own custom events
+- [Object Attributes](/api/object-attributes) - Learn about the different object attributes that can be applied to the native objects available in Shoehive
+- [Transport Modules](/api/transport-modules) - How to implement your own transport module
+- [Command System](/api/command-system) - How to send commands between the client and server
 
 ## License
 

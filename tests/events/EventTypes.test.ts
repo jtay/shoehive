@@ -2,13 +2,11 @@ import {
   PLAYER_EVENTS, 
   TABLE_EVENTS, 
   LOBBY_EVENTS, 
-  GAME_EVENTS,
   EVENTS, 
   EventType,
   PlayerEventType,
   TableEventType,
   LobbyEventType,
-  GameEventType
 } from '../../src/events/EventTypes';
 
 describe('EventTypes', () => {
@@ -17,6 +15,7 @@ describe('EventTypes', () => {
       CONNECTED: "player:connected",
       DISCONNECTED: "player:disconnected",
       RECONNECTED: "player:reconnected",
+      STATE_UPDATED: "player:state:updated",
       ATTRIBUTE_CHANGED: "player:attribute:changed",
       ATTRIBUTES_CHANGED: "player:attributes:changed",
       AUTHENTICATION_FAILED: "player:authentication:failed",
@@ -51,24 +50,10 @@ describe('EventTypes', () => {
     });
   });
 
-  test('GAME_EVENTS should have all expected event names', () => {
-    expect(GAME_EVENTS).toEqual({
-      STARTED: "game:started",
-      ENDED: "game:ended",
-      PAUSED: "game:paused",
-      RESUMED: "game:resumed",
-      ROUND_STARTED: "game:round:started",
-      ROUND_ENDED: "game:round:ended",
-      TURN_STARTED: "game:turn:started",
-      TURN_ENDED: "game:turn:ended"
-    });
-  });
-
   test('EVENTS should expose all event groups', () => {
     expect(EVENTS).toHaveProperty('PLAYER', PLAYER_EVENTS);
     expect(EVENTS).toHaveProperty('TABLE', TABLE_EVENTS);
     expect(EVENTS).toHaveProperty('LOBBY', LOBBY_EVENTS);
-    expect(EVENTS).toHaveProperty('GAME', GAME_EVENTS);
   });
 
   test('should allow use of specific event types', () => {
@@ -88,23 +73,17 @@ describe('EventTypes', () => {
     const lobbyUpdated: LobbyEventType = LOBBY_EVENTS.UPDATED;
     expect(lobbyUpdated).toBe('lobby:updated');
     
-    // Test using the GameEventType
-    const gameStarted: GameEventType = GAME_EVENTS.STARTED;
-    expect(gameStarted).toBe('game:started');
-    
     // Test using the combined EventType
     const eventTypes: EventType[] = [
       PLAYER_EVENTS.CONNECTED,
       TABLE_EVENTS.CREATED,
-      LOBBY_EVENTS.UPDATED,
-      GAME_EVENTS.STARTED
+      LOBBY_EVENTS.UPDATED
     ];
     
     expect(eventTypes).toEqual([
       'player:connected',
       'table:created',
       'lobby:updated',
-      'game:started'
     ]);
   });
   
