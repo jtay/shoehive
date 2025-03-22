@@ -17,7 +17,7 @@ Attributes are key-value pairs that can be attached to various game components s
 The following components support attributes:
 
 - `Player`: Store player-specific data
-- `Table`: Store table-specific data 
+- `Table`: Store game state as well as table metadata
 - `Hand`: Store hand-specific data
 
 ## Common Attribute Methods

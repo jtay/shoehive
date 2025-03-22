@@ -1,6 +1,6 @@
 import { Seat } from '../../src/core/Seat';
 import { Player } from '../../src/core/Player';
-import { Hand, CardSuit, CardRank } from '../../src/core/Card';
+import { Hand, CardSuit, CardRank } from '../../src/core/card';
 
 describe('Seat', () => {
   let seat: Seat;

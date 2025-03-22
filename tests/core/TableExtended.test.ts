@@ -1,7 +1,7 @@
 import { Table, TableState } from '../../src/core/Table';
 import { EventBus } from '../../src/events/EventBus';
 import { Player } from '../../src/core/Player';
-import { Card, CardSuit, CardRank } from '../../src/core/Card';
+import { Card, CardSuit, CardRank } from '../../src/core/card';
 import * as WebSocket from 'ws';
 import { TABLE_EVENTS } from '../../src/events/EventTypes';
 

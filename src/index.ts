@@ -1,5 +1,6 @@
 import { Player } from "./core/Player";
 import { Table, TableState } from "./core/Table";
+import { Card, CardSuit, CardRank, Deck, Hand } from "./core/card/index";
 import { TableFactory } from "./core/TableFactory";
 import { WebSocketManager } from "./core/WebSocketManager";
 import { EventBus } from "./events/EventBus";
@@ -55,7 +56,13 @@ export {
   CustomEventMap,
   EventType,
   EventPayloadMap,
-  DefaultEventPayloadMap
+  DefaultEventPayloadMap,
+  // Deck of cards
+  Card,
+  CardSuit,
+  CardRank,
+  Deck,
+  Hand
 };
 
 export function createGameServer(

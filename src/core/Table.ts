@@ -1,7 +1,7 @@
 import { EventBus } from "../events/EventBus";
 import { TABLE_EVENTS } from "../events/EventTypes";
 import { Player } from "./Player";
-import { Card, Deck, Hand } from "./Card";
+import { Card, Deck, Hand } from "./card";
 import { Seat } from "./Seat";
 import crypto from "crypto";
 import { CLIENT_MESSAGE_TYPES } from "./commands/index";

@@ -1,7 +1,7 @@
 import { Table, TableState } from '../../src/core/Table';
 import { EventBus } from '../../src/events/EventBus';
 import { Player } from '../../src/core/Player';
-import { Card, CardRank, CardSuit } from '../../src/core/Card';
+import { Card, CardRank, CardSuit } from '../../src/core/card';
 import * as WebSocket from 'ws';
 
 // Mock WebSocket and Player class

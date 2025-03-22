@@ -10,6 +10,8 @@ nav_order: 2
 
 The shoehive package natively exposes a number of events related to the game server lifecycle.
 
+Events are broadcasted via the [EventBus](/api/classes/eventbus/) component.
+
 ## Event Naming Convention
 
 Events follow a namespaced pattern with colon separators: `domain:action` or `domain:subject:action`

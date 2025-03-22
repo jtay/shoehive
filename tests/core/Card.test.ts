@@ -1,4 +1,4 @@
-import { Card, CardRank, CardSuit, Deck, Hand } from '../../src/core/Card';
+import { Card, CardRank, CardSuit, Deck, Hand } from '../../src/core/card';
 
 describe('Card Types', () => {
   test('CardSuit should have correct values', () => {

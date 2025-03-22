@@ -1,5 +1,5 @@
 import { Player } from "./Player";
-import { Hand } from "./Card";
+import { Hand } from "./card";
 
 export class Seat {
   private player: Player | null = null;

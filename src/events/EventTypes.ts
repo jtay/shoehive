@@ -24,6 +24,9 @@
  * 3. Using eventBus.registerCustomEvents<MyCustomEvents>() to extend the type system
  */
 
+import { Player } from "../core/Player";
+import { Table } from "../core/Table";
+
 // Player events
 export const PLAYER_EVENTS = {
   // Player connection events
@@ -136,10 +139,10 @@ export type EventPayloadMap<TMap extends Record<string, any>> = {
  * This can be extended by consumers of the library to add type information for event payloads
  */
 export interface DefaultEventPayloadMap {
-  [PLAYER_EVENTS.CONNECTED]: [player: unknown];
-  [PLAYER_EVENTS.DISCONNECTED]: [player: unknown];
-  [TABLE_EVENTS.PLAYER_JOINED]: [player: unknown, table: unknown];
-  [TABLE_EVENTS.PLAYER_LEFT]: [player: unknown, table: unknown];
+  [PLAYER_EVENTS.CONNECTED]: [player: Player];
+  [PLAYER_EVENTS.DISCONNECTED]: [player: Player];
+  [TABLE_EVENTS.PLAYER_JOINED]: [player: Player, table: Table];
+  [TABLE_EVENTS.PLAYER_LEFT]: [player: Player, table: Table];
   // Add more event payload types as needed
 }
 
