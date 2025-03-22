@@ -1,5 +1,6 @@
 import { Player } from "../core/Player";
 import { EventBus } from "./EventBus";
+import { CLIENT_MESSAGE_TYPES } from "../core/commands/index";
 
 interface Message {
   action: string;
@@ -42,7 +43,7 @@ export class MessageRouter {
       // Validate message format
       if (!message.action || typeof message.action !== "string") {
         player.sendMessage({
-          type: "error",
+          type: CLIENT_MESSAGE_TYPES.ERROR,
           message: "Invalid message format: missing or invalid action"
         });
         return;
@@ -61,7 +62,7 @@ export class MessageRouter {
     } catch (error) {
       console.error("Error processing message:", error);
       player.sendMessage({
-        type: "error",
+        type: CLIENT_MESSAGE_TYPES.ERROR,
         message: "Failed to process message"
       });
     }

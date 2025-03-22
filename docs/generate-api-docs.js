@@ -45,7 +45,7 @@ if (!fs.existsSync(GENERATED_DIR)) {
 console.log('Generating API documentation with TypeDoc...');
 try {
   execSync('npx typedoc', { cwd: ROOT_DIR, stdio: 'inherit' });
-} catch (error) {
+} catch ( error) {
   console.error('TypeDoc generation failed:', error);
   process.exit(1);
 }
@@ -70,7 +70,7 @@ function escapeYaml(str) {
     // Escape double quotes inside the string and wrap in double quotes
     return `"${str.replace(/"/g, '\\"')}"`;
   }
-  
+
   return str;
 }
 
@@ -132,9 +132,9 @@ function fixLinks(content, basePath) {
   
   // Handle TypeDoc-specific formats first - these often have specific formats like [**shoehive**](../README.md)
   processedContent = processedContent.replace(
-    /\[([^\]]+)\]\(([^)]+)\/README\.md\)/g,
-    (match, linkText, path) => {
-      return `[${linkText}](/api/generated/)`;
+    /\[([^\]]+)\]\(([^)]+)\/README\.md(#[\w-]*)\)/g,
+    (match, linkText, path, fragment) => {
+      return `[${linkText}](/api/generated/${fragment || ''})`;
     }
   );
   
@@ -196,9 +196,9 @@ function fixLinks(content, basePath) {
   
   // Special case for README.md in the same directory
   processedContent = processedContent.replace(
-    /\[([^\]]+)\]\(README\.md\)/g,
-    (match, linkText) => {
-      return `[${linkText}](/api/generated/)`;
+    /\[([^\]]+)\]\(README\.md(#[\w-]*)\)/g,
+    (match, linkText, fragment) => {
+      return `[${linkText}](/api/generated/${fragment || ''})`;
     }
   );
   
@@ -365,7 +365,7 @@ This section contains the automatically generated API documentation for Shoehive
         
         const indexContent = `---
 layout: default
-title: ${escapedTitle}
+title: ${removeTitlePrefix(escapedTitle)}
 permalink: ${subDirPermalink}
 parent: ${escapedParent}
 has_children: true
@@ -418,7 +418,7 @@ v${require('../package.json').version}
       
       const frontmatter = `---
 layout: default
-title: ${escapedTitle}
+title: ${removeTitlePrefix(escapedTitle)}
 permalink: ${permalink}
 parent: ${escapedParent}
 nav_order: ${navOrder[item.name]}
@@ -460,6 +460,22 @@ function fileHasFrontmatter(filePath) {
 function overrideNeeded(filePath) {
   // For this run, we'll override all files to ensure consistency
   return true;
+}
+
+function removeTitlePrefix(str) {
+  // Remove "Class: " prefix if present
+  str = str.replace(/^"Class: /, '"');
+  
+  // Remove "Enum: " prefix if present
+  str = str.replace(/^"Enumeration: /, '"');
+
+  // Remove "Interface: " prefix if present
+  str = str.replace(/^"Interface: /, '"');
+
+  // Remove "Function: " prefix if present
+  str = str.replace(/^"Function: /, '"');
+
+  return str;
 }
 
 /**

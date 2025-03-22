@@ -6,7 +6,24 @@ import { EventBus } from "./events/EventBus";
 import { MessageRouter } from "./events/MessageRouter";
 import { GameManager, GameDefinition } from "./core/GameManager";
 import { AuthModule, ServerTransportModule, TransportModule } from "./transport";
+import { CLIENT_COMMAND_TYPES, CLIENT_MESSAGE_TYPES } from "./core/commands/index";
 import * as http from "http";
+
+// Import all events-related exports
+import { 
+  PLAYER_EVENTS,
+  TABLE_EVENTS,
+  LOBBY_EVENTS,
+  EVENTS,
+  PlayerEventType,
+  TableEventType,
+  LobbyEventType,
+  BuiltInEventType,
+  CustomEventMap,
+  EventType,
+  EventPayloadMap,
+  DefaultEventPayloadMap
+} from "./events";
 
 // Export all the classes
 export {
@@ -22,7 +39,23 @@ export {
   // Export new transport modules
   AuthModule,
   ServerTransportModule,
-  TransportModule
+  TransportModule,
+  CLIENT_COMMAND_TYPES,
+  CLIENT_MESSAGE_TYPES,
+  // Export events
+  PLAYER_EVENTS,
+  TABLE_EVENTS,
+  LOBBY_EVENTS,
+  EVENTS,
+  // Export event types
+  PlayerEventType,
+  TableEventType,
+  LobbyEventType,
+  BuiltInEventType,
+  CustomEventMap,
+  EventType,
+  EventPayloadMap,
+  DefaultEventPayloadMap
 };
 
 export function createGameServer(
@@ -42,19 +75,19 @@ export function createGameServer(
    * Table commands
    */
 
-  messageRouter.registerCommandHandler("table:getState", (player, data) => {
+  messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.GET_STATE, (player, data) => {
     if (!data.tableId) return;
     
     const table = gameManager.getAllTables().find(t => t.id === data.tableId);
     if (table) {
       player.sendMessage({
-        type: "table:state",
+        type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
         state: table.getState()
       });
     }
   });
 
-  messageRouter.registerCommandHandler("table:join", (player, data) => {
+  messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.JOIN, (player, data) => {
     if (!data.tableId) return;
     
     const table = gameManager.getAllTables().find(t => t.id === data.tableId);
@@ -63,7 +96,7 @@ export function createGameServer(
     }
   });
   
-  messageRouter.registerCommandHandler("table:create", (player, data) => {
+  messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.CREATE, (player, data) => {
     if (!data.gameId) return;
     
     const table = gameManager.createTable(data.gameId, data.options);
@@ -72,7 +105,7 @@ export function createGameServer(
     }
   });
   
-  messageRouter.registerCommandHandler("table:leave", (player, data) => {
+  messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.LEAVE, (player, data) => {
     const table = player.getTable();
     if (table) {
       table.removePlayer(player.id);
@@ -83,7 +116,7 @@ export function createGameServer(
    * Seat commands
    */
   
-  messageRouter.registerCommandHandler("table:seat:sit", (player, data) => {
+  messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.SEAT_SIT, (player, data) => {
     if (typeof data.seatIndex !== 'number') return;
     
     const table = player.getTable();
@@ -92,7 +125,7 @@ export function createGameServer(
     }
   });
   
-  messageRouter.registerCommandHandler("table:seat:stand", (player, data) => {
+  messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.SEAT_STAND, (player, data) => {
     if (typeof data.seatIndex !== 'number') return;
     
     const table = player.getTable();

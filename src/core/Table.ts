@@ -4,6 +4,7 @@ import { Player } from "./Player";
 import { Card, Deck, Hand } from "./Card";
 import { Seat } from "./Seat";
 import crypto from "crypto";
+import { CLIENT_MESSAGE_TYPES } from "./commands/index";
 
 export enum TableState {
   WAITING = "waiting",
@@ -431,7 +432,7 @@ export class Table {
   public broadcastTableState(): void {
     const tableState = this.getTableState();
     this.broadcastMessage({
-      type: "table:state",
+      type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
       data: tableState
     });
     

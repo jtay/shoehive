@@ -6,6 +6,7 @@ import { Player } from "./Player";
 import { GameManager } from "./GameManager";
 import { AuthModule } from "../transport/AuthModule";
 import { PLAYER_EVENTS, TABLE_EVENTS, LOBBY_EVENTS } from "../events/EventTypes";
+import { CLIENT_COMMAND_TYPES, CLIENT_MESSAGE_TYPES } from "./commands/index";
 
 export class WebSocketManager {
   private wss: WebSocket.Server;
@@ -93,15 +94,9 @@ export class WebSocketManager {
     });
 
     this.eventBus.on(TABLE_EVENTS.PLAYER_JOINED, (player, table) => {
-      player.sendMessage({
-        type: "table:joined",
-        tableId: table.id,
-        gameId: table.getAttribute("gameId")
-      });
-      
       // Send the full table state to the joining player
       player.sendMessage({
-        type: "table:state",
+        type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
         data: table.getTableState()
       });
     });
@@ -176,7 +171,7 @@ export class WebSocketManager {
   private sendInitialState(player: Player): void {
     // Send player details
     player.sendMessage({
-      type: "player:state",
+      type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
       id: player.id,
       attributes: player.getAttributes()
     });
@@ -194,7 +189,7 @@ export class WebSocketManager {
     const table = player.getTable();
     if (table) {
       player.sendMessage({
-        type: "table:state",
+        type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
         data: table.getTableState()
       });
     }
@@ -213,7 +208,7 @@ export class WebSocketManager {
   public distributePlayerUpdate(player: Player, key: string, value: any, updateTableState: boolean = true): void {
     // Notify the player about their own attribute changes
     player.sendMessage({
-      type: "player:state",
+      type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
       data: {
         id: player.id,
         attributes: player.getAttributes()
@@ -252,7 +247,7 @@ export class WebSocketManager {
   public distributePlayerUpdates(player: Player, attributes: Record<string, any>, updateTableState: boolean = true): void {
     // Notify the player about their own attribute changes
     player.sendMessage({
-      type: "player:state",
+      type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
       data: {
         id: player.id,
         attributes: player.getAttributes()

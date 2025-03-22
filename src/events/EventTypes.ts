@@ -26,29 +26,33 @@
 
 // Player events
 export const PLAYER_EVENTS = {
+  // Player connection events
   CONNECTED: "player:connected",
   DISCONNECTED: "player:disconnected",
   RECONNECTED: "player:reconnected",
+  // Player state events
+  STATE_UPDATED: "player:state:updated",
   ATTRIBUTE_CHANGED: "player:attribute:changed",
   ATTRIBUTES_CHANGED: "player:attributes:changed",
+  // Player authentication events
   AUTHENTICATION_FAILED: "player:authentication:failed",
   AUTHENTICATION_SUCCEEDED: "player:authentication:succeeded"
 } as const;
 
 // Table events
 export const TABLE_EVENTS = {
+  // Table creation events
   CREATED: "table:created",
   EMPTY: "table:empty",
+  // Table state events
   STATE_UPDATED: "table:state:updated",
   ATTRIBUTE_CHANGED: "table:attribute:changed",
   ATTRIBUTES_CHANGED: "table:attributes:changed",
-  
   // Player-related table events
   PLAYER_JOINED: "table:player:joined",
   PLAYER_LEFT: "table:player:left",
   PLAYER_SAT: "table:player:sat",
   PLAYER_STOOD: "table:player:stood",
-  
   // Deck-related table events
   DECK_CREATED: "table:deck:created",
   DECK_SHUFFLED: "table:deck:shuffled",
@@ -70,44 +74,48 @@ export const LOBBY_EVENTS = {
   STATE: "lobby:state"
 } as const;
 
-// Game events (default generic game events that can be used across different games)
-export const GAME_EVENTS = {
-  STARTED: "game:started",
-  ENDED: "game:ended",
-  PAUSED: "game:paused",
-  RESUMED: "game:resumed",
-  ROUND_STARTED: "game:round:started",
-  ROUND_ENDED: "game:round:ended",
-  TURN_STARTED: "game:turn:started",
-  TURN_ENDED: "game:turn:ended"
-} as const;
-
 // Create union types of all event string literals
 export type PlayerEventType = typeof PLAYER_EVENTS[keyof typeof PLAYER_EVENTS];
 export type TableEventType = typeof TABLE_EVENTS[keyof typeof TABLE_EVENTS];
 export type LobbyEventType = typeof LOBBY_EVENTS[keyof typeof LOBBY_EVENTS];
-export type GameEventType = typeof GAME_EVENTS[keyof typeof GAME_EVENTS];
 
 // Create a union type of all built-in possible event names
-export type BuiltInEventType = PlayerEventType | TableEventType | LobbyEventType | GameEventType;
+export type BuiltInEventType = PlayerEventType | TableEventType | LobbyEventType;
 
 /**
  * Interface for custom event maps that consumers of the library can extend
  * 
  * Example usage:
  * ```
- * // Define your custom event constants
- * const POKER_EVENTS = {
- *   HAND_DEALT: "poker:hand:dealt",
- *   BETTING_ROUND_STARTED: "poker:betting:started"
+ * // Define your game event constants
+ * const GAME_EVENTS = {
+ *   STARTED: "game:started",
+ *   ENDED: "game:ended",
+ *   PAUSED: "game:paused",
+ *   RESUMED: "game:resumed",
+ *   ROUND_STARTED: "game:round:started",
+ *   ROUND_ENDED: "game:round:ended",
+ *   TURN_STARTED: "game:turn:started",
+ *   TURN_ENDED: "game:turn:ended"
  * } as const;
  * 
- * // Create a type for your custom events
+ * // Define your game-specific event constants
+ * const POKER_EVENTS = {
+ *   HAND_DEALT: "poker:hand:dealt",
+ *   BETTING_ROUND_STARTED: "poker:betting:started",
+ *   PLAYER_CALLED: "poker:player:called",
+ *   PLAYER_RAISED: "poker:player:raised",
+ *   PLAYER_FOLDED: "poker:player:folded"
+ * } as const;
+ * 
+ * // Create types for your custom events
+ * type GameEventType = typeof GAME_EVENTS[keyof typeof GAME_EVENTS];
  * type PokerEventType = typeof POKER_EVENTS[keyof typeof POKER_EVENTS];
  * 
  * // Extend the event system
  * declare module "shoehive" {
  *   interface CustomEventMap {
+ *     gameEvents: GameEventType;
  *     pokerEvents: PokerEventType;
  *   }
  * }
@@ -140,5 +148,4 @@ export const EVENTS = {
   PLAYER: PLAYER_EVENTS,
   TABLE: TABLE_EVENTS,
   LOBBY: LOBBY_EVENTS,
-  GAME: GAME_EVENTS
 } as const; 
