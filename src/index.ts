@@ -1,6 +1,7 @@
 import { Player } from "./core/Player";
 import { Table, TableState } from "./core/Table";
 import { Card, CardSuit, CardRank, Deck, Hand } from "./core/card/index";
+import { Seat } from "./core/Seat";
 import { TableFactory } from "./core/TableFactory";
 import { WebSocketManager } from "./core/WebSocketManager";
 import { EventBus } from "./events/EventBus";
@@ -30,6 +31,7 @@ import {
 export {
   Player,
   Table,
+  Seat,
   TableState,
   TableFactory,
   WebSocketManager,
