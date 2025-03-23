@@ -117,8 +117,8 @@ player.setAttribute('points', 100);
 // This will NOT trigger a table state update because 'strategy' is not table-relevant
 player.setAttribute('strategy', 'defensive');
 
-// This will NOT trigger a table state update because 'cards' is not table-relevant
-player.setAttribute('cards', ['A♠', 'K♥', 'Q♦']);
+// This will NOT trigger a table state update because 'secretNumber' is not table-relevant
+player.setAttribute('secretNumber', 42);
 
 // This will trigger both table and lobby updates because 'isReady' is in both lists
 player.setAttribute('isReady', true);

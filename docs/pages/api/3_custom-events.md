@@ -12,7 +12,9 @@ This guide explains how to extend the Shoehive event system with your own custom
 
 ## Introduction
 
-Shoehive follows an event-driven architecture where components communicate through events. While the framework provides a set of standard events for common functionality, your specific game logic will likely require custom events.
+Shoehive follows an event-driven architecture where components communicate through events. While the framework provides a set of standard events for common functionality (see [Default Events](/api/default-events)), your specific game logic will likely require custom events.
+
+Custom events are not to be confused with the [Command System](/api/command-system) which is used to manage messages between players and the server.
 
 ## Naming Convention
 
@@ -25,7 +27,7 @@ domain:action
 or
 
 ```
-domain:subdomain:action
+domain:subject:action
 ```
 
 For example:
@@ -60,7 +62,34 @@ export const POKER_EVENTS = {
 
 // Create a type from the event constants
 export type PokerEventType = typeof POKER_EVENTS[keyof typeof POKER_EVENTS];
+
+// Define the payload structures for your custom events
+export interface PokerEventPayloadMap {
+  [POKER_EVENTS.HAND_DEALT]: [player: Player, cards: Card[]];
+  [POKER_EVENTS.BETTING_ROUND_STARTED]: [table: Table, minBet: number];
+  [POKER_EVENTS.BETTING_ROUND_ENDED]: [table: Table, pot: number];
+  [POKER_EVENTS.PLAYER_FOLDED]: [table: Table, player: Player];
+  [POKER_EVENTS.PLAYER_CALLED]: [table: Table, player: Player, amount: number];
+  [POKER_EVENTS.PLAYER_RAISED]: [table: Table, player: Player, amount: number];
+  [POKER_EVENTS.SHOWDOWN]: [table: Table, players: Player[]];
+  [POKER_EVENTS.WINNER_DETERMINED]: [table: Table, player: Player, pot: number];
+}
 ```
+
+## Integrating with TypeScript Type System
+
+Shoehive provides a way to integrate your custom events with its type system. This provides type checking and autocompletion for your custom events:
+
+```typescript
+// Extend the Shoehive type system with your custom events
+declare module "shoehive" {
+  interface CustomEventMap {
+    pokerEvents: PokerEventType;
+  }
+}
+```
+
+With this declaration, your custom events will be included in the `EventType` union type, allowing for type checking when using the EventBus.
 
 ## Using Custom Events
 
@@ -93,7 +122,7 @@ For more complex games, you might want to create a specialized module that encap
 
 ```typescript
 // poker-module.ts
-import { EventBus, Table, Player } from 'shoehive';
+import { EventBus, Table, Player, TABLE_EVENTS, PLAYER_EVENTS } from 'shoehive';
 import { POKER_EVENTS } from './poker-events';
 
 export class PokerModule {
@@ -106,13 +135,13 @@ export class PokerModule {
   
   private registerEventHandlers() {
     // Listen for core game events and translate to poker-specific events
-    this.eventBus.on('table:player:joined', (player, table) => {
+    this.eventBus.on(TABLE_EVENTS.PLAYER_JOINED, (table, player) => {
       // Initialize player's poker state when they join
       this.initializePlayerState(player, table);
     });
     
-    this.eventBus.on('table:state:updated', (table, state) => {
-      if (state === 'ACTIVE') {
+    this.eventBus.on(TABLE_EVENTS.STATE_UPDATED, (table) => {
+      if (table.getAttribute('state') === 'ACTIVE') {
         // Start a new poker hand when the table becomes active
         this.startNewHand(table);
       }
@@ -176,10 +205,11 @@ eventBus.debugMonitor(true, undefined, (event, ...args) => {
 
 1. **Consistent Naming**: Follow the `domain:action` pattern for all your events
 2. **Use Constants**: Define all your events as constants to avoid typos and get better IDE support
-3. **Document Payloads**: Clearly document what data is included with each event
-4. **Event Segregation**: Keep events specific to their domain (e.g., poker events start with "poker:")
-5. **Clean Up Listeners**: Remove event listeners when components are destroyed to prevent memory leaks
-6. **Module Pattern**: For complex games, encapsulate related events and logic in a module
+3. **Define Payload Types**: Create interfaces for your event payloads to ensure type safety
+4. **Document Payloads**: Clearly document what data is included with each event
+5. **Event Segregation**: Keep events specific to their domain (e.g., poker events start with "poker:")
+6. **Clean Up Listeners**: Remove event listeners when components are destroyed to prevent memory leaks
+7. **Module Pattern**: For complex games, encapsulate related events and logic in a module
 
 ## Complete Example
 
@@ -187,13 +217,31 @@ Here's a complete example of implementing custom events for a poker game:
 
 ```typescript
 // poker-events.ts
+import { Player, Table } from 'shoehive';
+
 export const POKER_EVENTS = {
   HAND_DEALT: "poker:hand:dealt",
-  BETTING_ROUND_STARTED: "poker:betting:started"
+  BETTING_ROUND_STARTED: "poker:betting:started",
+  PLAYER_ACTION: "poker:player:action"
 } as const;
 
+export type PokerEventType = typeof POKER_EVENTS[keyof typeof POKER_EVENTS];
+
+export interface PokerEventPayloadMap {
+  [POKER_EVENTS.HAND_DEALT]: [player: Player, cards: any[]];
+  [POKER_EVENTS.BETTING_ROUND_STARTED]: [table: Table, minBet: number];
+  [POKER_EVENTS.PLAYER_ACTION]: [table: Table, player: Player, action: string, amount?: number];
+}
+
+// Extend Shoehive's type system
+declare module "shoehive" {
+  interface CustomEventMap {
+    pokerEvents: PokerEventType;
+  }
+}
+
 // poker-game.ts
-import { createGameServer, Player, Table, TableState } from 'shoehive';
+import { createGameServer, Player, Table } from 'shoehive';
 import { POKER_EVENTS } from './poker-events';
 import * as http from 'http';
 
@@ -247,31 +295,22 @@ gameServer.messageRouter.registerCommandHandler('poker:bet', (player, data) => {
   const currentBet = table.getAttribute('currentBet') || 0;
   table.setAttribute('currentBet', data.amount);
   
+  // Emit a custom event for the player action
+  eventBus.emit(POKER_EVENTS.PLAYER_ACTION, table, player, 'bet', data.amount);
+  
   // Notify all players about the bet
   table.broadcastToAll({
     type: 'playerBet',
     playerId: player.id,
     amount: data.amount
   });
-  
-  // Move to next player
-  const nextPlayer = getNextPlayer(table, player);
-  if (nextPlayer) {
-    table.setAttribute('currentPlayer', nextPlayer.id);
-  } else {
-    // End the betting round if we've gone around the table
-    eventBus.emit(POKER_EVENTS.BETTING_ROUND_ENDED, table);
-  }
 });
+
+// Enable debug monitoring for development
+eventBus.debugMonitor(true, (event) => event.startsWith('poker:'));
 
 // Start the server
 server.listen(3000, () => {
   console.log('Poker server running on port 3000');
 });
-
-// Helper function to get the next player
-function getNextPlayer(table: Table, currentPlayer: Player): Player | null {
-  // Implementation...
-  return null;
-}
 ```

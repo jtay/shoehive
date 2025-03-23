@@ -675,8 +675,8 @@ eventBus.on(GAME_EVENTS.STARTED, (table) => {
 ## Additional Resources
 
 - [API Reference](/api/reference)
-- [Creating Games Guide](/guides/creating-games)
+- [Creating Games Guide](/guides/building-games)
 - [Custom Events](/api/custom-events)
 - [Transport Modules](/api/transport-modules)
 - [Object Attributes](/api/object-attributes)
-- [Build a Tic Tac Toe Game](/guides/tic-tac-toe)
+- [Build a Tic Tac Toe Game](/guides/building-games/tic-tac-toe)
