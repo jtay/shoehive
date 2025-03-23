@@ -1,4 +1,4 @@
-name: NPM Publish
+name: Version Distribution
 
 on:
   push:
@@ -7,7 +7,6 @@ on:
     paths-ignore:
       - '**.md'
       - '.github/**'
-      - '!.github/workflows/publish.yml'
 
 permissions:
   contents: write
@@ -41,12 +40,40 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq
 
+      - name: Check version change
+        id: check-version
+        run: |
+          # Get current package.json version
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current version: $CURRENT_VERSION"
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          # Get package.json version from previous commit
+          git checkout HEAD~1 package.json
+          PREVIOUS_VERSION=$(node -p "require('./package.json').version")
+          echo "Previous version: $PREVIOUS_VERSION"
+          echo "previous_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+          
+          # Restore current package.json
+          git checkout HEAD package.json
+          
+          # Compare versions
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version unchanged, will not publish"
+            echo "should_publish=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Lint
+        if: steps.check-version.outputs.should_publish == 'true'
         run: npm run lint --if-present
         continue-on-error: true  # Allow lint errors initially
 
       - name: Run tests
         id: test
+        if: steps.check-version.outputs.should_publish == 'true'
         run: |
           # Create a directory for test outputs
           mkdir -p test-results
@@ -57,7 +84,7 @@ jobs:
 
       - name: Process test results
         id: process-results
-        if: always()
+        if: steps.check-version.outputs.should_publish == 'true'
         run: |
           echo "### Test Results for Publishing 🧪" > test-results/comment.md
           echo "" >> test-results/comment.md
@@ -109,7 +136,7 @@ jobs:
 
       - name: Post comment on commit
         id: commit-comment
-        if: always()
+        if: steps.check-version.outputs.should_publish == 'true'
         continue-on-error: true
         uses: actions/github-script@v6
         with:
@@ -133,39 +160,48 @@ jobs:
             }
 
       - name: Build
-        run: npm run build
-
-      - name: Check version change
-        id: check-version
-        run: |
-          # Get current package.json version
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          echo "Current version: $CURRENT_VERSION"
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          
-          # Get package.json version from previous commit
-          git checkout HEAD~1 package.json
-          PREVIOUS_VERSION=$(node -p "require('./package.json').version")
-          echo "Previous version: $PREVIOUS_VERSION"
-          echo "previous_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
-          
-          # Restore current package.json
-          git checkout HEAD package.json
-          
-          # Compare versions
-          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
-            echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
-            echo "should_publish=true" >> $GITHUB_OUTPUT
-          else
-            echo "Version unchanged, will not publish"
-            echo "should_publish=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Publish to npm
         if: steps.check-version.outputs.should_publish == 'true'
-        run: npm publish
+        run: npm run build
+          
+      - name: Create GitHub Release
+        if: steps.check-version.outputs.should_publish == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            try {
+              const version = process.env.CURRENT_VERSION;
+              const tagName = `v${version}`;
+              
+              // Create a tag
+              await github.rest.git.createRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `refs/tags/${tagName}`,
+                sha: context.sha
+              });
+              
+              console.log(`Tag ${tagName} created`);
+              
+              // Create a release
+              const release = await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: tagName,
+                name: `Version ${version}`,
+                body: `Release of version ${version}`,
+                prerelease: true,  // Mark as pre-release
+                draft: false
+              });
+              
+              console.log(`Release created: ${release.data.html_url}`);
+              return true;
+            } catch (error) {
+              console.error('Error creating release:', error.message);
+              return false;
+            }
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          CURRENT_VERSION: ${{ steps.check-version.outputs.current_version }}
           
       - name: Add publish result comment
         if: steps.check-version.outputs.should_publish == 'true'
@@ -175,11 +211,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             try {
+              const version = process.env.CURRENT_VERSION;
               await github.rest.repos.createCommitComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 commit_sha: context.sha,
-                body: `### 📦 Published to npm\n\nVersion \`${process.env.CURRENT_VERSION}\` has been successfully published to npm.`
+                body: `### 📦 Published to npm\n\nVersion \`${version}\` has been successfully published to npm.\n\nA GitHub pre-release tag \`v${version}\` has also been created.`
               });
               console.log('Publish notification posted successfully');
               return true;
@@ -189,3 +226,9 @@ jobs:
             }
         env:
           CURRENT_VERSION: ${{ steps.check-version.outputs.current_version }} 
+
+      - name: Publish to npm
+        if: steps.check-version.outputs.should_publish == 'true'
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
