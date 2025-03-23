@@ -187,4 +187,11 @@ export class Lobby {
     return this.attributes.has(key);
   }
 
+  /**
+   * Get the number of tables in the lobby.
+   * @returns The number of tables in the lobby
+   */
+  public getTableCount(): number {
+    return this.gameManager.getAllTables().length;
+  }
 } 

@@ -1,7 +1,6 @@
 import { EventBus } from "../events/EventBus";
 import { Table } from "./Table";
 import { TableFactory } from "./TableFactory";
-import { Player } from "./Player";
 import { TABLE_EVENTS } from "../events/EventTypes";
 
 export interface GameDefinition {
