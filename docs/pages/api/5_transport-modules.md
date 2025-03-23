@@ -227,10 +227,12 @@ const db = new DatabaseService({
 
 // Create the transport modules
 const authModule = new JwtAuthModule(process.env.JWT_SECRET || 'your-secret-key');
-const serverTransport = new DatabaseServerTransportModule(db);
+const serverTransportModule = new DatabaseServerTransportModule(db);
 
 // Create the game server with both modules
-const gameServer = createGameServer(server, authModule, serverTransport);
+const gameServer = createGameServer(server, authModule, serverTransportModule, {
+  reconnectionTimeoutMs: 300000 // Optional: Set reconnection timeout to 5 minutes
+});
 
 // Start the server
 server.listen(3000, () => {

@@ -8,7 +8,9 @@ nav_order: 6
 
 # 📨 Command System
 
-The command system in Shoehive provides a structured way to send messages between clients and the server, enabling bidirectional communication for game actions and state updates.
+The command system in Shoehive provides a structured way to send messages between clients and the server, enabling bidirectional communication for game actions and state updates. 
+
+It is not to be confused with the [Event System](/api/events) which is used to manage events between components in the game server.
 
 ## Introduction
 
