@@ -475,4 +475,13 @@ export class WebSocketManager {
     
     return result;
   }
+
+  /**
+   * Gets the current number of connected players.
+   * 
+   * @returns The number of connected players
+   */
+  public getConnectedPlayerCount(): number {
+    return this.players.size;
+  }
 }
