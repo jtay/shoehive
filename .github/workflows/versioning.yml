@@ -171,7 +171,7 @@ jobs:
           script: |
             try {
               const version = process.env.CURRENT_VERSION;
-              const tagName = `v${version}`;
+              const tagName = `${version}`;
               
               // Create a tag
               await github.rest.git.createRef({
