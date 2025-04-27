@@ -105,6 +105,143 @@ export class WebSocketManager {
       });
     });
 
+    // Add listener for lobby state requests
+    this.eventBus.on('request:lobby:state', (player) => {
+      player.sendMessage({
+        type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
+        data: {
+          games: this.gameManager.getAvailableGames(),
+          tables: this.gameManager.getAllTables().map(table => table.getTableMetadata())
+        }
+      });
+    });
+
+    // Add listeners for table actions
+    this.eventBus.on('request:table:join', (player, tableId) => {
+      const table = this.gameManager.getAllTables().find(t => t.id === tableId);
+      if (!table) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Table not found"
+        });
+        return;
+      }
+      
+      // Add player to table
+      const success = table.addPlayer(player);
+      if (success) {
+        player.setTable(table);
+        // The table:player:joined event will trigger sending the table state
+      } else {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Failed to join table"
+        });
+      }
+    });
+
+    this.eventBus.on('request:table:leave', (player, tableId) => {
+      const table = this.gameManager.getAllTables().find(t => t.id === tableId);
+      if (!table) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Table not found"
+        });
+        return;
+      }
+      
+      // Remove player from table
+      table.removePlayer(player.id);
+      player.setTable(null);
+      
+      // Confirm to the player
+      player.sendMessage({
+        type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
+        data: {
+          id: player.id,
+          attributes: player.getAttributes()
+        }
+      });
+      
+      // Update lobby state for all players
+      this.lobby.updateLobbyState();
+    });
+
+    this.eventBus.on('request:table:create', (player, gameId, options = {}) => {
+      try {
+        // Create a new table
+        const table = this.lobby.createTable(gameId, options);
+        if (!table) {
+          player.sendMessage({
+            type: CLIENT_MESSAGE_TYPES.ERROR,
+            message: "Failed to create table"
+          });
+          return;
+        }
+        
+        // Automatically join the player to their new table
+        table.addPlayer(player);
+        player.setTable(table);
+        
+        // Notify everyone about the new table (via lobby update)
+        this.lobby.updateLobbyState();
+      } catch (error) {
+        console.error("Error creating table:", error);
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Failed to create table: " + (error instanceof Error ? error.message : "unknown error")
+        });
+      }
+    });
+
+    this.eventBus.on('request:table:seat:sit', (player, tableId, seatIndex, buyIn) => {
+      const table = this.gameManager.getAllTables().find(t => t.id === tableId);
+      if (!table) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Table not found"
+        });
+        return;
+      }
+      
+      try {
+        // Emit a table event for seating the player and let the table handle it internally
+        this.eventBus.emit(TABLE_EVENTS.PLAYER_SIT_REQUEST, player, table, seatIndex, buyIn);
+        
+        // The response will be handled by the TABLE_EVENTS.PLAYER_SAT event listener
+      } catch (error) {
+        console.error("Error seating player:", error);
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Failed to sit at seat: " + (error instanceof Error ? error.message : "unknown error")
+        });
+      }
+    });
+
+    this.eventBus.on('request:table:seat:stand', (player, tableId) => {
+      const table = this.gameManager.getAllTables().find(t => t.id === tableId);
+      if (!table) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Table not found"
+        });
+        return;
+      }
+      
+      try {
+        // Emit a table event for unseating the player and let the table handle it internally
+        this.eventBus.emit(TABLE_EVENTS.PLAYER_STAND_REQUEST, player, table);
+        
+        // The response will be handled by the TABLE_EVENTS.PLAYER_STOOD event listener
+      } catch (error) {
+        console.error("Error unseating player:", error);
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Failed to stand from seat: " + (error instanceof Error ? error.message : "unknown error")
+        });
+      }
+    });
+
     this.eventBus.on(TABLE_EVENTS.PLAYER_JOINED, (player, table) => {
       // Send the full table state to the joining player
       player.sendMessage({
