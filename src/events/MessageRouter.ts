@@ -1,6 +1,6 @@
 import { Player } from "../core/Player";
 import { EventBus } from "./EventBus";
-import { CLIENT_MESSAGE_TYPES } from "../core/commands/index";
+import { CLIENT_MESSAGE_TYPES, CLIENT_COMMAND_TYPES } from "../core/commands/index";
 
 interface Message {
   action: string;
@@ -15,6 +15,11 @@ export class MessageRouter {
   constructor(eventBus: EventBus) {
     this.eventBus = eventBus;
     this.commandHandlers = new Map();
+    
+    // Register built-in command handlers
+    this.registerStateCommandHandlers();
+    this.registerLobbyCommandHandlers();
+    this.registerTableCommandHandlers();
   }
 
   /**
@@ -29,6 +34,155 @@ export class MessageRouter {
     handler: (player: Player, data: any) => void
   ): void {
     this.commandHandlers.set(action, handler);
+  }
+
+  /**
+   * Register handlers for state request commands
+   */
+  private registerStateCommandHandlers(): void {
+    // Player state
+    this.registerCommandHandler(CLIENT_COMMAND_TYPES.PLAYER.GET_STATE, (player, data) => {
+      player.sendMessage({
+        type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
+        data: {
+          id: player.id,
+          attributes: player.getAttributes()
+        }
+      });
+    });
+    
+    // Table state
+    this.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.GET_STATE, (player, data) => {
+      const table = player.getTable();
+      if (table) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
+          data: table.getTableState()
+        });
+      } else {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "You are not at a table"
+        });
+      }
+    });
+    
+    // Lobby state
+    this.registerCommandHandler(CLIENT_COMMAND_TYPES.LOBBY.GET_STATE, (player, data) => {
+      this.eventBus.emit('request:lobby:state', player);
+    });
+  }
+
+  /**
+   * Register handlers for lobby commands
+   */
+  private registerLobbyCommandHandlers(): void {
+    // Join table
+    this.registerCommandHandler(CLIENT_COMMAND_TYPES.LOBBY.JOIN_TABLE, (player, data) => {
+      if (!data.tableId) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Missing tableId parameter"
+        });
+        return;
+      }
+
+      this.eventBus.emit('request:table:join', player, data.tableId);
+    });
+
+    // Create table
+    this.registerCommandHandler(CLIENT_COMMAND_TYPES.LOBBY.CREATE_TABLE, (player, data) => {
+      if (!data.gameId) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Missing gameId parameter"
+        });
+        return;
+      }
+
+      this.eventBus.emit('request:table:create', player, data.gameId, data.options);
+    });
+  }
+
+  /**
+   * Register handlers for table commands
+   */
+  private registerTableCommandHandlers(): void {
+    // Join table
+    this.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.JOIN, (player, data) => {
+      if (!data.tableId) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Missing tableId parameter"
+        });
+        return;
+      }
+
+      this.eventBus.emit('request:table:join', player, data.tableId);
+    });
+
+    // Leave table
+    this.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.LEAVE, (player, data) => {
+      const table = player.getTable();
+      if (!table) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "You are not at a table"
+        });
+        return;
+      }
+
+      this.eventBus.emit('request:table:leave', player, table.id);
+    });
+
+    // Create table
+    this.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.CREATE, (player, data) => {
+      if (!data.gameId) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Missing gameId parameter"
+        });
+        return;
+      }
+
+      this.eventBus.emit('request:table:create', player, data.gameId, data.options);
+    });
+
+    // Sit at seat
+    this.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.SEAT_SIT, (player, data) => {
+      const table = player.getTable();
+      if (!table) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "You are not at a table"
+        });
+        return;
+      }
+
+      if (data.seatIndex === undefined || data.seatIndex === null) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Missing seatIndex parameter"
+        });
+        return;
+      }
+
+      this.eventBus.emit('request:table:seat:sit', player, table.id, data.seatIndex, data.buyIn);
+    });
+
+    // Stand from seat
+    this.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.SEAT_STAND, (player, data) => {
+      const table = player.getTable();
+      if (!table) {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "You are not at a table"
+        });
+        return;
+      }
+
+      this.eventBus.emit('request:table:seat:stand', player, table.id);
+    });
   }
 
   /**

@@ -1,5 +1,5 @@
 import { EventBus } from "../events/EventBus";
-import { TABLE_EVENTS } from "../events/EventTypes";
+import { TABLE_EVENTS } from "../events/TableEvents";
 import { Player } from "./Player";
 import { Card, Deck, Hand } from "./card/index";
 import { Seat } from "./Seat";
@@ -10,6 +10,11 @@ export enum TableState {
   WAITING = "waiting",
   ACTIVE = "active", 
   ENDED = "ended"
+}
+
+export interface TableOptions {
+  seatCount?: number;
+  [key: string]: any;
 }
 
 /**
@@ -36,20 +41,81 @@ export class Table {
   private readonly maxSeatsPerPlayer: number;
   private attributes: Map<string, any> = new Map();
   private deck: Deck | null = null;
+  private gameId: string;
+  private options: TableOptions;
 
   constructor(
     eventBus: EventBus,
     totalSeats: number,
     maxSeatsPerPlayer: number,
-    id?: string
+    id?: string,
+    gameId?: string,
+    options: TableOptions = {}
   ) {
     this.id = id || crypto.randomUUID();
     this.eventBus = eventBus;
     this.totalSeats = totalSeats;
     this.maxSeatsPerPlayer = maxSeatsPerPlayer;
+    this.gameId = gameId || 'default';
+    this.options = options;
     
     // Initialize seats with Seat objects
     this.seats = new Array(totalSeats).fill(null).map(() => new Seat());
+    
+    // Listen for player sit and stand request events
+    this.setupEventListeners();
+    
+    // Emit table created event
+    this.eventBus.emit(TABLE_EVENTS.CREATED, this);
+  }
+
+  /**
+   * Set up event listeners for this table
+   */
+  private setupEventListeners(): void {
+    // Handle player sit request
+    this.eventBus.on(TABLE_EVENTS.PLAYER_SIT_REQUEST, (player, table, seatIndex, buyIn) => {
+      // Only handle events for this table
+      if (table.id !== this.id) return;
+      
+      try {
+        const success = this.sitPlayerAtSeat(player.id, seatIndex, buyIn);
+        if (!success) {
+          player.sendMessage({
+            type: CLIENT_MESSAGE_TYPES.ERROR,
+            message: "Failed to sit at seat"
+          });
+        }
+      } catch (error) {
+        console.error("Error handling sit request:", error);
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Failed to sit at seat: " + (error instanceof Error ? error.message : "unknown error")
+        });
+      }
+    });
+    
+    // Handle player stand request
+    this.eventBus.on(TABLE_EVENTS.PLAYER_STAND_REQUEST, (player, table) => {
+      // Only handle events for this table
+      if (table.id !== this.id) return;
+      
+      try {
+        const success = this.standPlayerUp(player.id);
+        if (!success) {
+          player.sendMessage({
+            type: CLIENT_MESSAGE_TYPES.ERROR,
+            message: "Failed to stand from seat"
+          });
+        }
+      } catch (error) {
+        console.error("Error handling stand request:", error);
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Failed to stand from seat: " + (error instanceof Error ? error.message : "unknown error")
+        });
+      }
+    });
   }
 
   /*
@@ -293,9 +359,10 @@ export class Table {
    * Sits a player at a specific seat. Emits TABLE_EVENTS.PLAYER_SAT when a player sits at a seat.
    * @param playerId - The ID of the player to sit.
    * @param seatIndex - The index of the seat to sit the player at.
+   * @param buyIn - Optional buy-in amount for games that require it.
    * @returns True if the player was seated, false if the seat is invalid or already taken.
    */
-  public sitPlayerAtSeat(playerId: string, seatIndex: number): boolean {
+  public sitPlayerAtSeat(playerId: string, seatIndex: number, buyIn?: number): boolean {
     // Check if seat index is valid
     if (seatIndex < 0 || seatIndex >= this.totalSeats) {
       return false;
@@ -313,6 +380,12 @@ export class Table {
     const playerSeats = this.getPlayerSeatCount(playerId);
     if (playerSeats >= this.maxSeatsPerPlayer) {
       return false;
+    }
+
+    // Set buy-in if provided
+    if (buyIn !== undefined) {
+      // Store buy-in amount as a seat attribute
+      this.seats[seatIndex].setAttribute('buyIn', buyIn);
     }
 
     this.seats[seatIndex].setPlayer(player);
@@ -582,5 +655,29 @@ export class Table {
   public removeAttribute(key: string): void {
     this.attributes.delete(key);
     this.eventBus.emit(TABLE_EVENTS.ATTRIBUTE_CHANGED, this, key, undefined);
+  }
+
+  /**
+   * Makes a player stand up from all seats they occupy.
+   * @param playerId - The ID of the player to stand up.
+   * @returns True if the player was removed from at least one seat, false otherwise.
+   */
+  public standPlayerUp(playerId: string): boolean {
+    let success = false;
+    
+    // Find all seats the player is sitting at
+    for (let i = 0; i < this.seats.length; i++) {
+      const seat = this.seats[i];
+      const player = seat.getPlayer();
+      
+      if (player && player.id === playerId) {
+        // Remove player from this seat
+        if (this.removePlayerFromSeat(i)) {
+          success = true;
+        }
+      }
+    }
+    
+    return success;
   }
 } 

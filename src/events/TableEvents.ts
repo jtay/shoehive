@@ -21,6 +21,9 @@ export const TABLE_EVENTS = {
     PLAYER_LEFT: "table:player:left",
     PLAYER_SAT: "table:player:sat",
     PLAYER_STOOD: "table:player:stood",
+    // Player request events
+    PLAYER_SIT_REQUEST: "table:player:sit:request",
+    PLAYER_STAND_REQUEST: "table:player:stand:request",
     // Deck-related table events
     DECK_CREATED: "table:deck:created",
     DECK_SHUFFLED: "table:deck:shuffled",
@@ -51,6 +54,8 @@ export interface DefaultTableEventPayloadMap {
     [TABLE_EVENTS.PLAYER_LEFT]: [table: Table, player: Player];
     [TABLE_EVENTS.PLAYER_SAT]: [table: Table, player: Player, seatIndex: number];
     [TABLE_EVENTS.PLAYER_STOOD]: [table: Table, player: Player, seatIndex: number];
+    [TABLE_EVENTS.PLAYER_SIT_REQUEST]: [player: Player, table: Table, seatIndex: number, buyIn?: number];
+    [TABLE_EVENTS.PLAYER_STAND_REQUEST]: [player: Player, table: Table];
     [TABLE_EVENTS.DECK_CREATED]: [table: Table, deckId: string];
     [TABLE_EVENTS.DECK_SHUFFLED]: [table: Table, deckId: string];
     [TABLE_EVENTS.DECK_CARD_DRAWN]: [table: Table, deckId: string, card: any];

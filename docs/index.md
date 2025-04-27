@@ -9,7 +9,7 @@ nav_order: 1
 
 Welcome to the Shoehive documentation. This guide will help you learn about the Shoehive framework and build your own real-time multiplayer games.
 
-[![Tests](https://github.com/jtay/shoehive/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/jtay/shoehive/actions/workflows/test.yml) [![NPM Publish](https://github.com/jtay/shoehive/actions/workflows/publish.yml/badge.svg)](https://github.com/jtay/shoehive/actions/workflows/publish.yml) [![Docs](https://github.com/jtay/shoehive/actions/workflows/docs-deploy.yml/badge.svg?branch=main)](https://github.com/jtay/shoehive/actions/workflows/docs-deploy.yml)
+[![Tests](https://github.com/jtay/shoehive/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/jtay/shoehive/actions/workflows/test.yml) ![Version Distribution](https://github.com/jtay/shoehive/actions/workflows/versioning.yml/badge.svg) [![Docs](https://github.com/jtay/shoehive/actions/workflows/docs-deploy.yml/badge.svg?branch=main)](https://github.com/jtay/shoehive/actions/workflows/docs-deploy.yml)
 #### [**🐙&nbsp;GitHub**](https://github.com/jtay/shoehive) | [**📦&nbsp;Releases**](https://github.com/jtay/shoehive/releases) | [**⚡️&nbsp;Quick Start&nbsp;Guide**](https://shoehive.jtay.co.uk/quick-start) | [**📖&nbsp;Docs**](https://shoehive.jtay.co.uk) | [**🔍&nbsp;API&nbsp;Reference**](https://shoehive.jtay.co.uk/api/generated) | [**🤝&nbsp;Contributing**](https://github.com/jtay/shoehive/tree/main/CONTRIBUTING.md)
 
 ## Contents
