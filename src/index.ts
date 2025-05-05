@@ -107,7 +107,7 @@ export function createGameServer(
   messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.GET_STATE, (player, data) => {
     if (!data.tableId) return;
     
-    const table = gameManager.getAllTables().find(t => t.id === data.tableId);
+    const table = gameManager.getTableById(data.tableId);
     if (table) {
       player.sendMessage({
         type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
@@ -121,7 +121,7 @@ export function createGameServer(
   messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.JOIN, (player, data) => {
     if (!data.tableId) return;
     
-    const table = gameManager.getAllTables().find(t => t.id === data.tableId);
+    const table = gameManager.getTableById(data.tableId);
     if (table) {
       table.addPlayer(player);
     } else {

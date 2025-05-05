@@ -167,7 +167,7 @@ export class MessageRouter {
         return;
       }
 
-      this.eventBus.emit('request:table:seat:sit', player, table.id, data.seatIndex, data.buyIn);
+      this.eventBus.emit('request:table:seat:sit', player, table.id, data.seatIndex);
     });
 
     // Stand from seat

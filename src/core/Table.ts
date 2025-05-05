@@ -74,12 +74,12 @@ export class Table {
    */
   private setupEventListeners(): void {
     // Handle player sit request
-    this.eventBus.on(TABLE_EVENTS.PLAYER_SIT_REQUEST, (player, table, seatIndex, buyIn) => {
+    this.eventBus.on(TABLE_EVENTS.PLAYER_SIT_REQUEST, (player, table, seatIndex) => {
       // Only handle events for this table
       if (table.id !== this.id) return;
       
       try {
-        const success = this.sitPlayerAtSeat(player.id, seatIndex, buyIn);
+        const success = this.sitPlayerAtSeat(player.id, seatIndex);
         if (!success) {
           player.sendMessage({
             type: CLIENT_MESSAGE_TYPES.ERROR,
@@ -359,10 +359,9 @@ export class Table {
    * Sits a player at a specific seat. Emits TABLE_EVENTS.PLAYER_SAT when a player sits at a seat.
    * @param playerId - The ID of the player to sit.
    * @param seatIndex - The index of the seat to sit the player at.
-   * @param buyIn - Optional buy-in amount for games that require it.
    * @returns True if the player was seated, false if the seat is invalid or already taken.
    */
-  public sitPlayerAtSeat(playerId: string, seatIndex: number, buyIn?: number): boolean {
+  public sitPlayerAtSeat(playerId: string, seatIndex: number): boolean {
     // Check if seat index is valid
     if (seatIndex < 0 || seatIndex >= this.totalSeats) {
       return false;
@@ -380,12 +379,6 @@ export class Table {
     const playerSeats = this.getPlayerSeatCount(playerId);
     if (playerSeats >= this.maxSeatsPerPlayer) {
       return false;
-    }
-
-    // Set buy-in if provided
-    if (buyIn !== undefined) {
-      // Store buy-in amount as a seat attribute
-      this.seats[seatIndex].setAttribute('buyIn', buyIn);
     }
 
     this.seats[seatIndex].setPlayer(player);

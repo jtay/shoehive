@@ -118,7 +118,7 @@ export class WebSocketManager {
 
     // Add listeners for table actions
     this.eventBus.on('request:table:join', (player, tableId) => {
-      const table = this.gameManager.getAllTables().find(t => t.id === tableId);
+      const table = this.gameManager.getTableById(tableId);
       if (!table) {
         player.sendMessage({
           type: CLIENT_MESSAGE_TYPES.ERROR,
@@ -141,7 +141,7 @@ export class WebSocketManager {
     });
 
     this.eventBus.on('request:table:leave', (player, tableId) => {
-      const table = this.gameManager.getAllTables().find(t => t.id === tableId);
+      const table = this.gameManager.getTableById(tableId);
       if (!table) {
         player.sendMessage({
           type: CLIENT_MESSAGE_TYPES.ERROR,
@@ -194,8 +194,8 @@ export class WebSocketManager {
       }
     });
 
-    this.eventBus.on('request:table:seat:sit', (player, tableId, seatIndex, buyIn) => {
-      const table = this.gameManager.getAllTables().find(t => t.id === tableId);
+    this.eventBus.on('request:table:seat:sit', (player, tableId, seatIndex) => {
+      const table = player.getTable();
       if (!table) {
         player.sendMessage({
           type: CLIENT_MESSAGE_TYPES.ERROR,
@@ -206,7 +206,7 @@ export class WebSocketManager {
       
       try {
         // Emit a table event for seating the player and let the table handle it internally
-        this.eventBus.emit(TABLE_EVENTS.PLAYER_SIT_REQUEST, player, table, seatIndex, buyIn);
+        this.eventBus.emit(TABLE_EVENTS.PLAYER_SIT_REQUEST, player, table, seatIndex);
         
         // The response will be handled by the TABLE_EVENTS.PLAYER_SAT event listener
       } catch (error) {
@@ -219,7 +219,7 @@ export class WebSocketManager {
     });
 
     this.eventBus.on('request:table:seat:stand', (player, tableId) => {
-      const table = this.gameManager.getAllTables().find(t => t.id === tableId);
+      const table = this.gameManager.getTableById(tableId);
       if (!table) {
         player.sendMessage({
           type: CLIENT_MESSAGE_TYPES.ERROR,
