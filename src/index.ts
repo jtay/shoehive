@@ -148,7 +148,7 @@ export function createGameServer(
     if (table) {
       table.removePlayer(player.id);
     } else {
-      console.error(`Failed to leave table: ${table?.id}`);
+      console.error(`Failed to leave table`);
     }
   });
 
