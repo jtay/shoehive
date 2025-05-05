@@ -187,7 +187,8 @@ export class Table {
     const card = this.deck.drawCard(isVisible);
     if (!card) return false;
     
-    const seat = this.seats[seatIndex];
+    const seat = this.getSeat(seatIndex);
+    if (!seat) return false;
     
     // Create the hand if it doesn't exist
     if (!seat.getHand(handId)) {
@@ -209,12 +210,11 @@ export class Table {
    * @param handId - The ID of the hand to get.
    * @returns The hand object or null if no hand exists.
    */
-  public getHandAtSeat(seatIndex: number, handId: string = "main"): Hand | null {
-    if (seatIndex < 0 || seatIndex >= this.totalSeats) {
-      return null;
-    }
-    
-    return this.seats[seatIndex].getHand(handId);
+  public getHandAtSeat(seatIndex: number, handId: string = "main"): Hand | null {    
+    const seat = this.getSeat(seatIndex);
+    if (!seat) return null;
+
+    return seat.getHand(handId);
   }
 
   /**
@@ -243,7 +243,10 @@ export class Table {
       return null;
     }
     
-    return this.seats[seatIndex].getAllHands();
+    const seat = this.getSeat(seatIndex);
+    if (!seat) return null;
+
+    return seat.getAllHands();
   }
 
   /**
@@ -253,11 +256,10 @@ export class Table {
    * @returns True if the hand was cleared, false if no seat exists.
    */
   public clearHandAtSeat(seatIndex: number, handId: string = "main"): boolean {
-    if (seatIndex < 0 || seatIndex >= this.totalSeats) {
-      return false;
-    }
+    const seat = this.getSeat(seatIndex);
+    if (!seat) return false;
     
-    const result = this.seats[seatIndex].clearHand(handId);
+    const result = seat.clearHand(handId);
     if (result) {
       this.eventBus.emit(TABLE_EVENTS.SEAT_HAND_CLEARED, this, seatIndex, handId);
     }
@@ -269,7 +271,10 @@ export class Table {
    */
   public clearAllHands(): void {
     for (let i = 0; i < this.totalSeats; i++) {
-      this.seats[i].clearAllHands();
+      const seat = this.getSeat(i);
+      if (seat) {
+        seat.clearAllHands();
+      }
     }
     this.eventBus.emit(TABLE_EVENTS.SEATS_HANDS_CLEARED, this);
   }
@@ -281,11 +286,10 @@ export class Table {
    * @returns True if the hand was added, false if no seat exists.
    */
   public addHandToSeat(seatIndex: number, handId: string): boolean {
-    if (seatIndex < 0 || seatIndex >= this.totalSeats) {
-      return false;
-    }
+    const seat = this.getSeat(seatIndex);
+    if (!seat) return false;
     
-    const result = this.seats[seatIndex].addHand(handId);
+    const result = seat.addHand(handId);
     if (result) {
       this.eventBus.emit(TABLE_EVENTS.SEAT_HAND_ADDED, this, seatIndex, handId);
     }
@@ -299,11 +303,10 @@ export class Table {
    * @returns True if the hand was removed, false if no seat exists.
    */
   public removeHandFromSeat(seatIndex: number, handId: string): boolean {
-    if (seatIndex < 0 || seatIndex >= this.totalSeats) {
-      return false;
-    }
+    const seat = this.getSeat(seatIndex);
+    if (!seat) return false;
     
-    const result = this.seats[seatIndex].removeHand(handId);
+    const result = seat.removeHand(handId);
     if (result) {
       this.eventBus.emit(TABLE_EVENTS.SEAT_HAND_REMOVED, this, seatIndex, handId);
     }
@@ -338,8 +341,9 @@ export class Table {
 
     // Remove player from all seats
     for (let i = 0; i < this.seats.length; i++) {
-      if (this.seats[i].getPlayer()?.id === playerId) {
-        this.seats[i].setPlayer(null);
+      const seat = this.getSeat(i);
+      if (seat?.getPlayer()?.id === playerId) {
+        seat.setPlayer(null);
       }
     }
 
@@ -362,29 +366,13 @@ export class Table {
    * @returns True if the player was seated, false if the seat is invalid or already taken.
    */
   public sitPlayerAtSeat(playerId: string, seatIndex: number): boolean {
-    // Ensure seatIndex is a valid number
-    if (seatIndex === undefined || seatIndex === null || typeof seatIndex !== 'number') {
-      return false;
-    }
-    
-    // Check if seat index is valid
-    if (seatIndex < 0 || seatIndex >= this.totalSeats) {
-      return false;
-    }
-
-    // Ensure seat exists at this index
-    const seat = this.seats[seatIndex];
-    if (!seat) {
-      return false;
-    }
-
-    // Check if seat is already taken
-    if (seat.getPlayer() !== null) {
-      return false;
-    }
+    const seat = this.getSeat(seatIndex);
+    if (!seat) return false;
 
     const player = this.players.get(playerId);
     if (!player) return false;
+
+    if(this.getPlayerAtSeat(seatIndex)) return false;
 
     // Check if player is already seated at too many seats
     const playerSeats = this.getPlayerSeatCount(playerId);
@@ -403,14 +391,13 @@ export class Table {
    * @returns True if the player was removed from the seat, false if the seat is invalid or no player is seated.
    */
   public removePlayerFromSeat(seatIndex: number): boolean {
-    if (seatIndex < 0 || seatIndex >= this.totalSeats) {
-      return false;
-    }
+    const seat = this.getSeat(seatIndex);
+    if (!seat) return false;
 
-    const player = this.seats[seatIndex].getPlayer();
+    const player = seat.getPlayer();
     if (!player) return false;
 
-    this.seats[seatIndex].setPlayer(null);
+    seat.setPlayer(null);
     this.eventBus.emit(TABLE_EVENTS.PLAYER_STOOD, player, this, seatIndex);
     return true;
   }
@@ -484,6 +471,12 @@ export class Table {
     if (seatIndex < 0 || seatIndex >= this.totalSeats) {
       return null;
     }
+
+    // Ensure seat exists at this index
+    if(!this.seats[seatIndex] || typeof this.seats[seatIndex] !== 'object') {
+      this.seats[seatIndex] = new Seat();
+    }
+    
     return this.seats[seatIndex];
   }
 
@@ -501,10 +494,10 @@ export class Table {
    * @returns The player object or null if the seat is invalid.
    */
   public getPlayerAtSeat(seatIndex: number): Player | null {
-    if (seatIndex < 0 || seatIndex >= this.totalSeats) {
-      return null;
-    }
-    return this.seats[seatIndex].getPlayer();
+    const seat = this.getSeat(seatIndex);
+    if (!seat?.getPlayer()) return null;
+
+    return seat.getPlayer();
   }
 
   /**
@@ -680,7 +673,9 @@ export class Table {
     
     // Find all seats the player is sitting at
     for (let i = 0; i < this.seats.length; i++) {
-      const seat = this.seats[i];
+      const seat = this.getSeat(i);
+      if (!seat) continue;
+
       const player = seat.getPlayer();
       
       if (player && player.id === playerId) {
