@@ -26,6 +26,7 @@ export class TableFactory {
    */
   public createTable(totalSeats: number, maxSeatsPerPlayer: number): Table {
     const table = new Table(this.eventBus, totalSeats, maxSeatsPerPlayer);
+    console.log(`Table created: ${table.id}`);
     this.eventBus.emit(TABLE_EVENTS.CREATED, table);
     return table;
   }
