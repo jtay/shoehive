@@ -54,7 +54,7 @@ export interface DefaultTableEventPayloadMap {
     [TABLE_EVENTS.PLAYER_LEFT]: [table: Table, player: Player];
     [TABLE_EVENTS.PLAYER_SAT]: [table: Table, player: Player, seatIndex: number];
     [TABLE_EVENTS.PLAYER_STOOD]: [table: Table, player: Player, seatIndex: number];
-    [TABLE_EVENTS.PLAYER_SIT_REQUEST]: [player: Player, table: Table, seatIndex: number, buyIn?: number];
+    [TABLE_EVENTS.PLAYER_SIT_REQUEST]: [player: Player, table: Table, seatIndex: number];
     [TABLE_EVENTS.PLAYER_STAND_REQUEST]: [player: Player, table: Table];
     [TABLE_EVENTS.DECK_CREATED]: [table: Table, deckId: string];
     [TABLE_EVENTS.DECK_SHUFFLED]: [table: Table, deckId: string];

@@ -126,6 +126,16 @@ export class GameManager {
   }
 
   /**
+   * Gets a table by its ID.
+   * 
+   * @param tableId The ID of the table.
+   * @returns The table, or undefined if not found.
+   */
+  public getTableById(tableId: string): Table | undefined {
+    return this.tables.get(tableId);
+  }
+
+  /**
    * Gets all tables in the game manager.
    * 
    * @returns An array of all tables.
