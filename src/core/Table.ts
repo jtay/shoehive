@@ -362,13 +362,24 @@ export class Table {
    * @returns True if the player was seated, false if the seat is invalid or already taken.
    */
   public sitPlayerAtSeat(playerId: string, seatIndex: number): boolean {
+    // Ensure seatIndex is a valid number
+    if (seatIndex === undefined || seatIndex === null || typeof seatIndex !== 'number') {
+      return false;
+    }
+    
     // Check if seat index is valid
     if (seatIndex < 0 || seatIndex >= this.totalSeats) {
       return false;
     }
 
+    // Ensure seat exists at this index
+    const seat = this.seats[seatIndex];
+    if (!seat) {
+      return false;
+    }
+
     // Check if seat is already taken
-    if (this.seats[seatIndex].getPlayer() !== null) {
+    if (seat.getPlayer() !== null) {
       return false;
     }
 
@@ -381,7 +392,7 @@ export class Table {
       return false;
     }
 
-    this.seats[seatIndex].setPlayer(player);
+    seat.setPlayer(player);
     this.eventBus.emit(TABLE_EVENTS.PLAYER_SAT, player, this, seatIndex);
     return true;
   }
@@ -412,8 +423,17 @@ export class Table {
   public getPlayerSeatCount(playerId: string): number {
     let count = 0;
     for (const seat of this.seats) {
-      if (seat.getPlayer()?.id === playerId) {
-        count++;
+      // Skip null or undefined seats
+      if (!seat) continue;
+      
+      try {
+        const player = seat.getPlayer();
+        if (player && player.id === playerId) {
+          count++;
+        }
+      } catch (error) {
+        console.error(`Error checking player in seat: ${error}`);
+        // Continue with the loop even if one seat has an error
       }
     }
     return count;

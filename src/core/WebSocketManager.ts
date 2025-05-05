@@ -204,6 +204,15 @@ export class WebSocketManager {
         return;
       }
       
+      // Validate seatIndex to ensure it's a valid number
+      if (seatIndex === undefined || seatIndex === null || typeof seatIndex !== 'number') {
+        player.sendMessage({
+          type: CLIENT_MESSAGE_TYPES.ERROR,
+          message: "Invalid seat index"
+        });
+        return;
+      }
+      
       try {
         // Emit a table event for seating the player and let the table handle it internally
         this.eventBus.emit(TABLE_EVENTS.PLAYER_SIT_REQUEST, player, table, seatIndex);
