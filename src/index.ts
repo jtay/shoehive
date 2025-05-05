@@ -111,8 +111,10 @@ export function createGameServer(
     if (table) {
       player.sendMessage({
         type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
-        state: table.getState()
+        data: table.getState()
       });
+    } else {
+      console.error(`Failed to get table state: ${data.tableId}`);
     }
   });
 
@@ -122,15 +124,22 @@ export function createGameServer(
     const table = gameManager.getAllTables().find(t => t.id === data.tableId);
     if (table) {
       table.addPlayer(player);
+    } else {
+      console.error(`Failed to join table: ${data.tableId}`);
     }
   });
   
   messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.CREATE, (player, data) => {
-    if (!data.gameId) return;
+    if (!data.gameId) {
+      console.error(`Failed to create table: ${data.gameId} (no gameId provided)`);
+      return;
+    }
     
     const table = lobby.createTable(data.gameId, data.options);
     if (table) {
       table.addPlayer(player);
+    } else {
+      console.error(`Failed to create table: ${data.gameId}`);
     }
   });
   
@@ -138,6 +147,8 @@ export function createGameServer(
     const table = player.getTable();
     if (table) {
       table.removePlayer(player.id);
+    } else {
+      console.error(`Failed to leave table: ${table?.id}`);
     }
   });
 
@@ -151,6 +162,8 @@ export function createGameServer(
     const table = player.getTable();
     if (table) {
       table.sitPlayerAtSeat(player.id, data.seatIndex);
+    } else {
+      console.error(`Failed to sit player at seat: ${data.seatIndex}`);
     }
   });
   
@@ -160,6 +173,8 @@ export function createGameServer(
     const table = player.getTable();
     if (table) {
       table.removePlayerFromSeat(data.seatIndex);
+    } else {
+      console.error(`Failed to stand up from seat: ${data.seatIndex}`);
     }
   });
   

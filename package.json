@@ -1,6 +1,6 @@
 {
   "name": "shoehive",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "WebSocket-based multiplayer game framework for real-time, event-driven gameplay",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

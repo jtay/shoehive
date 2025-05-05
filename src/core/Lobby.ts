@@ -79,7 +79,10 @@ export class Lobby {
    */
   public createTable(gameId: string, options?: Record<string, any>): Table | null {
     const gameDefinition = this.gameManager.getGameDefinition(gameId);
-    if (!gameDefinition) return null;
+    if (!gameDefinition) {
+      console.error(`Failed to create table: ${gameId} (game definition not found)`);
+      return null;
+    }
 
     const table = this.tableFactory.createTable(
       gameDefinition.defaultSeats,
@@ -95,6 +98,8 @@ export class Lobby {
     // Call the setupTable function if provided in game definition options
     if (gameDefinition.options?.setupTable && typeof gameDefinition.options.setupTable === 'function') {
       gameDefinition.options.setupTable(table);
+    } else {
+      console.error(`${gameId} (setupTable function not found). Continuing...`);
     }
 
     return table;
