@@ -75,53 +75,53 @@ export class Table {
     this.eventBus.emit(TABLE_EVENTS.CREATED, this);
   }
 
+  // Cached listener references for proper cleanup and memory leak prevention
+  private handleSitRequest = (player: Player, table: Table, seatIndex: number) => {
+    if (table.id !== this.id) return;
+    try {
+      const success = this.sitPlayerAtSeat(player.id, seatIndex);
+      if (!success) {
+        player.sendMessage({ type: CLIENT_MESSAGE_TYPES.ERROR, message: "Failed to sit at seat" });
+      }
+    } catch (error) {
+      console.error("Error handling sit request:", error);
+      player.sendMessage({
+        type: CLIENT_MESSAGE_TYPES.ERROR,
+        message: "Failed to sit at seat: " + (error instanceof Error ? error.message : "unknown error")
+      });
+    }
+  };
+
+  private handleStandRequest = (player: Player, table: Table) => {
+    if (table.id !== this.id) return;
+    try {
+      const success = this.standPlayerUp(player.id);
+      if (!success) {
+        player.sendMessage({ type: CLIENT_MESSAGE_TYPES.ERROR, message: "Failed to stand from seat" });
+      }
+    } catch (error) {
+      console.error("Error handling stand request:", error);
+      player.sendMessage({
+        type: CLIENT_MESSAGE_TYPES.ERROR,
+        message: "Failed to stand from seat: " + (error instanceof Error ? error.message : "unknown error")
+      });
+    }
+  };
+
   /**
    * Set up event listeners for this table
    */
   private setupEventListeners(): void {
-    // Handle player sit request
-    this.eventBus.on(TABLE_EVENTS.PLAYER_SIT_REQUEST, (player, table, seatIndex) => {
-      // Only handle events for this table
-      if (table.id !== this.id) return;
-      
-      try {
-        const success = this.sitPlayerAtSeat(player.id, seatIndex);
-        if (!success) {
-          player.sendMessage({
-            type: CLIENT_MESSAGE_TYPES.ERROR,
-            message: "Failed to sit at seat"
-          });
-        }
-      } catch (error) {
-        console.error("Error handling sit request:", error);
-        player.sendMessage({
-          type: CLIENT_MESSAGE_TYPES.ERROR,
-          message: "Failed to sit at seat: " + (error instanceof Error ? error.message : "unknown error")
-        });
-      }
-    });
-    
-    // Handle player stand request
-    this.eventBus.on(TABLE_EVENTS.PLAYER_STAND_REQUEST, (player, table) => {
-      // Only handle events for this table
-      if (table.id !== this.id) return;
-      
-      try {
-        const success = this.standPlayerUp(player.id);
-        if (!success) {
-          player.sendMessage({
-            type: CLIENT_MESSAGE_TYPES.ERROR,
-            message: "Failed to stand from seat"
-          });
-        }
-      } catch (error) {
-        console.error("Error handling stand request:", error);
-        player.sendMessage({
-          type: CLIENT_MESSAGE_TYPES.ERROR,
-          message: "Failed to stand from seat: " + (error instanceof Error ? error.message : "unknown error")
-        });
-      }
-    });
+    this.eventBus.on(TABLE_EVENTS.PLAYER_SIT_REQUEST, this.handleSitRequest);
+    this.eventBus.on(TABLE_EVENTS.PLAYER_STAND_REQUEST, this.handleStandRequest);
+  }
+
+  /**
+   * Destroys the table by safely unbinding all event listeners to prevent severe memory leaks.
+   */
+  public destroy(): void {
+    this.eventBus.off(TABLE_EVENTS.PLAYER_SIT_REQUEST, this.handleSitRequest);
+    this.eventBus.off(TABLE_EVENTS.PLAYER_STAND_REQUEST, this.handleStandRequest);
   }
 
   /*
@@ -539,24 +539,28 @@ export class Table {
    * Broadcasts a TABLE_EVENTS.STATE_UPDATED event that can be used by other components.
    */
   public broadcastTableState(): void {
-    const tableState = this.getTableState();
-    this.broadcastMessage({
-      type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
-      data: tableState
-    });
-    
-    // Also emit an event that can be used by other components
-    this.eventBus.emit(TABLE_EVENTS.STATE_UPDATED, this, tableState);
+    // Generate specialized payloads dynamically so players can view their own proprietary hands
+    for (const player of this.players.values()) {
+      const personalTableState = this.getTableState(player.id);
+      player.sendMessage({
+        type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
+        data: personalTableState
+      });
+    }
+
+    // Emit a generic visibility state that can be used by other non-player components
+    const generalTableState = this.getTableState();
+    this.eventBus.emit(TABLE_EVENTS.STATE_UPDATED, this, generalTableState);
   }
 
   /**
    * Gets the complete table state including all attributes and game state.
-   * This is used for players who are at the table and need full information.
-   * Emits a TABLE_EVENTS.STATE_UPDATED event that can be used by other components.
+   * Modifies output arrays to reveal hidden cards strictly to their seated owner.
    * 
-   * @returns The complete table state.
+   * @param playerId An optional playerId. If matched against a seat owner, returns proprietary hidden cards.
+   * @returns The localized complete table state.
    */
-  public getTableState(): any {
+  public getTableState(playerId?: string): any {
     return {
       id: this.id,
       state: this.state,
@@ -566,7 +570,12 @@ export class Table {
           attributes: seat.getPlayer()!.getAttributes()
         } : null,
         hands: Array.from(seat.getAllHands() || new Map()).reduce((obj, [key, hand]) => {
-          obj[key] = hand.getVisibleState();
+          // If the requester owns the seat, map full visibility array
+          if (playerId && seat.getPlayer()?.id === playerId) {
+            obj[key] = hand.getFullState();
+          } else {
+            obj[key] = hand.getVisibleState();
+          }
           return obj;
         }, {} as Record<string, any>)
       })),

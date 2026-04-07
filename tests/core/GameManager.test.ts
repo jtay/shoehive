@@ -19,7 +19,8 @@ jest.mock('../../src/core/Table', () => {
       getTableMetadata: jest.fn().mockReturnValue({
         id: 'mock-table-id',
         gameId: 'test-game'
-      })
+      }),
+      destroy: jest.fn()
     }))
   };
 });

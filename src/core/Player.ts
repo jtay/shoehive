@@ -55,6 +55,16 @@ export class Player {
     }
   }
 
+  /**
+   * Updates the socket connection for this player.
+   * Useful for handling reconnections without losing player state.
+   * @param socket The new WebSocket connection
+   */
+  public setSocket(socket: WebSocket.WebSocket): void {
+    this.socket = socket;
+    this.setupSocketListeners();
+  }
+
   public setTable(table: Table | null): void {
     this.table = table;
   }

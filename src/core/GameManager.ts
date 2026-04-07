@@ -92,6 +92,9 @@ export class GameManager {
       this.tablesByGame.get(gameId)?.delete(tableId);
     }
 
+    // Sever internal event loops permanently to prevent heap overflow
+    table.destroy();
+    
     this.tables.delete(tableId);
   }
 

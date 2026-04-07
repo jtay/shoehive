@@ -135,4 +135,19 @@ export class Hand {
       attributes: Object.fromEntries(this.attributes.entries())
     };
   }
+
+  /**
+   * Returns a complete representation of the hand, including hidden cards.
+   * This should ONLY be sent to the player who owns this hand.
+   * 
+   * @returns A complete representation of the hand.
+   */
+  public getFullState(): any {
+    return {
+      id: this.id,
+      cards: this.getCards(),
+      hiddenCardCount: this.getHiddenCards().length,
+      attributes: Object.fromEntries(this.attributes.entries())
+    };
+  }
 } 

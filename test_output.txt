@@ -1,0 +1,609 @@
+
+> shoehive@0.9.5 test
+> jest
+
+FAIL tests/core/GameManager.test.ts
+  GameManager
+    ✓ should register a game definition (3 ms)
+    ✓ should unregister a game definition
+    ✓ should handle TABLE_CREATED event (1 ms)
+    ✕ should handle TABLE_EMPTY event
+    ✓ should get available games
+
+  ● GameManager › should handle TABLE_EMPTY event
+
+    TypeError: table.destroy is not a function
+
+      94 |
+      95 |     // Sever internal event loops permanently to prevent heap overflow
+    > 96 |     table.destroy();
+         |           ^
+      97 |     
+      98 |     this.tables.delete(tableId);
+      99 |   }
+
+      at GameManager.destroy [as removeTable] (src/core/GameManager.ts:96:11)
+      at EventEmitter.removeTable (src/core/GameManager.ts:54:12)
+      at EventBus.call (src/events/EventBus.ts:86:38)
+      at Object.<anonymous> (tests/core/GameManager.test.ts:116:14)
+
+  console.error
+    Error processing message: SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+        at JSON.parse (<anonymous>)
+        at MessageRouter.parse [as processMessage] (/Users/susan/Personal/shoehive/src/events/MessageRouter.ts:195:28)
+        at Object.<anonymous> (/Users/susan/Personal/shoehive/tests/events/MessageRouter.test.ts:88:19)
+        at Promise.then.completed (/Users/susan/Personal/shoehive/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/susan/Personal/shoehive/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/susan/Personal/shoehive/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:105:5)
+        at _runTest (/Users/susan/Personal/shoehive/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/susan/Personal/shoehive/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/susan/Personal/shoehive/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/susan/Personal/shoehive/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/susan/Personal/shoehive/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/susan/Personal/shoehive/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/susan/Personal/shoehive/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/susan/Personal/shoehive/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/susan/Personal/shoehive/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      219 |       
+      220 |     } catch (error) {
+    > 221 |       console.error("Error processing message:", error);
+          |               ^
+      222 |       player.sendMessage({
+      223 |         type: CLIENT_MESSAGE_TYPES.ERROR,
+      224 |         message: "Failed to process message"
+
+      at MessageRouter.error [as processMessage] (src/events/MessageRouter.ts:221:15)
+      at Object.<anonymous> (tests/events/MessageRouter.test.ts:88:19)
+
+  console.error
+    test-game (setupTable function not found). Continuing...
+
+      102 |       gameDefinition.options.setupTable(table);
+      103 |     } else {
+    > 104 |       console.error(`${gameId} (setupTable function not found). Continuing...`);
+          |               ^
+      105 |     }
+      106 |
+      107 |     return table;
+
+      at Lobby.error [as createTable] (src/core/Lobby.ts:104:15)
+      at Object.<anonymous> (tests/core/Lobby.test.ts:238:25)
+
+  console.error
+    test-game (setupTable function not found). Continuing...
+
+      102 |       gameDefinition.options.setupTable(table);
+      103 |     } else {
+    > 104 |       console.error(`${gameId} (setupTable function not found). Continuing...`);
+          |               ^
+      105 |     }
+      106 |
+      107 |     return table;
+
+      at Lobby.error [as createTable] (src/core/Lobby.ts:104:15)
+      at Object.<anonymous> (tests/core/Lobby.test.ts:267:11)
+
+  console.error
+    Failed to create table: non-existent-game (game definition not found)
+
+      84 |     const gameDefinition = this.gameManager.getGameDefinition(gameId);
+      85 |     if (!gameDefinition) {
+    > 86 |       console.error(`Failed to create table: ${gameId} (game definition not found)`);
+         |               ^
+      87 |       return null;
+      88 |     }
+      89 |
+
+      at Lobby.error [as createTable] (src/core/Lobby.ts:86:15)
+      at Object.<anonymous> (tests/core/Lobby.test.ts:273:25)
+
+PASS tests/events/MessageRouter.test.ts
+  MessageRouter
+    ✓ should register a command handler (4 ms)
+    ✓ should emit an event if no handler is registered (1 ms)
+    ✓ should handle invalid JSON message format (22 ms)
+    ✓ should handle message missing action property
+    ✓ should handle message with non-string action property
+    ✓ should handle multiple registered command handlers
+    ✓ should allow overriding previously registered command handlers (1 ms)
+    Command handling
+      ✓ should register and handle commands correctly (30 ms)
+      ✓ should handle errors when no handler for action (1 ms)
+
+PASS tests/core/Lobby.test.ts
+  Lobby
+    ✓ should broadcast lobby state on table created event
+    ✓ should broadcast lobby state on updateLobbyState call
+    ✓ should broadcast lobby state on player attribute change
+    ✓ should create a table for a game (24 ms)
+    ✓ should create a table with options (1 ms)
+    ✓ should return null when creating a table for a non-existent game (1 ms)
+    ✓ should call setupTable function if provided in game definition
+    Attribute Management
+      ✓ should manage single attributes correctly (2 ms)
+      ✓ should emit ATTRIBUTE_CHANGED event when attribute is set
+      ✓ should not emit ATTRIBUTE_CHANGED event if notify is false (1 ms)
+      ✓ should manage multiple attributes at once
+      ✓ should emit ATTRIBUTES_CHANGED event when multiple attributes are set
+      ✓ should get all attributes (1 ms)
+
+PASS tests/core/TablePlayerSeat.test.ts
+  Table Player and Seat Management
+    Player and Seat Management
+      ✓ should add and remove players (3 ms)
+      ✓ should seat players at specific seat indices (1 ms)
+      ✓ should not allow player to occupy more than maxSeatsPerPlayer seats
+      ✓ should remove player from seat
+      ✓ should get seat and all seats
+    Broadcasting
+      ✓ should broadcast message to all players (1 ms)
+      ✓ should broadcast table state (2 ms)
+      ✓ should get table state and metadata (1 ms)
+
+PASS tests/core/Table.test.ts
+  Table
+    ✓ should initialize with correct ID and state (2 ms)
+    ✓ should generate a random ID if none provided (1 ms)
+    ✓ should add player successfully (2 ms)
+    ✓ should not add player if already at another table
+    ✓ should remove player successfully (1 ms)
+    ✓ should return false when removing non-existent player
+    ✓ should sit player at seat successfully (1 ms)
+    ✓ should not sit player if seat index is invalid
+    ✓ should not sit player if seat is already taken
+    ✓ should not sit player if not at table (3 ms)
+    ✓ should not sit player if already seated at max seats (1 ms)
+    ✓ should remove player from seat successfully
+    ✓ should return false when removing from invalid seat index
+    ✓ should return false when removing from empty seat
+    ✓ should count player seats correctly (1 ms)
+    ✓ should set and get state correctly
+    ✓ should broadcast message to all players (1 ms)
+    ✓ should manage attributes correctly
+    ✓ should get player at seat
+
+PASS tests/core/Player.test.ts
+  Player
+    ✓ should initialize with correct ID (1 ms)
+    ✓ should generate a random ID if none provided (1 ms)
+    ✓ should set up socket listeners on creation
+    ✓ should send messages correctly (1 ms)
+    ✓ should not send message if socket is not open
+    ✓ should get and set table correctly
+    ✓ should manage attributes correctly (1 ms)
+    ✓ should disconnect by closing socket
+    ✓ should not attempt to close already closed socket (1 ms)
+    ✓ should emit event when player disconnects
+    ✓ should get all attributes
+    ✓ should emit ATTRIBUTE_CHANGED event when attribute is set
+    ✓ should not emit ATTRIBUTE_CHANGED event if notify is false
+    ✓ should set multiple attributes at once
+
+PASS tests/transport/BasicServerTransportModule.test.ts
+  BasicServerTransportModule
+    ✓ should initialize with empty balances and bets (6 ms)
+    ✓ should set and get player balance
+    ✓ should update player balance on bet creation (1 ms)
+    ✓ should throw error when creating bet with insufficient balance (7 ms)
+    ✓ should mark bet as won and update balance (1 ms)
+    ✓ should mark bet as lost without changing balance
+    ✓ should throw error when marking non-existent bet (1 ms)
+    ✓ should throw error when marking already settled bet (1 ms)
+    ✓ should store metadata with bets (2 ms)
+    ✓ should get only bets for specific player
+
+PASS tests/core/TableExtended.test.ts
+  Table Extended Tests
+    getHandAtSeat and getAllHandsAtSeat methods
+      ✓ should get a hand at a specific seat (2 ms)
+      ✓ should return null when getting a hand from an invalid seat index (1 ms)
+      ✓ should get all hands at a specific seat (39 ms)
+      ✓ should return null when getting all hands from an invalid seat index (18 ms)
+    Deck operations
+      ✓ should create a deck (3 ms)
+      ✓ should create a deck with multiple decks
+      ✓ should deal a card to a seat (1 ms)
+      ✓ should not deal a card when no deck exists
+      ✓ should not deal a card to an invalid seat
+      ✓ should deal a card to a specific hand
+      ✓ should handle dealing when hand does not exist
+      ✓ should deal a card face down
+      ✓ should shuffle the deck (1 ms)
+      ✓ should not shuffle when no deck exists
+    Hand management
+      ✓ should add a hand to a seat
+      ✓ should not add a hand to an invalid seat
+      ✓ should not add a hand that already exists
+      ✓ should remove a hand from a seat (1 ms)
+      ✓ should not remove the main hand
+      ✓ should not remove a hand from an invalid seat
+      ✓ should clear a hand at a seat
+      ✓ should not clear a hand at an invalid seat (1 ms)
+      ✓ should clear a specific hand at a seat
+      ✓ should clear multiple hands at a seat
+    Attribute operations
+      ✓ should set multiple attributes at once with notification (1 ms)
+      ✓ should set multiple attributes at once without notification
+      ✓ should update attributes and emit event
+      ✓ should get table state with seat details (1 ms)
+      ✓ should get table metadata
+
+  console.log
+    Table created: 285daba5-82a0-4ede-ad7c-effcbdb53e84
+
+      at TableFactory.log [as createTable] (src/core/TableFactory.ts:29:13)
+
+  console.log
+    Table created: 6dbe8e95-a076-4fb0-81a0-7c2f3a7a98f7
+
+      at TableFactory.log [as createTable] (src/core/TableFactory.ts:29:13)
+
+  console.error
+    test-game (setupTable function not found). Continuing...
+
+      102 |       gameDefinition.options.setupTable(table);
+      103 |     } else {
+    > 104 |       console.error(`${gameId} (setupTable function not found). Continuing...`);
+          |               ^
+      105 |     }
+      106 |
+      107 |     return table;
+
+      at Lobby.error [as createTable] (src/core/Lobby.ts:104:15)
+      at Object.<anonymous> (tests/core/GameManagerAdvanced.test.ts:71:26)
+
+  console.log
+    Table created: c98505c5-5aea-4929-89ff-7d184012792a
+
+      at TableFactory.log [as createTable] (src/core/TableFactory.ts:29:13)
+
+  console.error
+    test-game (setupTable function not found). Continuing...
+
+      102 |       gameDefinition.options.setupTable(table);
+      103 |     } else {
+    > 104 |       console.error(`${gameId} (setupTable function not found). Continuing...`);
+          |               ^
+      105 |     }
+      106 |
+      107 |     return table;
+
+      at Lobby.error [as createTable] (src/core/Lobby.ts:104:15)
+      at Object.<anonymous> (tests/core/GameManagerAdvanced.test.ts:72:26)
+
+  console.log
+    Table created: 84733cb0-9f86-46a7-a5f1-016d856be048
+
+      at TableFactory.log [as createTable] (src/core/TableFactory.ts:29:13)
+
+  console.error
+    test-game (setupTable function not found). Continuing...
+
+      102 |       gameDefinition.options.setupTable(table);
+      103 |     } else {
+    > 104 |       console.error(`${gameId} (setupTable function not found). Continuing...`);
+          |               ^
+      105 |     }
+      106 |
+      107 |     return table;
+
+      at Lobby.error [as createTable] (src/core/Lobby.ts:104:15)
+      at Object.<anonymous> (tests/core/GameManagerAdvanced.test.ts:73:26)
+
+PASS tests/events/EventBusAdvanced.test.ts
+  Advanced EventBus Tests
+    ✓ should enable and disable debug monitoring
+    ✓ should filter events with custom filter function (1 ms)
+    ✓ should use custom logger function
+    ✓ should handle all parameter combinations for debugMonitor
+    ✓ should count listeners correctly when debug monitoring is enabled/disabled
+
+  console.log
+    Table created: 4b6990b4-5831-433b-aac6-35799fec5959
+
+      at TableFactory.log [as createTable] (src/core/TableFactory.ts:29:13)
+
+  console.log
+    Table created: 540af586-19c8-47f4-b5c8-ef510ade5190
+
+      at TableFactory.log [as createTable] (src/core/TableFactory.ts:29:13)
+
+  console.log
+    Table created: 0e256a4f-76a5-479b-b009-b7789da86b7f
+
+      at TableFactory.log [as createTable] (src/core/TableFactory.ts:29:13)
+
+PASS tests/core/TableUncovered.test.ts
+  Table Uncovered Lines Tests
+    dealCardToHand method
+      ✓ should deal a card directly to a hand object (5 ms)
+      ✓ should return false when dealing a card to hand with no deck (1 ms)
+      ✓ should return false when no card can be drawn from empty deck (2 ms)
+    removePlayer method
+      ✓ should emit TABLE_EVENTS.EMPTY when last player is removed
+      ✓ should remove player from all seats they occupy (1 ms)
+    table state and metadata methods
+      ✓ should include attributes in table state
+      ✓ should include player count and game information in metadata (2 ms)
+    removeAttribute method
+      ✓ should remove an attribute and emit an event
+      ✓ should handle removing non-existent attributes (1 ms)
+
+  console.log
+    Table created: 0694f1da-ed48-4499-88d3-6f7451969d9b
+
+      at TableFactory.log [as createTable] (src/core/TableFactory.ts:29:13)
+
+PASS tests/core/Seat.test.ts
+  Seat
+    ✓ should initialize with a main hand (1 ms)
+    ✓ should set and get player
+    ✓ should add a hand
+    ✓ should not add a hand if it already exists
+    ✓ should remove a hand (1 ms)
+    ✓ should not remove the main hand
+    ✓ should not remove a non-existent hand
+    ✓ should get a hand
+    ✓ should return null for non-existent hand
+    ✓ should get all hands
+    ✓ should clear a hand
+    ✓ should not clear a non-existent hand (1 ms)
+    ✓ should clear all hands
+    ✓ should set and get attributes
+    ✓ should check if an attribute exists
+    ✓ should get all attributes
+    ✓ should set multiple attributes at once
+    ✓ should remove an attribute
+    ✓ should check if a player can modify the seat
+    ✓ should return false for canPlayerModify if no player is set
+
+  console.error
+    test-game (setupTable function not found). Continuing...
+
+      102 |       gameDefinition.options.setupTable(table);
+      103 |     } else {
+    > 104 |       console.error(`${gameId} (setupTable function not found). Continuing...`);
+          |               ^
+      105 |     }
+      106 |
+      107 |     return table;
+
+      at Lobby.error [as createTable] (src/core/Lobby.ts:104:15)
+      at Object.<anonymous> (tests/core/GameManagerAdvanced.test.ts:97:25)
+
+  console.log
+    Table created: 6e3d3be2-fafb-4a61-bffa-6df5e99cdb8c
+
+      at TableFactory.log [as createTable] (src/core/TableFactory.ts:29:13)
+
+  console.error
+    test-game (setupTable function not found). Continuing...
+
+      102 |       gameDefinition.options.setupTable(table);
+      103 |     } else {
+    > 104 |       console.error(`${gameId} (setupTable function not found). Continuing...`);
+          |               ^
+      105 |     }
+      106 |
+      107 |     return table;
+
+      at Lobby.error [as createTable] (src/core/Lobby.ts:104:15)
+      at Object.<anonymous> (tests/core/GameManagerAdvanced.test.ts:124:25)
+
+  console.log
+    Table created: 3f56e322-0d38-48fb-b88c-b6a5e1e0afb1
+
+      at TableFactory.log [as createTable] (src/core/TableFactory.ts:29:13)
+
+  console.error
+    game-1 (setupTable function not found). Continuing...
+
+      102 |       gameDefinition.options.setupTable(table);
+      103 |     } else {
+    > 104 |       console.error(`${gameId} (setupTable function not found). Continuing...`);
+          |               ^
+      105 |     }
+      106 |
+      107 |     return table;
+
+      at Lobby.error [as createTable] (src/core/Lobby.ts:104:15)
+      at Object.<anonymous> (tests/core/GameManagerAdvanced.test.ts:147:26)
+
+  console.log
+    Table created: 88f7d030-eaa9-442b-beaf-96d93421c27a
+
+      at TableFactory.log [as createTable] (src/core/TableFactory.ts:29:13)
+
+  console.error
+    game-1 (setupTable function not found). Continuing...
+
+      102 |       gameDefinition.options.setupTable(table);
+      103 |     } else {
+    > 104 |       console.error(`${gameId} (setupTable function not found). Continuing...`);
+          |               ^
+      105 |     }
+      106 |
+      107 |     return table;
+
+      at Lobby.error [as createTable] (src/core/Lobby.ts:104:15)
+      at Object.<anonymous> (tests/core/GameManagerAdvanced.test.ts:148:26)
+
+  console.log
+    Table created: abdb7ce0-b141-48fd-aa9c-800261e1601e
+
+      at TableFactory.log [as createTable] (src/core/TableFactory.ts:29:13)
+
+  console.error
+    game-2 (setupTable function not found). Continuing...
+
+      102 |       gameDefinition.options.setupTable(table);
+      103 |     } else {
+    > 104 |       console.error(`${gameId} (setupTable function not found). Continuing...`);
+          |               ^
+      105 |     }
+      106 |
+      107 |     return table;
+
+      at Lobby.error [as createTable] (src/core/Lobby.ts:104:15)
+      at Object.<anonymous> (tests/core/GameManagerAdvanced.test.ts:149:26)
+
+PASS tests/core/GameManagerAdvanced.test.ts
+  Advanced GameManager Tests
+    ✓ should create multiple tables for the same game (18 ms)
+    ✓ should remove tables when they become empty (4 ms)
+    ✓ should handle non-existent game when getting tables
+    ✓ should explicitly remove a table (1 ms)
+    ✓ should track tables correctly when games are unregistered (2 ms)
+
+PASS tests/core/TableCards.test.ts
+  Table Card Functionality
+    Deck Management
+      ✓ should create a deck (46 ms)
+      ✓ should create a deck with multiple decks (1 ms)
+      ✓ should shuffle the deck (1 ms)
+      ✓ should draw a card from the deck
+    Seat Hands Management
+      ✓ should have main hand for each seat by default (1 ms)
+      ✓ should add a new hand to a seat
+      ✓ should not add duplicate hand id
+      ✓ should not add hand to invalid seat (1 ms)
+      ✓ should remove a hand from a seat
+      ✓ should not remove main hand
+      ✓ should not remove hand from invalid seat (1 ms)
+      ✓ should get all hands at a seat
+      ✓ should clear a hand at a seat
+      ✓ should not clear hand on invalid seat (1 ms)
+      ✓ should not clear nonexistent hand
+      ✓ should clear all hands
+    Card Dealing
+      ✓ should deal a card to a seat (1 ms)
+      ✓ should deal a hidden card to a seat
+      ✓ should deal card to specific hand
+      ✓ should create hand if it does not exist
+      ✓ should not deal card if no deck exists (1 ms)
+      ✓ should not deal card to invalid seat
+      ✓ should not deal card if deck is empty
+
+PASS tests/events/EventBus.test.ts
+  EventBus
+    ✓ should emit and receive events
+    ✓ should handle multiple listeners for the same event (1 ms)
+    ✓ should handle once listener
+    ✓ should remove listener with off
+    ✓ should correctly report listener count
+    ✓ should handle predefined event constants
+    ✓ should handle custom events
+    ✓ should enable debug monitoring with default logger
+    ✓ should filter events in debug monitor
+    ✓ should use custom logger in debug monitor (1 ms)
+    ✓ should disable debug monitoring
+
+PASS tests/core/Card.test.ts
+  Card Types
+    ✓ CardSuit should have correct values (4 ms)
+    ✓ CardRank should have correct values
+  Hand
+    ✓ should initialize with default id (1 ms)
+    ✓ should initialize with custom id
+    ✓ should add and retrieve cards
+    ✓ should get only visible cards
+    ✓ should get only hidden cards (1 ms)
+    ✓ should remove card by index
+    ✓ should return null when removing invalid index
+    ✓ should clear all cards
+    ✓ should manage attributes correctly
+  Deck
+    ✓ should initialize with single deck of 52 cards (1 ms)
+    ✓ should initialize with multiple decks
+    ✓ should draw a card
+    ✓ should draw a hidden card
+    ✓ should draw multiple cards
+    ✓ should handle drawing more cards than available
+    ✓ should return null when drawing from empty deck
+    ✓ should add cards to discard pile
+    ✓ should reset deck from discard pile (1 ms)
+    ✓ should shuffle the deck
+
+PASS tests/events/EventTypes.test.ts
+  EventTypes
+    ✓ PLAYER_EVENTS should have all expected event names
+    ✓ TABLE_EVENTS should have all expected event names (1 ms)
+    ✓ LOBBY_EVENTS should have all expected event names
+    ✓ EVENTS should expose all event groups (1 ms)
+    ✓ should allow use of specific event types
+    ✓ should allow extending with custom events
+
+PASS tests/events/CustomEvents.test.ts
+  Custom Events Integration
+    ✓ should register and emit custom events alongside built-in events
+    ✓ should support one-time listeners for custom events
+    ✓ should remove listeners for custom events
+    ✓ should debug monitor custom events with filtering
+    ✓ should allow creation of game-specific event wrappers
+    ✓ should combine built-in and custom events in monitoring (2 ms)
+
+PASS tests/integration/GameServerIntegration.test.ts
+  Game Server Integration
+    ✓ should create a table and handle player interactions (45 ms)
+    ✓ should handle player disconnection and table cleanup (1 ms)
+    ✓ should handle bet creation and resolution using transport module (1 ms)
+    ✓ should handle player disconnection (1 ms)
+    ✓ should support configurable player attribute relevance (1 ms)
+
+PASS tests/core/WebSocketManager.test.ts
+  WebSocketManager
+    ✓ should initialize correctly (3 ms)
+    ✓ should handle new connections
+    ✓ should handle authentication (1 ms)
+    ✓ should reject connections with failed authentication (1 ms)
+    ✓ should process messages from socket
+    ✓ should distribute player updates (9 ms)
+    ✓ should handle bulk player updates (1 ms)
+    ✓ should not broadcast table state for non-relevant attributes (10 ms)
+    ✓ should handle lobby state updates (1 ms)
+    ✓ should handle player reconnection
+    ✓ should handle player timeouts and removal (3 ms)
+    ✓ should get player by ID
+    ✓ should disconnect player without timeout (1 ms)
+    ✓ should get and set reconnection timeout
+    ✓ should get disconnected players info
+
+--------------------------------|---------|----------|---------|---------|---------------------------------------------------------------------------------------------------------
+File                            | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                                                       
+--------------------------------|---------|----------|---------|---------|---------------------------------------------------------------------------------------------------------
+All files                       |   82.04 |    71.15 |   84.47 |   82.94 |                                                                                                         
+ core                           |   81.81 |    69.69 |   84.86 |   83.41 |                                                                                                         
+  GameManager.ts                |      95 |       75 |   93.33 |   97.36 | 140                                                                                                     
+  Lobby.ts                      |   92.98 |    73.33 |   93.75 |   98.14 | 202                                                                                                     
+  Player.ts                     |    87.5 |      100 |      75 |   89.74 | 40-49,64-65                                                                                             
+  Seat.ts                       |     100 |    88.88 |     100 |     100 | 98                                                                                                      
+  Table.ts                      |   85.03 |    76.59 |    91.3 |   87.05 | 71,80-88,96-104,245-246,444,499,637,702-719                                                             
+  TableFactory.ts               |     100 |      100 |     100 |     100 |                                                                                                         
+  WebSocketManager.ts           |   67.17 |     52.3 |   68.29 |   67.87 | 73-74,84-85,110-114,121-136,144-167,171-190,198-223,231-247,274-277,289,295,319,353,360,471-472,509,635 
+ core/card                      |   97.72 |    95.83 |     100 |   97.46 |                                                                                                         
+  Deck.ts                       |     100 |      100 |     100 |     100 |                                                                                                         
+  Hand.ts                       |    91.3 |       80 |     100 |   90.47 | 78-79                                                                                                   
+  index.ts                      |     100 |      100 |     100 |     100 |                                                                                                         
+  types.ts                      |     100 |      100 |     100 |     100 |                                                                                                         
+ core/commands                  |     100 |      100 |     100 |     100 |                                                                                                         
+  InboundClientCommandTypes.ts  |     100 |      100 |     100 |     100 |                                                                                                         
+  OutboundClientMessageTypes.ts |     100 |      100 |     100 |     100 |                                                                                                         
+  index.ts                      |     100 |      100 |     100 |     100 |                                                                                                         
+ events                         |   61.16 |       50 |   59.25 |   60.39 |                                                                                                         
+  EventBus.ts                   |     100 |      100 |    87.5 |     100 |                                                                                                         
+  EventTypes.ts                 |     100 |      100 |     100 |     100 |                                                                                                         
+  LobbyEvents.ts                |     100 |      100 |     100 |     100 |                                                                                                         
+  MessageRouter.ts              |   43.66 |    27.77 |    37.5 |   43.66 | 45,56-63,72,82-90,95-103,113-121,126-135,140-148,153-170,175-184                                        
+  PlayerEvents.ts               |     100 |      100 |     100 |     100 |                                                                                                         
+  TableEvents.ts                |     100 |      100 |     100 |     100 |                                                                                                         
+ transport/implementations      |     100 |    91.66 |     100 |     100 |                                                                                                         
+  BasicServerTransportModule.ts |     100 |    91.66 |     100 |     100 | 96                                                                                                      
+--------------------------------|---------|----------|---------|---------|---------------------------------------------------------------------------------------------------------
+Test Suites: 1 failed, 18 passed, 19 total
+Tests:       1 failed, 232 passed, 233 total
+Snapshots:   0 total
+Time:        1.833 s, estimated 3 s
+Ran all test suites.

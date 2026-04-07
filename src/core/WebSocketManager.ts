@@ -463,15 +463,8 @@ export class WebSocketManager {
       // Disconnect existing socket if any
       existingPlayer.disconnect();
       
-      // Create new player with the existing ID
-      const player = new Player(socket, this.eventBus, playerId);
-      this.players.set(playerId, player);
-      
-      // If the player was in a table, reconnect them
-      const previousTable = existingPlayer.getTable();
-      if (previousTable) {
-        player.setTable(previousTable);
-      }
+      // Re-bind the socket connection directly entirely bypassing new object creation
+      existingPlayer.setSocket(socket);
       
       // Clear any existing disconnect timeout for this player
       if (this.disconnectionTimeouts.has(playerId)) {
@@ -479,8 +472,8 @@ export class WebSocketManager {
         this.disconnectionTimeouts.delete(playerId);
       }
       
-      this.eventBus.emit(PLAYER_EVENTS.RECONNECTED, player);
-      return player;
+      this.eventBus.emit(PLAYER_EVENTS.RECONNECTED, existingPlayer);
+      return existingPlayer;
     } else {
       // Create new player
       const player = new Player(socket, this.eventBus, playerId || undefined);

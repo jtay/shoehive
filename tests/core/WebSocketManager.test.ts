@@ -140,8 +140,10 @@ describe('WebSocketManager', () => {
     // Verify player was sent messages with appropriate types
     expect(mockPlayer.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
-      id: 'test-player',
-      attributes: {}
+      data: expect.objectContaining({
+        id: 'test-player',
+        attributes: {}
+      })
     }));
     
     // Should also send lobby state
@@ -398,7 +400,8 @@ describe('WebSocketManager', () => {
       getTable: jest.fn().mockReturnValue(null),
       disconnect: jest.fn(),
       getAttributes: jest.fn().mockReturnValue({}),
-      onDisconnect: jest.fn().mockReturnThis()
+      onDisconnect: jest.fn().mockReturnThis(),
+      setSocket: jest.fn()
     };
     
     const mockPlayer2 = {
@@ -408,7 +411,8 @@ describe('WebSocketManager', () => {
       getTable: jest.fn().mockReturnValue(null),
       disconnect: jest.fn(),
       getAttributes: jest.fn().mockReturnValue({}),
-      onDisconnect: jest.fn().mockReturnThis()
+      onDisconnect: jest.fn().mockReturnThis(),
+      setSocket: jest.fn()
     };
     
     // Set up Player mock to return different instances
@@ -437,8 +441,8 @@ describe('WebSocketManager', () => {
     // Original player should be disconnected
     expect(mockPlayer1.disconnect).toHaveBeenCalled();
     
-    // New player should be added with the same ID
-    expect(Player).toHaveBeenCalledWith(newMockSocket, eventBus, 'reconnect-player');
+    // Original player should receive the hot-swapped socket
+    expect(mockPlayer1.setSocket).toHaveBeenCalledWith(newMockSocket);
   });
   
   test('should handle player timeouts and removal', () => {
