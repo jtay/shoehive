@@ -65,6 +65,12 @@ export class Table {
     // Listen for player sit and stand request events
     this.setupEventListeners();
     
+    // Set initial attributes without emitting events yet
+    this.attributes.set("gameId", this.gameId);
+    if (this.options && Object.keys(this.options).length > 0) {
+      this.attributes.set("options", this.options);
+    }
+    
     // Emit table created event
     this.eventBus.emit(TABLE_EVENTS.CREATED, this);
   }
@@ -228,8 +234,24 @@ export class Table {
     const card = this.deck.drawCard(true);
     if (!card) return false;
 
+    // Find the seat index for this hand
+    let seatIndex = -1;
+    for (let i = 0; i < this.seats.length; i++) {
+        const seat = this.getSeat(i);
+        if (seat) {
+            // Check all hands at this seat
+            for (const [_, h] of seat.getAllHands()) {
+                if (h === hand) {
+                    seatIndex = i;
+                    break;
+                }
+            }
+        }
+        if (seatIndex !== -1) break;
+    }
+
     hand.addCard(card);
-    this.eventBus.emit(TABLE_EVENTS.CARD_DEALT, this, card, hand.getId());
+    this.eventBus.emit(TABLE_EVENTS.CARD_DEALT, this, seatIndex, card, hand.getId());
     return true;
   }
 
@@ -577,8 +599,7 @@ export class Table {
    * @param value - The value of the attribute to set.
    */
   public setAttribute(key: string, value: any): void {
-    this.attributes.set(key, value);
-    this.eventBus.emit(TABLE_EVENTS.ATTRIBUTE_CHANGED, this, key, value);
+    this.setAttributes({ [key]: value });
   }
 
   /**

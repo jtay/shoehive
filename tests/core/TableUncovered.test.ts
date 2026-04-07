@@ -54,6 +54,7 @@ describe('Table Uncovered Lines Tests', () => {
       expect(emitSpy).toHaveBeenCalledWith(
         TABLE_EVENTS.CARD_DEALT,
         table,
+        -1, // seatIndex is -1 because hand is not attached to a seat here
         expect.any(Object), // Card
         'test-hand'
       );
@@ -149,6 +150,7 @@ describe('Table Uncovered Lines Tests', () => {
       
       // Verify table state has the attributes
       expect(tableState.attributes).toEqual({
+        gameId: 'default',
         gameType: 'poker',
         betLimit: 100
       });

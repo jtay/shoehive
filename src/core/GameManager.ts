@@ -16,6 +16,8 @@ export interface GameDefinition {
   tableRelevantPlayerAttributes?: string[];
   // Define which player attributes should trigger a lobby update when changed
   lobbyRelevantPlayerAttributes?: string[];
+  // Define custom table attributes that should trigger a table state broadcast
+  relevantTableAttributes?: string[];
 }
 
 export class GameManager {

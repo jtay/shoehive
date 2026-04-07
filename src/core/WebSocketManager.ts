@@ -297,9 +297,7 @@ export class WebSocketManager {
     
     // Handle table attribute changes
     this.eventBus.on(TABLE_EVENTS.ATTRIBUTE_CHANGED, (table, key, value) => {
-      // Broadcast the updated table state to all players at the table
-      table.broadcastTableState();
-      
+      // Broadcast is handled by ATTRIBUTES_CHANGED batch event to avoid duplicates.
       // Update lobby if this is a metadata attribute that would affect the lobby display
       const metadataAttributes = ["gameId", "gameName", "options"];
       if (metadataAttributes.includes(key)) {
@@ -309,8 +307,19 @@ export class WebSocketManager {
     
     // Handle bulk table attribute changes
     this.eventBus.on(TABLE_EVENTS.ATTRIBUTES_CHANGED, (table, changedKeys, attributes) => {
-      // Table will handle broadcasting to its players in most cases
-      // but we need to check if we should update the lobby
+      const gameId = table.getAttribute("gameId");
+      const gameDefinition = gameId ? this.gameManager.getGameDefinition(gameId) : null;
+      
+      const relevantTableAttributes = gameDefinition?.relevantTableAttributes || [
+        "status", "turn", "pot", "board", "phase", "winner"
+      ];
+      
+      // Broadcast if any relevant attributes were changed
+      if (changedKeys.some((key: string) => relevantTableAttributes.includes(key))) {
+        table.broadcastTableState();
+      }
+      
+      // we need to check if we should update the lobby
       const metadataAttributes = ["gameId", "gameName", "options"];
       const shouldUpdateLobby = changedKeys.some((key: string) => metadataAttributes.includes(key));
       
@@ -330,8 +339,10 @@ export class WebSocketManager {
     // Send player details
     player.sendMessage({
       type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
-      id: player.id,
-      attributes: player.getAttributes()
+      data: {
+        id: player.id,
+        attributes: player.getAttributes()
+      }
     });
 
     // Send available games and tables (lobby state)

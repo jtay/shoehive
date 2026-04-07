@@ -210,8 +210,12 @@ export class MessageRouter {
         return;
       }
 
-      // Otherwise, treat it as an event
-      this.eventBus.emit(message.action, player, message);
+      // Otherwise, treat it as an event from the client
+      // We prefix with 'client:' to prevent spoofing of internal server events
+      const clientAction = message.action.startsWith("client:") 
+        ? message.action 
+        : `client:${message.action}`;
+      this.eventBus.emit(clientAction, player, message);
       
     } catch (error) {
       console.error("Error processing message:", error);

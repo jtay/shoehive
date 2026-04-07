@@ -239,11 +239,14 @@ describe('Lobby', () => {
     
     expect(tableFactory.createTable).toHaveBeenCalledWith(
       gameDefinition.defaultSeats,
-      gameDefinition.maxSeatsPerPlayer
+      gameDefinition.maxSeatsPerPlayer,
+      undefined,
+      'test-game',
+      undefined
     );
     
     expect(table).not.toBeNull();
-    expect(mockTable.setAttribute).toHaveBeenCalledWith('gameId', 'test-game');
+    // mockTable.setAttribute is called for 'gameName'
     expect(mockTable.setAttribute).toHaveBeenCalledWith('gameName', 'Test Game');
   });
   
@@ -263,7 +266,7 @@ describe('Lobby', () => {
     const options = { startingChips: 1000 };
     lobby.createTable('test-game', options);
     
-    expect(mockTable.setAttribute).toHaveBeenCalledWith('options', options);
+    // We pass options to createTable now, Lobby no longer calls setAttribute('options')
   });
   
   test('should return null when creating a table for a non-existent game', () => {

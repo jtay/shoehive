@@ -24,10 +24,9 @@ export class TableFactory {
    * @param maxSeatsPerPlayer - The maximum number of seats a player can occupy.
    * @returns The newly created table.
    */
-  public createTable(totalSeats: number, maxSeatsPerPlayer: number): Table {
-    const table = new Table(this.eventBus, totalSeats, maxSeatsPerPlayer);
+  public createTable(totalSeats: number, maxSeatsPerPlayer: number, id?: string, gameId?: string, options?: any): Table {
+    const table = new Table(this.eventBus, totalSeats, maxSeatsPerPlayer, id, gameId, options);
     console.log(`Table created: ${table.id}`);
-    this.eventBus.emit(TABLE_EVENTS.CREATED, table);
     return table;
   }
 } 

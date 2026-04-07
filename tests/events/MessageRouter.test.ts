@@ -80,7 +80,7 @@ describe('MessageRouter', () => {
     messageRouter.processMessage(mockPlayer, JSON.stringify(message));
     
     // Verify event was emitted
-    expect(emitSpy).toHaveBeenCalledWith('unhandled:action', mockPlayer, message);
+    expect(emitSpy).toHaveBeenCalledWith('client:unhandled:action', mockPlayer, message);
   });
   
   test('should handle invalid JSON message format', () => {
@@ -190,7 +190,7 @@ describe('MessageRouter', () => {
       
       // Verify that the event bus was used since no handler was found
       expect(emitSpy).toHaveBeenCalledWith(
-        'UNKNOWN_COMMAND',
+        'client:UNKNOWN_COMMAND',
         mockPlayer,
         expect.objectContaining({
           action: 'UNKNOWN_COMMAND',

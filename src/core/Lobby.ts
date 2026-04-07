@@ -65,8 +65,11 @@ export class Lobby {
     });
 
     // Listen for table attribute changes that might affect lobby display
-    this.eventBus.on(TABLE_EVENTS.ATTRIBUTE_CHANGED, () => {
-      this.broadcastLobbyUpdate();
+    this.eventBus.on(TABLE_EVENTS.ATTRIBUTE_CHANGED, (table: Table, key: string, value: any) => {
+      const metadataAttributes = ["gameId", "gameName", "options"];
+      if (metadataAttributes.includes(key)) {
+        this.broadcastLobbyUpdate();
+      }
     });
   }
 
@@ -86,14 +89,13 @@ export class Lobby {
 
     const table = this.tableFactory.createTable(
       gameDefinition.defaultSeats,
-      gameDefinition.maxSeatsPerPlayer
+      gameDefinition.maxSeatsPerPlayer,
+      undefined,
+      gameId,
+      options
     );
     
-    table.setAttribute("gameId", gameId);
     table.setAttribute("gameName", gameDefinition.name);
-    if (options) {
-      table.setAttribute("options", options);
-    }
 
     // Call the setupTable function if provided in game definition options
     if (gameDefinition.options?.setupTable && typeof gameDefinition.options.setupTable === 'function') {
