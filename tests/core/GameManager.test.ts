@@ -73,10 +73,10 @@ describe('GameManager', () => {
       maxSeatsPerPlayer: 1
     };
     
-    gameManager.registerGame(gameDefinition);
+    gameManager.registerGame({ gameDefinition: gameDefinition });
     
     // Verify game is registered by getting it back
-    expect(gameManager.getGameDefinition('test-game')).toEqual(gameDefinition);
+    expect(gameManager.getGameDefinition({ gameId: 'test-game' })).toEqual(gameDefinition);
   });
   
   test('should unregister a game definition', () => {
@@ -90,17 +90,17 @@ describe('GameManager', () => {
       maxSeatsPerPlayer: 1
     };
     
-    gameManager.registerGame(gameDefinition);
-    expect(gameManager.getGameDefinition('test-game')).toEqual(gameDefinition);
+    gameManager.registerGame({ gameDefinition: gameDefinition });
+    expect(gameManager.getGameDefinition({ gameId: 'test-game' })).toEqual(gameDefinition);
     
-    gameManager.unregisterGame('test-game');
+    gameManager.unregisterGame({ gameId: 'test-game' });
     
     // Verify game is unregistered
-    expect(gameManager.getGameDefinition('test-game')).toBeUndefined();
+    expect(gameManager.getGameDefinition({ gameId: 'test-game' })).toBeUndefined();
   });
   
   test('should handle TABLE_CREATED event', () => {
-    eventBus.emit(TABLE_EVENTS.CREATED, mockTable);
+    eventBus.emit(TABLE_EVENTS.CREATED, { mockTable });
     
     // Check that the table was added to the game manager
     expect(gameManager.getAllTables()).toContain(mockTable);
@@ -108,13 +108,13 @@ describe('GameManager', () => {
   
   test('should handle TABLE_EMPTY event', () => {
     // Add a table to the game manager through the event
-    eventBus.emit(TABLE_EVENTS.CREATED, mockTable);
+    eventBus.emit(TABLE_EVENTS.CREATED, { mockTable });
     
     // Check that it's in tables
     expect(gameManager.getAllTables()).toContain(mockTable);
     
     // Trigger the TABLE_EMPTY event
-    eventBus.emit(TABLE_EVENTS.EMPTY, mockTable);
+    eventBus.emit(TABLE_EVENTS.EMPTY, { mockTable });
     
     // Check that the table was removed
     expect(gameManager.getAllTables()).not.toContain(mockTable);
@@ -141,8 +141,8 @@ describe('GameManager', () => {
       maxSeatsPerPlayer: 1
     };
     
-    gameManager.registerGame(gameDefinition1);
-    gameManager.registerGame(gameDefinition2);
+    gameManager.registerGame({ gameDefinition: gameDefinition1 });
+    gameManager.registerGame({ gameDefinition: gameDefinition2 });
     
     const availableGames = gameManager.getAvailableGames();
     

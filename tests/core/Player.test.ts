@@ -58,7 +58,7 @@ describe('Player', () => {
     Object.defineProperty(WebSocket.WebSocket, 'OPEN', { value: 1 });
     
     const message = { type: 'test', data: 'message' };
-    player.sendMessage(message);
+    player.sendMessage({ message: message });
     
     expect(mockSocket.send).toHaveBeenCalledWith(JSON.stringify(message));
   });
@@ -69,7 +69,7 @@ describe('Player', () => {
     
     // Object.defineProperty(WebSocket.WebSocket, 'OPEN', { value: 1 });
     const message = { type: 'test' };
-    player.sendMessage(message);
+    player.sendMessage({ message: message });
     
     expect(mockSocket.send).not.toHaveBeenCalled();
   });
@@ -78,24 +78,24 @@ describe('Player', () => {
     expect(player.getTable()).toBeNull();
     
     const mockTable = {} as Table;
-    player.setTable(mockTable);
+    player.setTable({ table: mockTable });
     expect(player.getTable()).toBe(mockTable);
     
-    player.setTable(null);
+    player.setTable({ table: null });
     expect(player.getTable()).toBeNull();
   });
   
   test('should manage attributes correctly', () => {
-    expect(player.hasAttribute('score')).toBe(false);
+    expect(player.hasAttribute({ key: 'score' })).toBe(false);
     
-    player.setAttribute('score', 100);
-    expect(player.hasAttribute('score')).toBe(true);
-    expect(player.getAttribute('score')).toBe(100);
+    player.setAttribute({ key: 'score', value: 100 });
+    expect(player.hasAttribute({ key: 'score' })).toBe(true);
+    expect(player.getAttribute({ key: 'score' })).toBe(100);
     
-    player.setAttribute('score', 200);
-    expect(player.getAttribute('score')).toBe(200);
+    player.setAttribute({ key: 'score', value: 200 });
+    expect(player.getAttribute({ key: 'score' })).toBe(200);
     
-    expect(player.getAttribute('nonexistent')).toBeUndefined();
+    expect(player.getAttribute({ key: 'nonexistent' })).toBeUndefined();
   });
   
   test('should disconnect by closing socket', () => {
@@ -128,9 +128,9 @@ describe('Player', () => {
   });
   
   test('should get all attributes', () => {
-    player.setAttribute('name', 'Player1');
-    player.setAttribute('score', 100);
-    player.setAttribute('avatar', 'avatar1.png');
+    player.setAttribute({ key: 'name', value: 'Player1' });
+    player.setAttribute({ key: 'score', value: 100 });
+    player.setAttribute({ key: 'avatar', value: 'avatar1.png' });
     
     const attributes = player.getAttributes();
     expect(attributes).toEqual({
@@ -143,7 +143,7 @@ describe('Player', () => {
   test('should emit ATTRIBUTE_CHANGED event when attribute is set', () => {
     const spy = jest.spyOn(eventBus, 'emit');
     
-    player.setAttribute('status', 'ready');
+    player.setAttribute({ key: 'status', value: 'ready' });
     
     expect(spy).toHaveBeenCalledWith(
       PLAYER_EVENTS.ATTRIBUTE_CHANGED,
@@ -155,14 +155,14 @@ describe('Player', () => {
   
   test('should not emit ATTRIBUTE_CHANGED event if notify is false', () => {
     // Set initial attribute
-    player.setAttribute('status', 'ready');
+    player.setAttribute({ key: 'status', value: 'ready' });
     
     // Clear previous spy calls
     jest.clearAllMocks();
     const spy = jest.spyOn(eventBus, 'emit');
     
     // Set the same value but with notify=false
-    player.setAttribute('status', 'ready', false);
+    player.setAttribute({ key: 'status', value: 'ready', notify: false });
     
     // Event should not be emitted
     expect(spy).not.toHaveBeenCalled();
@@ -175,10 +175,10 @@ describe('Player', () => {
       isReady: true
     };
     
-    player.setAttributes(attributesObject);
+    player.setAttributes({ attributes: attributesObject });
     
-    expect(player.getAttribute('name')).toBe('Player1');
-    expect(player.getAttribute('score')).toBe(100);
-    expect(player.getAttribute('isReady')).toBe(true);
+    expect(player.getAttribute({ key: 'name' })).toBe('Player1');
+    expect(player.getAttribute({ key: 'score' })).toBe(100);
+    expect(player.getAttribute({ key: 'isReady' })).toBe(true);
   });
 }); 

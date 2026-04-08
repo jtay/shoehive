@@ -30,7 +30,7 @@ export class Player {
 
   private setupSocketListeners(): void {
     this.socket.on("close", () => {
-      this.eventBus.emit(PLAYER_EVENTS.DISCONNECTED, this);
+      this.eventBus.emit(PLAYER_EVENTS.DISCONNECTED, { table: this });
       
       // Call all disconnect callbacks
       this.disconnectCallbacks.forEach(callback => callback());
@@ -45,11 +45,11 @@ export class Player {
    * Register a callback to be called when the player disconnects
    * @param callback The function to call when the player disconnects
    */
-  public onDisconnect(callback: () => void): void {
+  public onDisconnect({ callback }: { callback: () => void }): void {
     this.disconnectCallbacks.push(callback);
   }
 
-  public sendMessage(message: any): void {
+  public sendMessage({ message }: { message: any }): void {
     if (this.socket.readyState === WebSocket.WebSocket.OPEN) {
       this.socket.send(JSON.stringify(message));
     }
@@ -60,12 +60,12 @@ export class Player {
    * Useful for handling reconnections without losing player state.
    * @param socket The new WebSocket connection
    */
-  public setSocket(socket: WebSocket.WebSocket): void {
+  public setSocket({ socket }: { socket: WebSocket.WebSocket }): void {
     this.socket = socket;
     this.setupSocketListeners();
   }
 
-  public setTable(table: Table | null): void {
+  public setTable({ table }: { table: Table | null }): void {
     this.table = table;
   }
 
@@ -80,11 +80,11 @@ export class Player {
    * @param value The attribute value
    * @param notify Whether to emit an event (defaults to true)
    */
-  public setAttribute(key: string, value: any, notify: boolean = true): void {
+  public setAttribute({ key, value, notify = true }: { key: string, value: any, notify?: boolean }): void {
     this.attributes.set(key, value);
     
     if (notify) {
-      this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, this, key, value);
+      this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, { table: this, key, value });
     }
   }
 
@@ -94,7 +94,7 @@ export class Player {
    * 
    * @param attributes Object containing attribute key-value pairs
    */
-  public setAttributes(attributes: Record<string, any>): void {
+  public setAttributes({ attributes }: { attributes: Record<string, any> }): void {
     const changedKeys: string[] = [];
     
     // Set all attributes first
@@ -105,11 +105,11 @@ export class Player {
     
     // Then emit a single event for all changes
     if (changedKeys.length > 0) {
-      this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTES_CHANGED, this, changedKeys, attributes);
+      this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTES_CHANGED, { table: this, changedKeys, attributes });
       
       // Also emit individual events for backward compatibility
       for (const key of changedKeys) {
-        this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, this, key, attributes[key]);
+        this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, { table: this, key, arg2: attributes[key] });
       }
     }
   }
@@ -119,7 +119,7 @@ export class Player {
    * @param key - The key of the attribute to get
    * @returns The value of the attribute, or undefined if it doesn't exist
    */
-  public getAttribute(key: string): any {
+  public getAttribute({ key }: { key: string }): any {
     return this.attributes.get(key);
   }
 
@@ -136,7 +136,7 @@ export class Player {
    * @param key - The key of the attribute to check
    * @returns True if the attribute exists, false otherwise
    */
-  public hasAttribute(key: string): boolean {
+  public hasAttribute({ key }: { key: string }): boolean {
     return this.attributes.has(key);
   }
 

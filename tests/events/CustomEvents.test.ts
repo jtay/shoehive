@@ -29,9 +29,9 @@ describe('Custom Events Integration', () => {
     const tablePlayerJoinedHandler = jest.fn();
     
     // Register handlers for built-in and custom events
-    eventBus.on(PLAYER_EVENTS.CONNECTED, playerConnectedHandler);
-    eventBus.on(POKER_EVENTS.HAND_DEALT, pokerHandDealtHandler);
-    eventBus.on(TABLE_EVENTS.PLAYER_JOINED, tablePlayerJoinedHandler);
+    eventBus.on({ event: PLAYER_EVENTS.CONNECTED, listener: playerConnectedHandler });
+    eventBus.on({ event: POKER_EVENTS.HAND_DEALT, listener: pokerHandDealtHandler });
+    eventBus.on({ event: TABLE_EVENTS.PLAYER_JOINED, listener: tablePlayerJoinedHandler });
     
     // Test data
     const player = { id: 'player1' };
@@ -39,9 +39,9 @@ describe('Custom Events Integration', () => {
     const cards = [{ suit: 'hearts', value: 'A' }, { suit: 'spades', value: 'K' }];
     
     // Emit events
-    eventBus.emit(PLAYER_EVENTS.CONNECTED, player);
-    eventBus.emit(POKER_EVENTS.HAND_DEALT, player, cards);
-    eventBus.emit(TABLE_EVENTS.PLAYER_JOINED, player, table);
+    eventBus.emit(PLAYER_EVENTS.CONNECTED, { player });
+    eventBus.emit(POKER_EVENTS.HAND_DEALT, { player, cards });
+    eventBus.emit(TABLE_EVENTS.PLAYER_JOINED, { player, table });
     
     // Verify all handlers were called with correct arguments
     expect(playerConnectedHandler).toHaveBeenCalledWith(player);
@@ -53,13 +53,13 @@ describe('Custom Events Integration', () => {
     const foldHandler = jest.fn();
     
     // Register a one-time handler
-    eventBus.once(POKER_EVENTS.PLAYER_FOLDED, foldHandler);
+    eventBus.once({ event: POKER_EVENTS.PLAYER_FOLDED, listener: foldHandler });
     
     const player = { id: 'player1' };
     
     // Emit the event twice
-    eventBus.emit(POKER_EVENTS.PLAYER_FOLDED, player);
-    eventBus.emit(POKER_EVENTS.PLAYER_FOLDED, player);
+    eventBus.emit(POKER_EVENTS.PLAYER_FOLDED, { player });
+    eventBus.emit(POKER_EVENTS.PLAYER_FOLDED, { player });
     
     // Handler should only be called once
     expect(foldHandler).toHaveBeenCalledTimes(1);
@@ -70,8 +70,8 @@ describe('Custom Events Integration', () => {
     const showdownHandler = jest.fn();
     
     // Register and then remove the handler
-    eventBus.on(POKER_EVENTS.SHOWDOWN, showdownHandler);
-    eventBus.off(POKER_EVENTS.SHOWDOWN, showdownHandler);
+    eventBus.on({ event: POKER_EVENTS.SHOWDOWN, listener: showdownHandler });
+    eventBus.off({ event: POKER_EVENTS.SHOWDOWN, listener: showdownHandler });
     
     // Emit the event
     eventBus.emit(POKER_EVENTS.SHOWDOWN, { players: [{ id: 'player1' }, { id: 'player2' }] });
@@ -84,13 +84,13 @@ describe('Custom Events Integration', () => {
     const mockLogger = jest.fn();
     
     // Only monitor poker events
-    eventBus.debugMonitor(true, (eventName) => eventName.startsWith('poker:'), mockLogger);
+    eventBus.debugMonitor({ enabled: true, filter: (eventName) => eventName.startsWith('poker:'), logger: mockLogger });
     
     // Emit both built-in and custom events
     eventBus.emit(PLAYER_EVENTS.CONNECTED, { id: 'player1' });
-    eventBus.emit(POKER_EVENTS.BETTING_ROUND_STARTED, { id: 'table1' }, 10);
+    eventBus.emit(POKER_EVENTS.BETTING_ROUND_STARTED, { arg0: { id: 'table1' }, arg1: 10 });
     eventBus.emit(TABLE_EVENTS.CREATED, { id: 'table2' });
-    eventBus.emit(POKER_EVENTS.PLAYER_RAISED, { id: 'player2' }, 20);
+    eventBus.emit(POKER_EVENTS.PLAYER_RAISED, { arg0: { id: 'player2' }, arg1: 20 });
     
     // Only poker events should be logged
     expect(mockLogger).toHaveBeenCalledTimes(2);
@@ -109,20 +109,20 @@ describe('Custom Events Integration', () => {
         this.eventBus = eventBus;
       }
       
-      public onHandDealt(listener: (player: any, cards: any[]) => void): void {
-        this.eventBus.on(POKER_EVENTS.HAND_DEALT, listener);
+      public onHandDealt({ listener }: { listener: (player: any, cards: any[]) => void }): void {
+        this.eventBus.on({ event: POKER_EVENTS.HAND_DEALT, listener: listener });
       }
       
-      public onBettingRoundStarted(listener: (table: any, minBet: number) => void): void {
-        this.eventBus.on(POKER_EVENTS.BETTING_ROUND_STARTED, listener);
+      public onBettingRoundStarted({ listener }: { listener: (table: any, minBet: number) => void }): void {
+        this.eventBus.on({ event: POKER_EVENTS.BETTING_ROUND_STARTED, listener: listener });
       }
       
-      public emitHandDealt(player: any, cards: any[]): void {
-        this.eventBus.emit(POKER_EVENTS.HAND_DEALT, player, cards);
+      public emitHandDealt({ player, cards }: { player: any, cards: any[] }): void {
+        this.eventBus.emit(POKER_EVENTS.HAND_DEALT, { player, cards });
       }
       
-      public emitBettingRoundStarted(table: any, minBet: number): void {
-        this.eventBus.emit(POKER_EVENTS.BETTING_ROUND_STARTED, table, minBet);
+      public emitBettingRoundStarted({ table, minBet }: { table: any, minBet: number }): void {
+        this.eventBus.emit(POKER_EVENTS.BETTING_ROUND_STARTED, { table, minBet });
       }
     }
     
@@ -138,12 +138,12 @@ describe('Custom Events Integration', () => {
     const handDealtListener = jest.fn();
     const bettingStartedListener = jest.fn();
     
-    pokerEvents.onHandDealt(handDealtListener);
-    pokerEvents.onBettingRoundStarted(bettingStartedListener);
+    pokerEvents.onHandDealt({ listener: handDealtListener });
+    pokerEvents.onBettingRoundStarted({ listener: bettingStartedListener });
     
     // Emit events through the wrapper
-    pokerEvents.emitHandDealt(player, cards);
-    pokerEvents.emitBettingRoundStarted(table, 25);
+    pokerEvents.emitHandDealt({ player: player, cards: cards });
+    pokerEvents.emitBettingRoundStarted({ table: table, minBet: 25 });
     
     // Verify listeners were called with correct arguments
     expect(handDealtListener).toHaveBeenCalledWith(player, cards);
@@ -166,13 +166,13 @@ describe('Custom Events Integration', () => {
     const tableCreatedHandler = jest.fn();
     const pokerShowdownHandler = jest.fn();
     
-    eventBus.on(combinedEvents.PLAYER.CONNECTED, playerConnectedHandler);
-    eventBus.on(combinedEvents.TABLE.CREATED, tableCreatedHandler);
-    eventBus.on(combinedEvents.POKER.SHOWDOWN, pokerShowdownHandler);
+    eventBus.on({ event: combinedEvents.PLAYER.CONNECTED, listener: playerConnectedHandler });
+    eventBus.on({ event: combinedEvents.TABLE.CREATED, listener: tableCreatedHandler });
+    eventBus.on({ event: combinedEvents.POKER.SHOWDOWN, listener: pokerShowdownHandler });
     
     // Emit events
-    eventBus.emit(combinedEvents.PLAYER.CONNECTED, player);
-    eventBus.emit(combinedEvents.TABLE.CREATED, table);
+    eventBus.emit(combinedEvents.PLAYER.CONNECTED, { player });
+    eventBus.emit(combinedEvents.TABLE.CREATED, { table });
     eventBus.emit(combinedEvents.POKER.SHOWDOWN, { players: [player] });
     
     // Verify all handlers were called

@@ -38,21 +38,21 @@ export class GameManager {
    * This listens for table creation and table emptying.
    */
   private setupEventListeners(): void {
-    this.eventBus.on(TABLE_EVENTS.CREATED, (table: Table) => {
-      this.tables.set(table.id, table);
-      
-      const gameId = table.getAttribute("gameId");
-      if (gameId) {
-        if (!this.tablesByGame.has(gameId)) {
-          this.tablesByGame.set(gameId, new Set());
-        }
-        this.tablesByGame.get(gameId)?.add(table.id);
-      }
-    });
+    this.eventBus.on({ event: TABLE_EVENTS.CREATED, listener: (table: Table) => {
+                this.tables.set(table.id, table);
+                
+                const gameId = table.getAttribute({ key: "gameId" });
+                if (gameId) {
+                  if (!this.tablesByGame.has(gameId)) {
+                    this.tablesByGame.set(gameId, new Set());
+                  }
+                  this.tablesByGame.get(gameId)?.add(table.id);
+                }
+              } });
 
-    this.eventBus.on(TABLE_EVENTS.EMPTY, (table: Table) => {
-      this.removeTable(table.id);
-    });
+    this.eventBus.on({ event: TABLE_EVENTS.EMPTY, listener: (table: Table) => {
+                this.removeTable({ tableId: table.id });
+              } });
   }
 
   /**
@@ -60,7 +60,7 @@ export class GameManager {
    * 
    * @param gameDefinition The game definition to register.
    */
-  public registerGame(gameDefinition: GameDefinition): void {
+  public registerGame({ gameDefinition }: { gameDefinition: GameDefinition }): void {
     this.games.set(gameDefinition.id, gameDefinition);
     this.tablesByGame.set(gameDefinition.id, new Set());
   }
@@ -70,11 +70,11 @@ export class GameManager {
    * 
    * @param gameId The ID of the game to unregister.
    */
-  public unregisterGame(gameId: string): void {
+  public unregisterGame({ gameId }: { gameId: string }): void {
     this.games.delete(gameId);
     // Remove all tables for this game
     const tablesToRemove = this.tablesByGame.get(gameId) || new Set();
-    tablesToRemove.forEach(tableId => this.removeTable(tableId));
+    tablesToRemove.forEach(tableId => this.removeTable({ tableId: tableId }));
     this.tablesByGame.delete(gameId);
   }
 
@@ -83,11 +83,11 @@ export class GameManager {
    * 
    * @param tableId The ID of the table to remove.
    */
-  public removeTable(tableId: string): void {
+  public removeTable({ tableId }: { tableId: string }): void {
     const table = this.tables.get(tableId);
     if (!table) return;
 
-    const gameId = table.getAttribute("gameId");
+    const gameId = table.getAttribute({ key: "gameId" });
     if (gameId) {
       this.tablesByGame.get(gameId)?.delete(tableId);
     }
@@ -113,7 +113,7 @@ export class GameManager {
    * @param gameId The ID of the game
    * @returns The game definition, or undefined if not found
    */
-  public getGameDefinition(gameId: string): GameDefinition | undefined {
+  public getGameDefinition({ gameId }: { gameId: string }): GameDefinition | undefined {
     return this.games.get(gameId);
   }
 
@@ -123,7 +123,7 @@ export class GameManager {
    * @param gameId The ID of the game.
    * @returns An array of tables for the game.
    */
-  public getTablesForGame(gameId: string): Table[] {
+  public getTablesForGame({ gameId }: { gameId: string }): Table[] {
     const tableIds = this.tablesByGame.get(gameId) || new Set();
     return Array.from(tableIds)
       .map(id => this.tables.get(id))
@@ -136,7 +136,7 @@ export class GameManager {
    * @param tableId The ID of the table.
    * @returns The table, or undefined if not found.
    */
-  public getTableById(tableId: string): Table | undefined {
+  public getTableById({ tableId }: { tableId: string }): Table | undefined {
     return this.tables.get(tableId);
   }
 

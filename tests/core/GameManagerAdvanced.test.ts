@@ -60,7 +60,7 @@ describe('Advanced GameManager Tests', () => {
       lobbyRelevantPlayerAttributes: ['name', 'avatar', ...customAttributes]
     };
     
-    gameManager.registerGame(gameDefinition);
+    gameManager.registerGame({ gameDefinition: gameDefinition });
     return gameDefinition;
   };
   
@@ -68,21 +68,21 @@ describe('Advanced GameManager Tests', () => {
     const gameDefinition = registerTestGame();
     
     // Create multiple tables for the same game
-    const table1 = lobby.createTable('test-game');
-    const table2 = lobby.createTable('test-game');
-    const table3 = lobby.createTable('test-game');
+    const table1 = lobby.createTable({ gameId: 'test-game' });
+    const table2 = lobby.createTable({ gameId: 'test-game' });
+    const table3 = lobby.createTable({ gameId: 'test-game' });
     
     expect(table1).not.toBeNull();
     expect(table2).not.toBeNull();
     expect(table3).not.toBeNull();
     
     // Manually trigger TABLE_CREATED event since our test isn't emitting it
-    eventBus.emit(TABLE_EVENTS.CREATED, table1!);
-    eventBus.emit(TABLE_EVENTS.CREATED, table2!);
-    eventBus.emit(TABLE_EVENTS.CREATED, table3!);
+    eventBus.emit(TABLE_EVENTS.CREATED, { arg0: table1! });
+    eventBus.emit(TABLE_EVENTS.CREATED, { arg0: table2! });
+    eventBus.emit(TABLE_EVENTS.CREATED, { arg0: table3! });
     
     // Check that we can get all tables for the game
-    const tablesForGame = gameManager.getTablesForGame('test-game');
+    const tablesForGame = gameManager.getTablesForGame({ gameId: 'test-game' });
     expect(tablesForGame.length).toBe(3);
     
     // Check that we can get all tables in general
@@ -94,26 +94,26 @@ describe('Advanced GameManager Tests', () => {
     const gameDefinition = registerTestGame();
     
     // Create a table
-    const table = lobby.createTable('test-game')!;
+    const table = lobby.createTable({ gameId: 'test-game' })!;
     expect(table).not.toBeNull();
     
     // Manually trigger TABLE_CREATED event
-    eventBus.emit(TABLE_EVENTS.CREATED, table);
+    eventBus.emit(TABLE_EVENTS.CREATED, { table });
     
     // Check that it's in the list of tables
-    let tablesForGame = gameManager.getTablesForGame('test-game');
+    let tablesForGame = gameManager.getTablesForGame({ gameId: 'test-game' });
     expect(tablesForGame.length).toBe(1);
     
     // Trigger the TABLE_EMPTY event
-    eventBus.emit(TABLE_EVENTS.EMPTY, table);
+    eventBus.emit(TABLE_EVENTS.EMPTY, { table });
     
     // Check that the table was removed
-    tablesForGame = gameManager.getTablesForGame('test-game');
+    tablesForGame = gameManager.getTablesForGame({ gameId: 'test-game' });
     expect(tablesForGame.length).toBe(0);
   });
   
   test('should handle non-existent game when getting tables', () => {
-    const tablesForNonExistentGame = gameManager.getTablesForGame('non-existent-game');
+    const tablesForNonExistentGame = gameManager.getTablesForGame({ gameId: 'non-existent-game' });
     expect(tablesForNonExistentGame).toEqual([]);
   });
   
@@ -121,21 +121,21 @@ describe('Advanced GameManager Tests', () => {
     const gameDefinition = registerTestGame();
     
     // Create a table
-    const table = lobby.createTable('test-game')!;
+    const table = lobby.createTable({ gameId: 'test-game' })!;
     expect(table).not.toBeNull();
     
     // Manually trigger TABLE_CREATED event
-    eventBus.emit(TABLE_EVENTS.CREATED, table);
+    eventBus.emit(TABLE_EVENTS.CREATED, { table });
     
     // Check that it's in the list of tables
-    let tablesForGame = gameManager.getTablesForGame('test-game');
+    let tablesForGame = gameManager.getTablesForGame({ gameId: 'test-game' });
     expect(tablesForGame.length).toBe(1);
     
     // Remove the table explicitly
-    gameManager.removeTable(table.id);
+    gameManager.removeTable({ tableId: table.id });
     
     // Check that the table was removed
-    tablesForGame = gameManager.getTablesForGame('test-game');
+    tablesForGame = gameManager.getTablesForGame({ gameId: 'test-game' });
     expect(tablesForGame.length).toBe(0);
   });
   
@@ -144,30 +144,30 @@ describe('Advanced GameManager Tests', () => {
     const game2 = registerTestGame('game-2', 'Game 2');
     
     // Create tables for both games
-    const table1 = lobby.createTable('game-1')!;
-    const table2 = lobby.createTable('game-1')!;
-    const table3 = lobby.createTable('game-2')!;
+    const table1 = lobby.createTable({ gameId: 'game-1' })!;
+    const table2 = lobby.createTable({ gameId: 'game-1' })!;
+    const table3 = lobby.createTable({ gameId: 'game-2' })!;
     
     // Manually trigger TABLE_CREATED events
-    eventBus.emit(TABLE_EVENTS.CREATED, table1);
-    eventBus.emit(TABLE_EVENTS.CREATED, table2);
-    eventBus.emit(TABLE_EVENTS.CREATED, table3);
+    eventBus.emit(TABLE_EVENTS.CREATED, { table1 });
+    eventBus.emit(TABLE_EVENTS.CREATED, { table2 });
+    eventBus.emit(TABLE_EVENTS.CREATED, { table3 });
     
     // Verify tables are tracked properly
-    expect(gameManager.getTablesForGame('game-1').length).toBe(2);
-    expect(gameManager.getTablesForGame('game-2').length).toBe(1);
+    expect(gameManager.getTablesForGame({ gameId: 'game-1' }).length).toBe(2);
+    expect(gameManager.getTablesForGame({ gameId: 'game-2' }).length).toBe(1);
     
     // Unregister game-1
-    gameManager.unregisterGame('game-1');
+    gameManager.unregisterGame({ gameId: 'game-1' });
     
     // Verify game-1 is no longer tracked
-    expect(gameManager.getGameDefinition('game-1')).toBeUndefined();
+    expect(gameManager.getGameDefinition({ gameId: 'game-1' })).toBeUndefined();
     
     // Tables for game-1 should be removed
-    expect(gameManager.getTablesForGame('game-1').length).toBe(0);
+    expect(gameManager.getTablesForGame({ gameId: 'game-1' }).length).toBe(0);
     
     // Tables for game-2 should be unaffected
-    expect(gameManager.getTablesForGame('game-2').length).toBe(1);
+    expect(gameManager.getTablesForGame({ gameId: 'game-2' }).length).toBe(1);
     
     // Only game-2 tables should remain in getAllTables
     const allTables = gameManager.getAllTables();

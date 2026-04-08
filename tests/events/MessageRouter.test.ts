@@ -51,7 +51,7 @@ describe('MessageRouter', () => {
   
   test('should register a command handler', () => {
     const handlerFn = jest.fn();
-    messageRouter.registerCommandHandler('test:action', handlerFn);
+    messageRouter.registerCommandHandler({ action: 'test:action', handler: handlerFn });
     
     // Prepare test message
     const message = {
@@ -60,7 +60,7 @@ describe('MessageRouter', () => {
     };
     
     // Process the message
-    messageRouter.processMessage(mockPlayer, JSON.stringify(message));
+    messageRouter.processMessage({ player: mockPlayer, messageStr: JSON.stringify(message) });
     
     // Verify handler was called
     expect(handlerFn).toHaveBeenCalledWith(mockPlayer, message);
@@ -77,7 +77,7 @@ describe('MessageRouter', () => {
     };
     
     // Process the message
-    messageRouter.processMessage(mockPlayer, JSON.stringify(message));
+    messageRouter.processMessage({ player: mockPlayer, messageStr: JSON.stringify(message) });
     
     // Verify event was emitted
     expect(emitSpy).toHaveBeenCalledWith('client:unhandled:action', mockPlayer, message);
@@ -85,7 +85,7 @@ describe('MessageRouter', () => {
   
   test('should handle invalid JSON message format', () => {
     // Process invalid JSON
-    messageRouter.processMessage(mockPlayer, '{invalid-json');
+    messageRouter.processMessage({ player: mockPlayer, messageStr: '{invalid-json' });
     
     // Verify error message was sent
     expect(mockPlayer.sendMessage).toHaveBeenCalledWith({
@@ -96,7 +96,7 @@ describe('MessageRouter', () => {
   
   test('should handle message missing action property', () => {
     // Process message without action
-    messageRouter.processMessage(mockPlayer, JSON.stringify({ data: 'test' }));
+    messageRouter.processMessage({ player: mockPlayer, messageStr: JSON.stringify({ data: 'test' }) });
     
     // Verify error message was sent
     expect(mockPlayer.sendMessage).toHaveBeenCalledWith({
@@ -107,7 +107,7 @@ describe('MessageRouter', () => {
   
   test('should handle message with non-string action property', () => {
     // Process message with numeric action
-    messageRouter.processMessage(mockPlayer, JSON.stringify({ action: 123 }));
+    messageRouter.processMessage({ player: mockPlayer, messageStr: JSON.stringify({ action: 123 }) });
     
     // Verify error message was sent
     expect(mockPlayer.sendMessage).toHaveBeenCalledWith({
@@ -120,14 +120,14 @@ describe('MessageRouter', () => {
     const handler1 = jest.fn();
     const handler2 = jest.fn();
     
-    messageRouter.registerCommandHandler('action1', handler1);
-    messageRouter.registerCommandHandler('action2', handler2);
+    messageRouter.registerCommandHandler({ action: 'action1', handler: handler1 });
+    messageRouter.registerCommandHandler({ action: 'action2', handler: handler2 });
     
     // Process message for action1
-    messageRouter.processMessage(mockPlayer, JSON.stringify({ action: 'action1', data: 1 }));
+    messageRouter.processMessage({ player: mockPlayer, messageStr: JSON.stringify({ action: 'action1', data: 1 }) });
     
     // Process message for action2
-    messageRouter.processMessage(mockPlayer, JSON.stringify({ action: 'action2', data: 2 }));
+    messageRouter.processMessage({ player: mockPlayer, messageStr: JSON.stringify({ action: 'action2', data: 2 }) });
     
     // Verify correct handlers were called with correct data
     expect(handler1).toHaveBeenCalledWith(mockPlayer, { action: 'action1', data: 1 });
@@ -138,11 +138,11 @@ describe('MessageRouter', () => {
     const handler1 = jest.fn();
     const handler2 = jest.fn();
     
-    messageRouter.registerCommandHandler('action', handler1);
-    messageRouter.registerCommandHandler('action', handler2); // Override previous handler
+    messageRouter.registerCommandHandler({ action: 'action', handler: handler1 });
+    messageRouter.registerCommandHandler({ action: 'action', handler: handler2 }); // Override previous handler
     
     // Process message
-    messageRouter.processMessage(mockPlayer, JSON.stringify({ action: 'action' }));
+    messageRouter.processMessage({ player: mockPlayer, messageStr: JSON.stringify({ action: 'action' }) });
     
     // Verify only the new handler was called
     expect(handler1).not.toHaveBeenCalled();
@@ -156,13 +156,13 @@ describe('MessageRouter', () => {
         sendMessage: jest.fn()
       } as unknown as Player;
       
-      messageRouter.registerCommandHandler('TEST_COMMAND', mockHandler);
+      messageRouter.registerCommandHandler({ action: 'TEST_COMMAND', handler: mockHandler });
       
       // Process the message
-      messageRouter.processMessage(mockPlayer, JSON.stringify({
-        action: 'TEST_COMMAND',
-        data: { foo: 'bar' }
-      }));
+      messageRouter.processMessage({ player: mockPlayer, messageStr: JSON.stringify({
+                    action: 'TEST_COMMAND',
+                    data: { foo: 'bar' }
+                  }) });
       
       // Verify the handler was called with the player and message data
       expect(mockHandler).toHaveBeenCalledWith(mockPlayer, expect.objectContaining({
@@ -183,10 +183,10 @@ describe('MessageRouter', () => {
       const emitSpy = jest.spyOn(eventBus, 'emit');
       
       // Process message with no registered handler
-      messageRouter.processMessage(mockPlayer, JSON.stringify({
-        action: 'UNKNOWN_COMMAND',
-        data: { foo: 'bar' }
-      }));
+      messageRouter.processMessage({ player: mockPlayer, messageStr: JSON.stringify({
+                    action: 'UNKNOWN_COMMAND',
+                    data: { foo: 'bar' }
+                  }) });
       
       // Verify that the event bus was used since no handler was found
       expect(emitSpy).toHaveBeenCalledWith(

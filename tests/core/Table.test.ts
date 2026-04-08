@@ -75,7 +75,7 @@ describe('Table', () => {
   test('should add player successfully', () => {
     const spy = jest.spyOn(eventBus, 'emit');
     
-    const result = table.addPlayer(player1);
+    const result = table.addPlayer({ player: player1 });
     
     expect(result).toBe(true);
     expect(player1.setTable).toHaveBeenCalledWith(table);
@@ -87,7 +87,7 @@ describe('Table', () => {
   test('should not add player if already at another table', () => {
     player1.getTable = jest.fn().mockReturnValue({} as Table);
     
-    const result = table.addPlayer(player1);
+    const result = table.addPlayer({ player: player1 });
     
     expect(result).toBe(false);
     expect(table.getPlayerCount()).toBe(0);
@@ -96,8 +96,8 @@ describe('Table', () => {
   test('should remove player successfully', () => {
     const spy = jest.spyOn(eventBus, 'emit');
     
-    table.addPlayer(player1);
-    const result = table.removePlayer(player1.id);
+    table.addPlayer({ player: player1 });
+    const result = table.removePlayer({ playerId: player1.id });
     
     expect(result).toBe(true);
     expect(player1.setTable).toHaveBeenCalledWith(null);
@@ -107,15 +107,15 @@ describe('Table', () => {
   });
   
   test('should return false when removing non-existent player', () => {
-    const result = table.removePlayer('non-existent');
+    const result = table.removePlayer({ playerId: 'non-existent' });
     expect(result).toBe(false);
   });
   
   test('should sit player at seat successfully', () => {
     const spy = jest.spyOn(eventBus, 'emit');
     
-    table.addPlayer(player1);
-    const result = table.sitPlayerAtSeat(player1.id, 0);
+    table.addPlayer({ player: player1 });
+    const result = table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: 0 });
     
     expect(result).toBe(true);
     expect(table.getSeats()[0].getPlayer()).toBe(player1);
@@ -123,36 +123,36 @@ describe('Table', () => {
   });
   
   test('should not sit player if seat index is invalid', () => {
-    table.addPlayer(player1);
+    table.addPlayer({ player: player1 });
     
-    expect(table.sitPlayerAtSeat(player1.id, -1)).toBe(false);
-    expect(table.sitPlayerAtSeat(player1.id, 2)).toBe(false);
+    expect(table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: -1 })).toBe(false);
+    expect(table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: 2 })).toBe(false);
   });
   
   test('should not sit player if seat is already taken', () => {
-    table.addPlayer(player1);
-    table.addPlayer(player2);
+    table.addPlayer({ player: player1 });
+    table.addPlayer({ player: player2 });
     
-    table.sitPlayerAtSeat(player1.id, 0);
-    const result = table.sitPlayerAtSeat(player2.id, 0);
+    table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: 0 });
+    const result = table.sitPlayerAtSeat({ playerId: player2.id, seatIndex: 0 });
     
     expect(result).toBe(false);
     expect(table.getSeats()[0].getPlayer()).toBe(player1);
   });
   
   test('should not sit player if not at table', () => {
-    const result = table.sitPlayerAtSeat('unknown-player', 0);
+    const result = table.sitPlayerAtSeat({ playerId: 'unknown-player', seatIndex: 0 });
     expect(result).toBe(false);
   });
   
   test('should not sit player if already seated at max seats', () => {
-    table.addPlayer(player1);
+    table.addPlayer({ player: player1 });
     
     // Sit at seat 0, which should succeed
-    table.sitPlayerAtSeat(player1.id, 0);
+    table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: 0 });
     
     // Sit at seat 1, which should fail due to max seats per player = 1
-    const result = table.sitPlayerAtSeat(player1.id, 1);
+    const result = table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: 1 });
     
     expect(result).toBe(false);
     expect(table.getSeats()[1].getPlayer()).toBeNull();
@@ -161,10 +161,10 @@ describe('Table', () => {
   test('should remove player from seat successfully', () => {
     const spy = jest.spyOn(eventBus, 'emit');
     
-    table.addPlayer(player1);
-    table.sitPlayerAtSeat(player1.id, 0);
+    table.addPlayer({ player: player1 });
+    table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: 0 });
     
-    const result = table.removePlayerFromSeat(0);
+    const result = table.removePlayerFromSeat({ seatIndex: 0 });
     
     expect(result).toBe(true);
     expect(table.getSeats()[0].getPlayer()).toBeNull();
@@ -172,28 +172,28 @@ describe('Table', () => {
   });
   
   test('should return false when removing from invalid seat index', () => {
-    expect(table.removePlayerFromSeat(-1)).toBe(false);
-    expect(table.removePlayerFromSeat(2)).toBe(false);
+    expect(table.removePlayerFromSeat({ seatIndex: -1 })).toBe(false);
+    expect(table.removePlayerFromSeat({ seatIndex: 2 })).toBe(false);
   });
   
   test('should return false when removing from empty seat', () => {
-    expect(table.removePlayerFromSeat(0)).toBe(false);
+    expect(table.removePlayerFromSeat({ seatIndex: 0 })).toBe(false);
   });
   
   test('should count player seats correctly', () => {
     table = new Table(eventBus, 3, 2); // Allow 2 seats per player
     
-    table.addPlayer(player1);
-    expect(table.getPlayerSeatCount(player1.id)).toBe(0);
+    table.addPlayer({ player: player1 });
+    expect(table.getPlayerSeatCount({ playerId: player1.id })).toBe(0);
     
-    table.sitPlayerAtSeat(player1.id, 0);
-    expect(table.getPlayerSeatCount(player1.id)).toBe(1);
+    table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: 0 });
+    expect(table.getPlayerSeatCount({ playerId: player1.id })).toBe(1);
     
-    table.sitPlayerAtSeat(player1.id, 1);
-    expect(table.getPlayerSeatCount(player1.id)).toBe(2);
+    table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: 1 });
+    expect(table.getPlayerSeatCount({ playerId: player1.id })).toBe(2);
     
-    table.removePlayerFromSeat(0);
-    expect(table.getPlayerSeatCount(player1.id)).toBe(1);
+    table.removePlayerFromSeat({ seatIndex: 0 });
+    expect(table.getPlayerSeatCount({ playerId: player1.id })).toBe(1);
   });
   
   test('should set and get state correctly', () => {
@@ -201,46 +201,46 @@ describe('Table', () => {
     
     expect(table.getState()).toBe(TableState.WAITING);
     
-    table.setState(TableState.ACTIVE);
+    table.setState({ state: TableState.ACTIVE });
     expect(table.getState()).toBe(TableState.ACTIVE);
     expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.STATE_UPDATED, table, TableState.ACTIVE);
     
-    table.setState(TableState.ENDED);
+    table.setState({ state: TableState.ENDED });
     expect(table.getState()).toBe(TableState.ENDED);
     expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.STATE_UPDATED, table, TableState.ENDED);
   });
   
   test('should broadcast message to all players', () => {
-    table.addPlayer(player1);
-    table.addPlayer(player2);
+    table.addPlayer({ player: player1 });
+    table.addPlayer({ player: player2 });
     
     const message = { type: 'test', data: 'broadcast' };
-    table.broadcastMessage(message);
+    table.broadcastMessage({ message: message });
     
     expect(player1.sendMessage).toHaveBeenCalledWith(message);
     expect(player2.sendMessage).toHaveBeenCalledWith(message);
   });
   
   test('should manage attributes correctly', () => {
-    expect(table.hasAttribute('gameType')).toBe(false);
+    expect(table.hasAttribute({ key: 'gameType' })).toBe(false);
     
-    table.setAttribute('gameType', 'poker');
-    expect(table.hasAttribute('gameType')).toBe(true);
-    expect(table.getAttribute('gameType')).toBe('poker');
+    table.setAttribute({ key: 'gameType', value: 'poker' });
+    expect(table.hasAttribute({ key: 'gameType' })).toBe(true);
+    expect(table.getAttribute({ key: 'gameType' })).toBe('poker');
     
-    table.setAttribute('gameType', 'blackjack');
-    expect(table.getAttribute('gameType')).toBe('blackjack');
+    table.setAttribute({ key: 'gameType', value: 'blackjack' });
+    expect(table.getAttribute({ key: 'gameType' })).toBe('blackjack');
     
-    expect(table.getAttribute('nonexistent')).toBeUndefined();
+    expect(table.getAttribute({ key: 'nonexistent' })).toBeUndefined();
   });
   
   test('should get player at seat', () => {
-    table.addPlayer(player1);
-    table.sitPlayerAtSeat(player1.id, 0);
+    table.addPlayer({ player: player1 });
+    table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: 0 });
     
-    expect(table.getPlayerAtSeat(0)).toBe(player1);
-    expect(table.getPlayerAtSeat(1)).toBeNull();
-    expect(table.getPlayerAtSeat(-1)).toBeNull();
-    expect(table.getPlayerAtSeat(2)).toBeNull();
+    expect(table.getPlayerAtSeat({ seatIndex: 0 })).toBe(player1);
+    expect(table.getPlayerAtSeat({ seatIndex: 1 })).toBeNull();
+    expect(table.getPlayerAtSeat({ seatIndex: -1 })).toBeNull();
+    expect(table.getPlayerAtSeat({ seatIndex: 2 })).toBeNull();
   });
 }); 

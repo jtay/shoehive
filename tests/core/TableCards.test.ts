@@ -61,26 +61,26 @@ describe('Table Card Functionality', () => {
     Object.defineProperty(player2, 'id', { value: 'player2', writable: true });
     
     // Add players to table
-    table.addPlayer(player1);
-    table.addPlayer(player2);
+    table.addPlayer({ player: player1 });
+    table.addPlayer({ player: player2 });
     
     // Sit players at seats
-    table.sitPlayerAtSeat(player1.id, 0);
-    table.sitPlayerAtSeat(player2.id, 1);
+    table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: 0 });
+    table.sitPlayerAtSeat({ playerId: player2.id, seatIndex: 1 });
   });
   
   describe('Deck Management', () => {
     test('should create a deck', () => {
       const spy = jest.spyOn(eventBus, 'emit');
       
-      table.createDeck();
+      table.createDeck({});
       
       expect(table.getDeck()).not.toBeNull();
       expect(spy).toHaveBeenCalledWith('table:deck:created', table, 1);
     });
     
     test('should create a deck with multiple decks', () => {
-      table.createDeck(6);
+      table.createDeck({ numberOfDecks: 6 });
       
       const deck = table.getDeck();
       expect(deck).not.toBeNull();
@@ -93,32 +93,32 @@ describe('Table Card Functionality', () => {
       // No deck yet
       expect(table.shuffleDeck()).toBe(false);
       
-      table.createDeck();
+      table.createDeck({});
       expect(table.shuffleDeck()).toBe(true);
       expect(spy).toHaveBeenCalledWith('table:deck:shuffled', table);
     });
     
     test('should draw a card from the deck', () => {
       // No deck yet
-      expect(table.drawCard()).toBeNull();
+      expect(table.drawCard({})).toBeNull();
       
-      table.createDeck();
+      table.createDeck({});
       const spy = jest.spyOn(eventBus, 'emit');
       
-      const card = table.drawCard();
+      const card = table.drawCard({});
       
       expect(card).not.toBeNull();
       expect(card!.isVisible).toBe(true);
       expect(spy).toHaveBeenCalledWith('table:deck:card:drawn', table, card);
       
-      const hiddenCard = table.drawCard(false);
+      const hiddenCard = table.drawCard({ isVisible: false });
       expect(hiddenCard!.isVisible).toBe(false);
     });
   });
   
   describe('Seat Hands Management', () => {
     test('should have main hand for each seat by default', () => {
-      const hand = table.getHandAtSeat(0);
+      const hand = table.getHandAtSeat({ seatIndex: 0 });
       expect(hand).not.toBeNull();
       expect(hand!.getId()).toBe('main');
       expect(hand!.getCards().length).toBe(0);
@@ -127,49 +127,49 @@ describe('Table Card Functionality', () => {
     test('should add a new hand to a seat', () => {
       const spy = jest.spyOn(eventBus, 'emit');
       
-      expect(table.addHandToSeat(0, 'split')).toBe(true);
+      expect(table.addHandToSeat({ seatIndex: 0, handId: 'split' })).toBe(true);
       
-      const hand = table.getHandAtSeat(0, 'split');
+      const hand = table.getHandAtSeat({ seatIndex: 0, handId: 'split' });
       expect(hand).not.toBeNull();
       expect(hand!.getId()).toBe('split');
       expect(spy).toHaveBeenCalledWith('table:seat:hand:added', table, 0, 'split');
     });
     
     test('should not add duplicate hand id', () => {
-      table.addHandToSeat(0, 'split');
-      expect(table.addHandToSeat(0, 'split')).toBe(false);
+      table.addHandToSeat({ seatIndex: 0, handId: 'split' });
+      expect(table.addHandToSeat({ seatIndex: 0, handId: 'split' })).toBe(false);
     });
     
     test('should not add hand to invalid seat', () => {
-      expect(table.addHandToSeat(-1, 'split')).toBe(false);
-      expect(table.addHandToSeat(5, 'split')).toBe(false);
+      expect(table.addHandToSeat({ seatIndex: -1, handId: 'split' })).toBe(false);
+      expect(table.addHandToSeat({ seatIndex: 5, handId: 'split' })).toBe(false);
     });
     
     test('should remove a hand from a seat', () => {
       const spy = jest.spyOn(eventBus, 'emit');
       
-      table.addHandToSeat(0, 'split');
-      expect(table.removeHandFromSeat(0, 'split')).toBe(true);
+      table.addHandToSeat({ seatIndex: 0, handId: 'split' });
+      expect(table.removeHandFromSeat({ seatIndex: 0, handId: 'split' })).toBe(true);
       
-      expect(table.getHandAtSeat(0, 'split')).toBeNull();
+      expect(table.getHandAtSeat({ seatIndex: 0, handId: 'split' })).toBeNull();
       expect(spy).toHaveBeenCalledWith('table:seat:hand:removed', table, 0, 'split');
     });
     
     test('should not remove main hand', () => {
-      expect(table.removeHandFromSeat(0, 'main')).toBe(false);
-      expect(table.getHandAtSeat(0, 'main')).not.toBeNull();
+      expect(table.removeHandFromSeat({ seatIndex: 0, handId: 'main' })).toBe(false);
+      expect(table.getHandAtSeat({ seatIndex: 0, handId: 'main' })).not.toBeNull();
     });
     
     test('should not remove hand from invalid seat', () => {
-      expect(table.removeHandFromSeat(-1, 'split')).toBe(false);
-      expect(table.removeHandFromSeat(5, 'split')).toBe(false);
+      expect(table.removeHandFromSeat({ seatIndex: -1, handId: 'split' })).toBe(false);
+      expect(table.removeHandFromSeat({ seatIndex: 5, handId: 'split' })).toBe(false);
     });
     
     test('should get all hands at a seat', () => {
-      table.addHandToSeat(0, 'split');
-      table.addHandToSeat(0, 'double');
+      table.addHandToSeat({ seatIndex: 0, handId: 'split' });
+      table.addHandToSeat({ seatIndex: 0, handId: 'double' });
       
-      const hands = table.getAllHandsAtSeat(0);
+      const hands = table.getAllHandsAtSeat({ seatIndex: 0 });
       
       expect(hands).not.toBeNull();
       expect(hands!.size).toBe(3);
@@ -179,65 +179,65 @@ describe('Table Card Functionality', () => {
     });
     
     test('should clear a hand at a seat', () => {
-      table.createDeck();
+      table.createDeck({});
       
       // Deal some cards
-      table.dealCardToSeat(0);
-      table.dealCardToSeat(0);
+      table.dealCardToSeat({ seatIndex: 0 });
+      table.dealCardToSeat({ seatIndex: 0 });
       
-      const handBefore = table.getHandAtSeat(0);
+      const handBefore = table.getHandAtSeat({ seatIndex: 0 });
       expect(handBefore!.getCards().length).toBe(2);
       
       const spy = jest.spyOn(eventBus, 'emit');
       
-      expect(table.clearHandAtSeat(0)).toBe(true);
+      expect(table.clearHandAtSeat({ seatIndex: 0 })).toBe(true);
       
-      const handAfter = table.getHandAtSeat(0);
+      const handAfter = table.getHandAtSeat({ seatIndex: 0 });
       expect(handAfter!.getCards().length).toBe(0);
       expect(spy).toHaveBeenCalledWith('table:seat:hand:cleared', table, 0, 'main');
     });
     
     test('should not clear hand on invalid seat', () => {
-      expect(table.clearHandAtSeat(-1)).toBe(false);
-      expect(table.clearHandAtSeat(5)).toBe(false);
+      expect(table.clearHandAtSeat({ seatIndex: -1 })).toBe(false);
+      expect(table.clearHandAtSeat({ seatIndex: 5 })).toBe(false);
     });
     
     test('should not clear nonexistent hand', () => {
-      expect(table.clearHandAtSeat(0, 'nonexistent')).toBe(false);
+      expect(table.clearHandAtSeat({ seatIndex: 0, handId: 'nonexistent' })).toBe(false);
     });
     
     test('should clear all hands', () => {
-      table.createDeck();
+      table.createDeck({});
       
       // Add multiple hands
-      table.addHandToSeat(0, 'split');
-      table.addHandToSeat(1, 'split');
+      table.addHandToSeat({ seatIndex: 0, handId: 'split' });
+      table.addHandToSeat({ seatIndex: 1, handId: 'split' });
       
       // Deal cards to different hands
-      table.dealCardToSeat(0);
-      table.dealCardToSeat(0, true, 'split');
-      table.dealCardToSeat(1);
+      table.dealCardToSeat({ seatIndex: 0 });
+      table.dealCardToSeat({ seatIndex: 0, isVisible: true, handId: 'split' });
+      table.dealCardToSeat({ seatIndex: 1 });
       
       const spy = jest.spyOn(eventBus, 'emit');
       
       table.clearAllHands();
       
-      expect(table.getHandAtSeat(0)!.getCards().length).toBe(0);
-      expect(table.getHandAtSeat(0, 'split')!.getCards().length).toBe(0);
-      expect(table.getHandAtSeat(1)!.getCards().length).toBe(0);
+      expect(table.getHandAtSeat({ seatIndex: 0 })!.getCards().length).toBe(0);
+      expect(table.getHandAtSeat({ seatIndex: 0, handId: 'split' })!.getCards().length).toBe(0);
+      expect(table.getHandAtSeat({ seatIndex: 1 })!.getCards().length).toBe(0);
       expect(spy).toHaveBeenCalledWith('table:seats:hands:cleared', table);
     });
   });
   
   describe('Card Dealing', () => {
     test('should deal a card to a seat', () => {
-      table.createDeck();
+      table.createDeck({});
       const spy = jest.spyOn(eventBus, 'emit');
       
-      const result = table.dealCardToSeat(0);
+      const result = table.dealCardToSeat({ seatIndex: 0 });
       
       expect(result).toBe(true);
-      const hand = table.getHandAtSeat(0);
+      const hand = table.getHandAtSeat({ seatIndex: 0 });
       expect(hand!.getCards().length).toBe(1);
       expect(hand!.getCards()[0].isVisible).toBe(true);
       
@@ -252,11 +252,11 @@ describe('Table Card Functionality', () => {
     });
     
     test('should deal a hidden card to a seat', () => {
-      table.createDeck();
+      table.createDeck({});
       
-      table.dealCardToSeat(0, false);
+      table.dealCardToSeat({ seatIndex: 0, isVisible: false });
       
-      const hand = table.getHandAtSeat(0);
+      const hand = table.getHandAtSeat({ seatIndex: 0 });
       expect(hand!.getCards().length).toBe(1);
       expect(hand!.getCards()[0].isVisible).toBe(false);
       expect(hand!.getVisibleCards().length).toBe(0);
@@ -264,46 +264,46 @@ describe('Table Card Functionality', () => {
     });
     
     test('should deal card to specific hand', () => {
-      table.createDeck();
-      table.addHandToSeat(0, 'split');
+      table.createDeck({});
+      table.addHandToSeat({ seatIndex: 0, handId: 'split' });
       
-      table.dealCardToSeat(0, true, 'split');
+      table.dealCardToSeat({ seatIndex: 0, isVisible: true, handId: 'split' });
       
-      expect(table.getHandAtSeat(0)!.getCards().length).toBe(0);
-      expect(table.getHandAtSeat(0, 'split')!.getCards().length).toBe(1);
+      expect(table.getHandAtSeat({ seatIndex: 0 })!.getCards().length).toBe(0);
+      expect(table.getHandAtSeat({ seatIndex: 0, handId: 'split' })!.getCards().length).toBe(1);
     });
     
     test('should create hand if it does not exist', () => {
-      table.createDeck();
+      table.createDeck({});
       
-      expect(table.getHandAtSeat(0, 'newHand')).toBeNull();
+      expect(table.getHandAtSeat({ seatIndex: 0, handId: 'newHand' })).toBeNull();
       
-      table.dealCardToSeat(0, true, 'newHand');
+      table.dealCardToSeat({ seatIndex: 0, isVisible: true, handId: 'newHand' });
       
-      expect(table.getHandAtSeat(0, 'newHand')).not.toBeNull();
-      expect(table.getHandAtSeat(0, 'newHand')!.getCards().length).toBe(1);
+      expect(table.getHandAtSeat({ seatIndex: 0, handId: 'newHand' })).not.toBeNull();
+      expect(table.getHandAtSeat({ seatIndex: 0, handId: 'newHand' })!.getCards().length).toBe(1);
     });
     
     test('should not deal card if no deck exists', () => {
-      expect(table.dealCardToSeat(0)).toBe(false);
+      expect(table.dealCardToSeat({ seatIndex: 0 })).toBe(false);
     });
     
     test('should not deal card to invalid seat', () => {
-      table.createDeck();
+      table.createDeck({});
       
-      expect(table.dealCardToSeat(-1)).toBe(false);
-      expect(table.dealCardToSeat(5)).toBe(false);
+      expect(table.dealCardToSeat({ seatIndex: -1 })).toBe(false);
+      expect(table.dealCardToSeat({ seatIndex: 5 })).toBe(false);
     });
     
     test('should not deal card if deck is empty', () => {
-      table.createDeck(1);
+      table.createDeck({ numberOfDecks: 1 });
       
       // Draw all 52 cards
       for (let i = 0; i < 52; i++) {
-        table.drawCard();
+        table.drawCard({});
       }
       
-      expect(table.dealCardToSeat(0)).toBe(false);
+      expect(table.dealCardToSeat({ seatIndex: 0 })).toBe(false);
     });
   });
 }); 

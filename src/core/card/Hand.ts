@@ -23,7 +23,7 @@ export class Hand {
    * 
    * @param card The card to add.
    */
-  public addCard(card: Card): void {
+  public addCard({ card }: { card: Card }): void {
     this.cards.push(card);
   }
 
@@ -97,7 +97,7 @@ export class Hand {
    * @param key The key of the attribute to set.
    * @param value The value of the attribute to set.
    */
-  public setAttribute(key: string, value: any): void {
+  public setAttribute({ key, value }: { key: string, value: any }): void {
     this.attributes.set(key, value);
   }
 
@@ -107,7 +107,7 @@ export class Hand {
    * @param key The key of the attribute to get.
    * @returns The value of the attribute or null if the attribute does not exist.
    */
-  public getAttribute(key: string): any {
+  public getAttribute({ key }: { key: string }): any {
     return this.attributes.get(key);
   }
 
@@ -117,7 +117,7 @@ export class Hand {
    * @param key The key of the attribute to check.
    * @returns True if the attribute exists, false otherwise.
    */
-  public hasAttribute(key: string): boolean {
+  public hasAttribute({ key }: { key: string }): boolean {
     return this.attributes.has(key);
   }
 

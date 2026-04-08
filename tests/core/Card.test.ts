@@ -45,8 +45,8 @@ describe('Hand', () => {
     const card1: Card = { suit: CardSuit.HEARTS, rank: CardRank.ACE, isVisible: true };
     const card2: Card = { suit: CardSuit.SPADES, rank: CardRank.KING, isVisible: false };
     
-    hand.addCard(card1);
-    hand.addCard(card2);
+    hand.addCard({ card: card1 });
+    hand.addCard({ card: card2 });
     
     const cards = hand.getCards();
     expect(cards.length).toBe(2);
@@ -58,8 +58,8 @@ describe('Hand', () => {
     const visibleCard: Card = { suit: CardSuit.HEARTS, rank: CardRank.ACE, isVisible: true };
     const hiddenCard: Card = { suit: CardSuit.SPADES, rank: CardRank.KING, isVisible: false };
     
-    hand.addCard(visibleCard);
-    hand.addCard(hiddenCard);
+    hand.addCard({ card: visibleCard });
+    hand.addCard({ card: hiddenCard });
     
     const visibleCards = hand.getVisibleCards();
     expect(visibleCards.length).toBe(1);
@@ -70,8 +70,8 @@ describe('Hand', () => {
     const visibleCard: Card = { suit: CardSuit.HEARTS, rank: CardRank.ACE, isVisible: true };
     const hiddenCard: Card = { suit: CardSuit.SPADES, rank: CardRank.KING, isVisible: false };
     
-    hand.addCard(visibleCard);
-    hand.addCard(hiddenCard);
+    hand.addCard({ card: visibleCard });
+    hand.addCard({ card: hiddenCard });
     
     const hiddenCards = hand.getHiddenCards();
     expect(hiddenCards.length).toBe(1);
@@ -82,10 +82,10 @@ describe('Hand', () => {
     const card1: Card = { suit: CardSuit.HEARTS, rank: CardRank.ACE, isVisible: true };
     const card2: Card = { suit: CardSuit.SPADES, rank: CardRank.KING, isVisible: true };
     
-    hand.addCard(card1);
-    hand.addCard(card2);
+    hand.addCard({ card: card1 });
+    hand.addCard({ card: card2 });
     
-    const removedCard = hand.removeCard(0);
+    const removedCard = hand.removeCard({ index: 0 });
     expect(removedCard).toEqual(card1);
     expect(hand.getCards().length).toBe(1);
     expect(hand.getCards()[0]).toEqual(card2);
@@ -93,10 +93,10 @@ describe('Hand', () => {
 
   test('should return null when removing invalid index', () => {
     const card: Card = { suit: CardSuit.HEARTS, rank: CardRank.ACE, isVisible: true };
-    hand.addCard(card);
+    hand.addCard({ card: card });
     
-    expect(hand.removeCard(-1)).toBeNull();
-    expect(hand.removeCard(1)).toBeNull();
+    expect(hand.removeCard({ index: -1 })).toBeNull();
+    expect(hand.removeCard({ index: 1 })).toBeNull();
     expect(hand.getCards().length).toBe(1);
   });
 
@@ -104,24 +104,24 @@ describe('Hand', () => {
     const card1: Card = { suit: CardSuit.HEARTS, rank: CardRank.ACE, isVisible: true };
     const card2: Card = { suit: CardSuit.SPADES, rank: CardRank.KING, isVisible: true };
     
-    hand.addCard(card1);
-    hand.addCard(card2);
+    hand.addCard({ card: card1 });
+    hand.addCard({ card: card2 });
     
-    hand.clear();
+    hand.clear({});
     expect(hand.getCards().length).toBe(0);
   });
 
   test('should manage attributes correctly', () => {
-    expect(hand.hasAttribute('value')).toBe(false);
+    expect(hand.hasAttribute({ key: 'value' })).toBe(false);
     
-    hand.setAttribute('value', 21);
-    expect(hand.hasAttribute('value')).toBe(true);
-    expect(hand.getAttribute('value')).toBe(21);
+    hand.setAttribute({ key: 'value', value: 21 });
+    expect(hand.hasAttribute({ key: 'value' })).toBe(true);
+    expect(hand.getAttribute({ key: 'value' })).toBe(21);
     
-    hand.setAttribute('value', 19);
-    expect(hand.getAttribute('value')).toBe(19);
+    hand.setAttribute({ key: 'value', value: 19 });
+    expect(hand.getAttribute({ key: 'value' })).toBe(19);
     
-    expect(hand.getAttribute('nonexistent')).toBeUndefined();
+    expect(hand.getAttribute({ key: 'nonexistent' })).toBeUndefined();
   });
 });
 
@@ -143,7 +143,7 @@ describe('Deck', () => {
     const deck = new Deck();
     const initialCount = deck.getRemainingCards();
     
-    const card = deck.drawCard();
+    const card = deck.drawCard({});
     
     expect(card).not.toBeNull();
     expect(card?.isVisible).toBe(true);
@@ -153,7 +153,7 @@ describe('Deck', () => {
   test('should draw a hidden card', () => {
     const deck = new Deck();
     
-    const card = deck.drawCard(false);
+    const card = deck.drawCard({ isVisible: false });
     
     expect(card).not.toBeNull();
     expect(card?.isVisible).toBe(false);
@@ -163,7 +163,7 @@ describe('Deck', () => {
     const deck = new Deck();
     const initialCount = deck.getRemainingCards();
     
-    const cards = deck.drawCards(5);
+    const cards = deck.drawCards({ count: 5 });
     
     expect(cards.length).toBe(5);
     expect(deck.getRemainingCards()).toBe(initialCount - 5);
@@ -173,7 +173,7 @@ describe('Deck', () => {
     const deck = new Deck();
     const initialCount = deck.getRemainingCards();
     
-    const cards = deck.drawCards(60);
+    const cards = deck.drawCards({ count: 60 });
     
     expect(cards.length).toBe(initialCount);
     expect(deck.getRemainingCards()).toBe(0);
@@ -182,26 +182,26 @@ describe('Deck', () => {
   test('should return null when drawing from empty deck', () => {
     const deck = new Deck();
     // Draw all cards
-    deck.drawCards(52);
+    deck.drawCards({ count: 52 });
     
-    const card = deck.drawCard();
+    const card = deck.drawCard({});
     expect(card).toBeNull();
   });
 
   test('should add cards to discard pile', () => {
     const deck = new Deck();
-    const card = deck.drawCard()!;
+    const card = deck.drawCard({})!;
     
-    deck.addToDiscard(card);
+    deck.addToDiscard({ card: card });
     
     expect(deck.getDiscardedCards()).toBe(1);
   });
 
   test('should reset deck from discard pile', () => {
     const deck = new Deck();
-    const cards = deck.drawCards(10);
+    const cards = deck.drawCards({ count: 10 });
     
-    cards.forEach(card => deck.addToDiscard(card));
+    cards.forEach(card => deck.addToDiscard({ card: card }));
     
     expect(deck.getRemainingCards()).toBe(42);
     expect(deck.getDiscardedCards()).toBe(10);
@@ -219,8 +219,8 @@ describe('Deck', () => {
     const deck2 = new Deck();
     
     // Draw some cards from both decks to get reference cards before shuffling
-    const preShuffleCard1 = deck1.drawCard();
-    const preShuffleCard2 = deck2.drawCard();
+    const preShuffleCard1 = deck1.drawCard({});
+    const preShuffleCard2 = deck2.drawCard({});
     
     // Verify both decks produce the same card (they're ordered the same)
     expect(preShuffleCard1?.suit).toBe(preShuffleCard2?.suit);
@@ -230,8 +230,8 @@ describe('Deck', () => {
     deck2.shuffle();
     
     // Draw another card from each deck
-    const postShuffleCard1 = deck1.drawCard();
-    const postShuffleCard2 = deck2.drawCard();
+    const postShuffleCard1 = deck1.drawCard({});
+    const postShuffleCard2 = deck2.drawCard({});
     
     // After shuffling, the cards should be different
     expect(

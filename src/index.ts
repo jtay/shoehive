@@ -67,21 +67,16 @@ export {
   Hand
 };
 
-export function createGameServer(
-  server: http.Server,
-  authModule?: AuthModule,
-  serverTransportModule?: ServerTransportModule,
-  options?: {
-    /**
-     * Optional timeout in milliseconds for player reconnection.
-     * When a player disconnects, their game state is preserved for this duration.
-     * If they reconnect within this time, they continue from where they left off.
-     * If they don't reconnect within this time, they are removed from the game.
-     * Default is 600000 (10 minutes). Set to 0 to disable reconnection.
-     */
-    reconnectionTimeoutMs?: number;
-  }
-) {
+export function createGameServer({ server, authModule, serverTransportModule, options }: { server: http.Server, authModule?: AuthModule, serverTransportModule?: ServerTransportModule, options?: {
+        /**
+         * Optional timeout in milliseconds for player reconnection.
+         * When a player disconnects, their game state is preserved for this duration.
+         * If they reconnect within this time, they continue from where they left off.
+         * If they don't reconnect within this time, they are removed from the game.
+         * Default is 600000 (10 minutes). Set to 0 to disable reconnection.
+         */
+        reconnectionTimeoutMs?: number;
+      } }) {
   const eventBus = new EventBus();
   const messageRouter = new MessageRouter(eventBus);
   const tableFactory = new TableFactory(eventBus);
@@ -104,79 +99,79 @@ export function createGameServer(
    * Table commands
    */
 
-  messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.GET_STATE, (player, data) => {
-    if (!data.tableId) return;
-    
-    const table = gameManager.getTableById(data.tableId);
-    if (table) {
-      player.sendMessage({
-        type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
-        data: table.getState()
-      });
-    } else {
-      console.error(`Failed to get table state: ${data.tableId}`);
-    }
-  });
+  messageRouter.registerCommandHandler({ action: CLIENT_COMMAND_TYPES.TABLE.GET_STATE, handler: (player, data) => {
+            if (!data.tableId) return;
+            
+            const table = gameManager.getTableById({ tableId: data.tableId });
+            if (table) {
+              player.sendMessage({ message: {
+                            type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
+                            data: table.getState()
+                          } });
+            } else {
+              console.error(`Failed to get table state: ${data.tableId}`);
+            }
+          } });
 
-  messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.JOIN, (player, data) => {
-    if (!data.tableId) return;
-    
-    const table = gameManager.getTableById(data.tableId);
-    if (table) {
-      table.addPlayer(player);
-    } else {
-      console.error(`Failed to join table: ${data.tableId}`);
-    }
-  });
+  messageRouter.registerCommandHandler({ action: CLIENT_COMMAND_TYPES.TABLE.JOIN, handler: (player, data) => {
+            if (!data.tableId) return;
+            
+            const table = gameManager.getTableById({ tableId: data.tableId });
+            if (table) {
+              table.addPlayer({ player: player });
+            } else {
+              console.error(`Failed to join table: ${data.tableId}`);
+            }
+          } });
   
-  messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.CREATE, (player, data) => {
-    if (!data.gameId) {
-      console.error(`Failed to create table: ${data.gameId} (no gameId provided)`);
-      return;
-    }
-    
-    const table = lobby.createTable(data.gameId, data.options);
-    if (table) {
-      table.addPlayer(player);
-    } else {
-      console.error(`Failed to create table: ${data.gameId}`);
-    }
-  });
+  messageRouter.registerCommandHandler({ action: CLIENT_COMMAND_TYPES.TABLE.CREATE, handler: (player, data) => {
+            if (!data.gameId) {
+              console.error(`Failed to create table: ${data.gameId} (no gameId provided)`);
+              return;
+            }
+            
+            const table = lobby.createTable({ gameId: data.gameId, options: data.options });
+            if (table) {
+              table.addPlayer({ player: player });
+            } else {
+              console.error(`Failed to create table: ${data.gameId}`);
+            }
+          } });
   
-  messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.LEAVE, (player, data) => {
-    const table = player.getTable();
-    if (table) {
-      table.removePlayer(player.id);
-    } else {
-      console.error(`Failed to leave table`);
-    }
-  });
+  messageRouter.registerCommandHandler({ action: CLIENT_COMMAND_TYPES.TABLE.LEAVE, handler: (player, data) => {
+            const table = player.getTable();
+            if (table) {
+              table.removePlayer({ playerId: player.id });
+            } else {
+              console.error(`Failed to leave table`);
+            }
+          } });
 
   /**
    * Seat commands
    */
   
-  messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.SEAT_SIT, (player, data) => {
-    if (typeof data.seatIndex !== 'number') return;
-    
-    const table = player.getTable();
-    if (table) {
-      table.sitPlayerAtSeat(player.id, data.seatIndex);
-    } else {
-      console.error(`Failed to sit player at seat: ${data.seatIndex}`);
-    }
-  });
+  messageRouter.registerCommandHandler({ action: CLIENT_COMMAND_TYPES.TABLE.SEAT_SIT, handler: (player, data) => {
+            if (typeof data.seatIndex !== 'number') return;
+            
+            const table = player.getTable();
+            if (table) {
+              table.sitPlayerAtSeat({ playerId: player.id, seatIndex: data.seatIndex });
+            } else {
+              console.error(`Failed to sit player at seat: ${data.seatIndex}`);
+            }
+          } });
   
-  messageRouter.registerCommandHandler(CLIENT_COMMAND_TYPES.TABLE.SEAT_STAND, (player, data) => {
-    if (typeof data.seatIndex !== 'number') return;
-    
-    const table = player.getTable();
-    if (table) {
-      table.removePlayerFromSeat(data.seatIndex);
-    } else {
-      console.error(`Failed to stand up from seat: ${data.seatIndex}`);
-    }
-  });
+  messageRouter.registerCommandHandler({ action: CLIENT_COMMAND_TYPES.TABLE.SEAT_STAND, handler: (player, data) => {
+            if (typeof data.seatIndex !== 'number') return;
+            
+            const table = player.getTable();
+            if (table) {
+              table.removePlayerFromSeat({ seatIndex: data.seatIndex });
+            } else {
+              console.error(`Failed to stand up from seat: ${data.seatIndex}`);
+            }
+          } });
   
   return {
     eventBus,

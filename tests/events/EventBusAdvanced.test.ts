@@ -25,7 +25,7 @@ describe('Advanced EventBus Tests', () => {
   
   test('should enable and disable debug monitoring', () => {
     // Enable debug monitoring
-    eventBus.debugMonitor(true);
+    eventBus.debugMonitor({ enabled: true });
     
     // Emit an event
     eventBus.emit('test:event', { data: 'test data' });
@@ -37,7 +37,7 @@ describe('Advanced EventBus Tests', () => {
     mockLogger.mockClear();
     
     // Disable debug monitoring
-    eventBus.debugMonitor(false);
+    eventBus.debugMonitor({ enabled: false });
     
     // Emit another event
     eventBus.emit('another:event', { data: 'more data' });
@@ -51,7 +51,7 @@ describe('Advanced EventBus Tests', () => {
     const filter = (event: string) => event.startsWith('player:');
     
     // Enable debug monitoring with the filter
-    eventBus.debugMonitor(true, filter);
+    eventBus.debugMonitor({ enabled: true, filter: filter });
     
     // Emit a PLAYER event (should be logged)
     eventBus.emit(PLAYER_EVENTS.CONNECTED, { id: 'player1' });
@@ -74,7 +74,7 @@ describe('Advanced EventBus Tests', () => {
     const customLogger = jest.fn();
     
     // Enable debug monitoring with the custom logger
-    eventBus.debugMonitor(true, undefined, customLogger);
+    eventBus.debugMonitor({ enabled: true, filter: undefined, logger: customLogger });
     
     // Emit an event
     eventBus.emit('test:event', { data: 'test data' });
@@ -86,29 +86,29 @@ describe('Advanced EventBus Tests', () => {
   
   test('should handle all parameter combinations for debugMonitor', () => {
     // Test with default parameters
-    eventBus.debugMonitor();
-    eventBus.emit('test:event', 1, 2, 3);
+    eventBus.debugMonitor({});
+    eventBus.emit('test:event', { arg0: 1, arg1: 2, arg2: 3 });
     expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:event', 1, 2, 3);
     mockLogger.mockClear();
     
     // Test with only enabled parameter
-    eventBus.debugMonitor(true);
-    eventBus.emit('test:event', 1, 2, 3);
+    eventBus.debugMonitor({ enabled: true });
+    eventBus.emit('test:event', { arg0: 1, arg1: 2, arg2: 3 });
     expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:event', 1, 2, 3);
     mockLogger.mockClear();
     
     // Test with enabled and filter parameters
     const filter = jest.fn().mockReturnValue(true);
-    eventBus.debugMonitor(true, filter);
-    eventBus.emit('test:event', 1, 2, 3);
+    eventBus.debugMonitor({ enabled: true, filter: filter });
+    eventBus.emit('test:event', { arg0: 1, arg1: 2, arg2: 3 });
     expect(filter).toHaveBeenCalledWith('test:event');
     expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:event', 1, 2, 3);
     mockLogger.mockClear();
     
     // Test with all parameters
     const customLogger = jest.fn();
-    eventBus.debugMonitor(true, filter, customLogger);
-    eventBus.emit('test:event', 1, 2, 3);
+    eventBus.debugMonitor({ enabled: true, filter: filter, logger: customLogger });
+    eventBus.emit('test:event', { arg0: 1, arg1: 2, arg2: 3 });
     expect(filter).toHaveBeenCalledWith('test:event');
     expect(customLogger).toHaveBeenCalledWith('[EVENT] test:event', 1, 2, 3);
     expect(mockLogger).not.toHaveBeenCalled();
@@ -116,28 +116,28 @@ describe('Advanced EventBus Tests', () => {
   
   test('should count listeners correctly when debug monitoring is enabled/disabled', () => {
     // Check initial listener count (should be 0)
-    expect(eventBus.listenerCount('test:event')).toBe(0);
+    expect(eventBus.listenerCount({ event: 'test:event' })).toBe(0);
     
     // Add a listener
     const listener = jest.fn();
-    eventBus.on('test:event', listener);
+    eventBus.on({ event: 'test:event', listener: listener });
     
     // Check listener count (should be 1)
-    expect(eventBus.listenerCount('test:event')).toBe(1);
+    expect(eventBus.listenerCount({ event: 'test:event' })).toBe(1);
     
     // Enable debug monitoring (this adds a listener to '*' for testing)
-    eventBus.debugMonitor(true);
+    eventBus.debugMonitor({ enabled: true });
     
     // Check listener count for the special '*' event (should be 1)
-    expect(eventBus.listenerCount('*')).toBe(1);
+    expect(eventBus.listenerCount({ event: '*' })).toBe(1);
     
     // Disable debug monitoring (this removes all listeners for '*')
-    eventBus.debugMonitor(false);
+    eventBus.debugMonitor({ enabled: false });
     
     // Check listener count for the special '*' event (should be 0)
-    expect(eventBus.listenerCount('*')).toBe(0);
+    expect(eventBus.listenerCount({ event: '*' })).toBe(0);
     
     // Check that the original listener is still there
-    expect(eventBus.listenerCount('test:event')).toBe(1);
+    expect(eventBus.listenerCount({ event: 'test:event' })).toBe(1);
   });
 }); 

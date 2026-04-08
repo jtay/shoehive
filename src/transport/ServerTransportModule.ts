@@ -10,7 +10,7 @@ export interface ServerTransportModule {
    * @param player The player to check balance for
    * @returns A promise that resolves to the player's balance
    */
-  getPlayerBalance(player: Player): Promise<number>;
+  getPlayerBalance(options: { player: Player }): Promise<number>;
   
   /**
    * Create a bet for a player
@@ -19,7 +19,7 @@ export interface ServerTransportModule {
    * @param metadata Any additional information about the bet
    * @returns A promise that resolves to a bet ID if successful
    */
-  createBet(player: Player, amount: number, metadata?: Record<string, any>): Promise<string>;
+  createBet(options: { player: Player, amount: number, metadata?: Record<string, any> }): Promise<string>;
   
   /**
    * Mark a bet as won and award the player
@@ -28,7 +28,7 @@ export interface ServerTransportModule {
    * @param metadata Any additional information about the win
    * @returns A promise that resolves to true if successful
    */
-  markBetWon(betId: string, winAmount: number, metadata?: Record<string, any>): Promise<boolean>;
+  markBetWon(options: { betId: string, winAmount: number, metadata?: Record<string, any> }): Promise<boolean>;
   
   /**
    * Mark a bet as lost
@@ -36,5 +36,5 @@ export interface ServerTransportModule {
    * @param metadata Any additional information about the loss
    * @returns A promise that resolves to true if successful
    */
-  markBetLost(betId: string, metadata?: Record<string, any>): Promise<boolean>;
+  markBetLost(options: { betId: string, metadata?: Record<string, any> }): Promise<boolean>;
 } 

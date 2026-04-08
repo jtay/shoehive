@@ -220,7 +220,7 @@ describe('WebSocketManager', () => {
     
     // Instead of trying to access the message handler, call processMessage directly
     // on the messageRouter with our mock player and message
-    messageRouter.processMessage(mockPlayer as unknown as Player, message);
+    messageRouter.processMessage({ player: mockPlayer as unknown as Player, messageStr: message });
     
     // Verify messageRouter.processMessage was called
     expect(processMessageSpy).toHaveBeenCalledWith(mockPlayer, message);
@@ -255,7 +255,7 @@ describe('WebSocketManager', () => {
     });
     
     // Call the method directly
-    webSocketManager.distributePlayerUpdate(mockPlayer as unknown as Player, 'name', 'Player 1 Updated');
+    webSocketManager.distributePlayerUpdate({ player: mockPlayer as unknown as Player, key: 'name', value: 'Player 1 Updated' });
     
     // Player should receive their own update
     expect(mockPlayer.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
@@ -297,10 +297,7 @@ describe('WebSocketManager', () => {
     });
     
     // Call the method directly with multiple attributes
-    webSocketManager.distributePlayerUpdates(
-      mockPlayer as unknown as Player, 
-      { name: 'Player 1 Updated', age: 26 }
-    );
+    webSocketManager.distributePlayerUpdates({ player: mockPlayer as unknown as Player, attributes: { name: 'Player 1 Updated', age: 26 } });
     
     // Player should receive their own update
     expect(mockPlayer.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
@@ -342,7 +339,7 @@ describe('WebSocketManager', () => {
     });
     
     // Call the method directly with a non-relevant attribute
-    webSocketManager.distributePlayerUpdate(mockPlayer as unknown as Player, 'privateData', 'new secret');
+    webSocketManager.distributePlayerUpdate({ player: mockPlayer as unknown as Player, key: 'privateData', value: 'new secret' });
     
     // Player should receive their own update
     expect(mockPlayer.sendMessage).toHaveBeenCalled();
@@ -376,7 +373,7 @@ describe('WebSocketManager', () => {
       games: [],
       tables: []
     };
-    eventBus.emit(LOBBY_EVENTS.UPDATED, lobbyState);
+    eventBus.emit(LOBBY_EVENTS.UPDATED, { lobbyState });
     
     // All players should receive the lobby state
     expect(mockPlayer1.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
@@ -511,13 +508,13 @@ describe('WebSocketManager', () => {
     webSocketManager.players = new Map([['get-player-test', mockPlayer]]);
     
     // Get the player
-    const player = webSocketManager.getPlayer('get-player-test');
+    const player = webSocketManager.getPlayer({ playerId: 'get-player-test' });
     
     // Should return the correct player
     expect(player).toBe(mockPlayer);
     
     // Non-existent player should return undefined
-    expect(webSocketManager.getPlayer('non-existent')).toBeUndefined();
+    expect(webSocketManager.getPlayer({ playerId: 'non-existent' })).toBeUndefined();
   });
   
   test('should disconnect player without timeout', () => {
@@ -542,7 +539,7 @@ describe('WebSocketManager', () => {
     ]);
     
     // Disconnect the player
-    webSocketManager.disconnectPlayer('disconnect-test');
+    webSocketManager.disconnectPlayer({ playerId: 'disconnect-test' });
     
     // Player should be disconnected
     expect(mockPlayer.disconnect).toHaveBeenCalled();
@@ -566,7 +563,7 @@ describe('WebSocketManager', () => {
     expect(webSocketManager.getReconnectionTimeout()).toBe(600000);
     
     // Change timeout
-    webSocketManager.setReconnectionTimeout(30000);
+    webSocketManager.setReconnectionTimeout({ timeoutMs: 30000 });
     
     // Verify change
     expect(webSocketManager.getReconnectionTimeout()).toBe(30000);

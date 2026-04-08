@@ -61,22 +61,22 @@ describe('Lobby', () => {
 
   describe('Attribute Management', () => {
     test('should manage single attributes correctly', () => {
-      expect(lobby.hasAttribute('theme')).toBe(false);
+      expect(lobby.hasAttribute({ key: 'theme' })).toBe(false);
       
-      lobby.setAttribute('theme', 'dark');
-      expect(lobby.hasAttribute('theme')).toBe(true);
-      expect(lobby.getAttribute('theme')).toBe('dark');
+      lobby.setAttribute({ key: 'theme', value: 'dark' });
+      expect(lobby.hasAttribute({ key: 'theme' })).toBe(true);
+      expect(lobby.getAttribute({ key: 'theme' })).toBe('dark');
       
-      lobby.setAttribute('theme', 'light');
-      expect(lobby.getAttribute('theme')).toBe('light');
+      lobby.setAttribute({ key: 'theme', value: 'light' });
+      expect(lobby.getAttribute({ key: 'theme' })).toBe('light');
       
-      expect(lobby.getAttribute('nonexistent')).toBeUndefined();
+      expect(lobby.getAttribute({ key: 'nonexistent' })).toBeUndefined();
     });
 
     test('should emit ATTRIBUTE_CHANGED event when attribute is set', () => {
       const emitSpy = jest.spyOn(eventBus, 'emit');
       
-      lobby.setAttribute('status', 'open');
+      lobby.setAttribute({ key: 'status', value: 'open' });
       
       expect(emitSpy).toHaveBeenCalledWith(
         LOBBY_EVENTS.ATTRIBUTE_CHANGED,
@@ -89,7 +89,7 @@ describe('Lobby', () => {
     test('should not emit ATTRIBUTE_CHANGED event if notify is false', () => {
       const emitSpy = jest.spyOn(eventBus, 'emit');
       
-      lobby.setAttribute('status', 'open', false);
+      lobby.setAttribute({ key: 'status', value: 'open', notify: false });
       
       expect(emitSpy).not.toHaveBeenCalled();
     });
@@ -101,11 +101,11 @@ describe('Lobby', () => {
         maxPlayers: 100
       };
       
-      lobby.setAttributes(attributes);
+      lobby.setAttributes({ attributes: attributes });
       
-      expect(lobby.getAttribute('theme')).toBe('dark');
-      expect(lobby.getAttribute('status')).toBe('open');
-      expect(lobby.getAttribute('maxPlayers')).toBe(100);
+      expect(lobby.getAttribute({ key: 'theme' })).toBe('dark');
+      expect(lobby.getAttribute({ key: 'status' })).toBe('open');
+      expect(lobby.getAttribute({ key: 'maxPlayers' })).toBe(100);
     });
 
     test('should emit ATTRIBUTES_CHANGED event when multiple attributes are set', () => {
@@ -116,7 +116,7 @@ describe('Lobby', () => {
         status: 'open'
       };
       
-      lobby.setAttributes(attributes);
+      lobby.setAttributes({ attributes: attributes });
       
       expect(emitSpy).toHaveBeenCalledWith(
         LOBBY_EVENTS.ATTRIBUTES_CHANGED,
@@ -127,9 +127,9 @@ describe('Lobby', () => {
     });
 
     test('should get all attributes', () => {
-      lobby.setAttribute('theme', 'dark');
-      lobby.setAttribute('status', 'open');
-      lobby.setAttribute('maxPlayers', 100);
+      lobby.setAttribute({ key: 'theme', value: 'dark' });
+      lobby.setAttribute({ key: 'status', value: 'open' });
+      lobby.setAttribute({ key: 'maxPlayers', value: 100 });
       
       const allAttributes = lobby.getAttributes();
       expect(allAttributes).toEqual({
@@ -155,13 +155,13 @@ describe('Lobby', () => {
     };
     
     // Register game
-    gameManager.registerGame(gameDefinition);
+    gameManager.registerGame({ gameDefinition: gameDefinition });
     
     // Clear emit history
     emitSpy.mockClear();
     
     // Emit table created event
-    eventBus.emit(TABLE_EVENTS.CREATED, mockTable);
+    eventBus.emit(TABLE_EVENTS.CREATED, { mockTable });
     
     // Expect lobby state event was emitted
     expect(emitSpy).toHaveBeenCalledWith(
@@ -207,13 +207,13 @@ describe('Lobby', () => {
       lobbyRelevantPlayerAttributes: ['status']
     };
     
-    gameManager.registerGame(gameDefinition);
+    gameManager.registerGame({ gameDefinition: gameDefinition });
     
     const emitSpy = jest.spyOn(eventBus, 'emit');
     emitSpy.mockClear();
     
     // Emit player attribute changed event for a relevant attribute
-    eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, mockPlayer, 'status', 'ready');
+    eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, { mockPlayer, arg1: 'status', arg2: 'ready' });
     
     // Expect lobby state event was emitted
     expect(emitSpy).toHaveBeenCalledWith(
@@ -233,9 +233,9 @@ describe('Lobby', () => {
       maxSeatsPerPlayer: 1
     };
     
-    gameManager.registerGame(gameDefinition);
+    gameManager.registerGame({ gameDefinition: gameDefinition });
     
-    const table = lobby.createTable('test-game');
+    const table = lobby.createTable({ gameId: 'test-game' });
     
     expect(tableFactory.createTable).toHaveBeenCalledWith(
       gameDefinition.defaultSeats,
@@ -261,16 +261,16 @@ describe('Lobby', () => {
       maxSeatsPerPlayer: 1
     };
     
-    gameManager.registerGame(gameDefinition);
+    gameManager.registerGame({ gameDefinition: gameDefinition });
     
     const options = { startingChips: 1000 };
-    lobby.createTable('test-game', options);
+    lobby.createTable({ gameId: 'test-game', options: options });
     
     // We pass options to createTable now, Lobby no longer calls setAttribute('options')
   });
   
   test('should return null when creating a table for a non-existent game', () => {
-    const table = lobby.createTable('non-existent-game');
+    const table = lobby.createTable({ gameId: 'non-existent-game' });
     
     expect(table).toBeNull();
     expect(tableFactory.createTable).not.toHaveBeenCalled();
@@ -292,8 +292,8 @@ describe('Lobby', () => {
       }
     };
     
-    gameManager.registerGame(gameDefinition);
-    lobby.createTable('test-game');
+    gameManager.registerGame({ gameDefinition: gameDefinition });
+    lobby.createTable({ gameId: 'test-game' });
     
     expect(setupTableMock).toHaveBeenCalledWith(mockTable);
   });
