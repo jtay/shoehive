@@ -94,7 +94,7 @@ export class WebSocketManager {
    * and sends the appropriate messages to all players.
    */
   private setupEventListeners(): void {
-    this.eventBus.on({ event: LOBBY_EVENTS.UPDATED, listener: ({ lobbyState }: { lobbyState: any }) => {
+    this.eventBus.on({ event: LOBBY_EVENTS.UPDATED, listener: ({ lobbyState }: { lobbyState: unknown }) => {
                 const message = {
                   type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
                   data: lobbyState
@@ -178,7 +178,7 @@ export class WebSocketManager {
                 this.lobby.updateLobbyState();
               } });
 
-    this.eventBus.on({ event: 'request:table:create', listener: ({ player, gameId, options = {} }: { player: Player, gameId: string, options?: any }) => {
+    this.eventBus.on({ event: 'request:table:create', listener: ({ player, gameId, options = {} }: { player: Player, gameId: string, options?: Record<string, unknown> }) => {
                 try {
                   // Create a new table
                   const table = this.lobby.createTable({ gameId: gameId, options: options });
@@ -305,25 +305,25 @@ export class WebSocketManager {
               } });
     
     // Handle table state updates
-    this.eventBus.on({ event: TABLE_EVENTS.STATE_UPDATED, listener: ({ table, state }: { table: Table, state: any }) => {
+    this.eventBus.on({ event: TABLE_EVENTS.STATE_UPDATED, listener: ({ table, state }: { table: Table, state: unknown }) => {
                 // No need to broadcast again as the table has already done this
                 // This event can be used by other components
               } });
     
     // Handle player attribute changes
-    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTE_CHANGED, listener: ({ player, key, value }: { player: Player, key: string, value: any }) => {
+    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTE_CHANGED, listener: ({ player, key, value }: { player: Player, key: string, value: unknown }) => {
                 // Use the new distribution method
                 this.distributePlayerUpdate({ player: player, key: key, value: value });
               } });
     
     // Handle bulk player attribute changes
-    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTES_CHANGED, listener: ({ player, changedKeys, attributes }: { player: Player, changedKeys: string[], attributes: Record<string, any> }) => {
+    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTES_CHANGED, listener: ({ player, changedKeys, attributes }: { player: Player, changedKeys: string[], attributes: Record<string, unknown> }) => {
                 // Use the new bulk distribution method
                 this.distributePlayerUpdates({ player: player, attributes: attributes });
               } });
     
     // Handle table attribute changes
-    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTE_CHANGED, listener: ({ table, key, value }: { table: Table, key: string, value: any }) => {
+    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTE_CHANGED, listener: ({ table, key, value }: { table: Table, key: string, value: unknown }) => {
                 // Broadcast is handled by ATTRIBUTES_CHANGED batch event to avoid duplicates.
                 // Update lobby if this is a metadata attribute that would affect the lobby display
                 const metadataAttributes = ["gameId", "gameName", "options"];
@@ -333,8 +333,8 @@ export class WebSocketManager {
               } });
     
     // Handle bulk table attribute changes
-    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTES_CHANGED, listener: ({ table, changedKeys, attributes }: { table: Table, changedKeys: string[], attributes: Record<string, any> }) => {
-                const gameId = table.getAttribute({ key: "gameId" });
+    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTES_CHANGED, listener: ({ table, changedKeys, attributes }: { table: Table, changedKeys: string[], attributes: Record<string, unknown> }) => {
+                const gameId = table.getAttribute({ key: "gameId" }) as string;
                 const gameDefinition = gameId ? this.gameManager.getGameDefinition({ gameId: gameId }) : null;
                 
                 const relevantTableAttributes = gameDefinition?.relevantTableAttributes || [
@@ -401,7 +401,7 @@ export class WebSocketManager {
    * @param value The new value
    * @param updateTableState Whether to update the table state
    */
-  public distributePlayerUpdate({ player, key, value, updateTableState = true }: { player: Player, key: string, value: any, updateTableState?: boolean }): void {
+  public distributePlayerUpdate({ player, key, value, updateTableState = true }: { player: Player, key: string, value: unknown, updateTableState?: boolean }): void {
     // Notify the player about their own attribute changes
     player.sendMessage({ message: {
                 type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
@@ -415,7 +415,7 @@ export class WebSocketManager {
     const table = player.getTable();
     if (table && updateTableState) {
       // Get the game ID for this table
-      const gameId = table.getAttribute({ key: "gameId" });
+      const gameId = table.getAttribute({ key: "gameId" }) as string;
       if (!gameId) return;
       
       // Get the game definition
@@ -440,7 +440,7 @@ export class WebSocketManager {
    * @param attributes The attributes that changed
    * @param updateTableState Whether to update the table state
    */
-  public distributePlayerUpdates({ player, attributes, updateTableState = true }: { player: Player, attributes: Record<string, any>, updateTableState?: boolean }): void {
+  public distributePlayerUpdates({ player, attributes, updateTableState = true }: { player: Player, attributes: Record<string, unknown>, updateTableState?: boolean }): void {
     // Notify the player about their own attribute changes
     player.sendMessage({ message: {
                 type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
@@ -454,7 +454,7 @@ export class WebSocketManager {
     const table = player.getTable();
     if (table && updateTableState) {
       // Get the game ID for this table
-      const gameId = table.getAttribute({ key: "gameId" });
+      const gameId = table.getAttribute({ key: "gameId" }) as string;
       if (!gameId) return;
       
       // Get the game definition
@@ -636,8 +636,8 @@ export class WebSocketManager {
     
     this.players.forEach(player => {
       if (player.getAttribute({ key: 'connectionStatus' }) === 'disconnected') {
-        const disconnectedAt = player.getAttribute({ key: 'disconnectedAt' });
-        const reconnectionAvailableUntil = player.getAttribute({ key: 'reconnectionAvailableUntil' });
+        const disconnectedAt = player.getAttribute({ key: 'disconnectedAt' }) as number;
+        const reconnectionAvailableUntil = player.getAttribute({ key: 'reconnectionAvailableUntil' }) as number;
         
         if (disconnectedAt && reconnectionAvailableUntil) {
           result.push({

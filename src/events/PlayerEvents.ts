@@ -26,13 +26,13 @@ export const PLAYER_EVENTS = {
  * You can use these payloads to listen for changes in the player state, or to trigger actions based on player events.
  */
 export interface DefaultPlayerEventPayloadMap {
-  [PLAYER_EVENTS.CONNECTED]: [player: Player];
-  [PLAYER_EVENTS.DISCONNECTED]: [player: Player];
-  [PLAYER_EVENTS.RECONNECTED]: [player: Player];
-  [PLAYER_EVENTS.REMOVED]: [player: Player];
-  [PLAYER_EVENTS.STATE_UPDATED]: [player: Player];
-  [PLAYER_EVENTS.ATTRIBUTE_CHANGED]: [player: Player, key: string, value: any];
-  [PLAYER_EVENTS.ATTRIBUTES_CHANGED]: [player: Player, changedKeys: string[], attributes: Record<string, any>];
-  [PLAYER_EVENTS.AUTHENTICATION_FAILED]: [player: Player, reason: string];
-  [PLAYER_EVENTS.AUTHENTICATION_SUCCEEDED]: [player: Player];
+  [PLAYER_EVENTS.CONNECTED]: { player: Player };
+  [PLAYER_EVENTS.DISCONNECTED]: { player: Player };
+  [PLAYER_EVENTS.RECONNECTED]: { player: Player };
+  [PLAYER_EVENTS.REMOVED]: { player: Player };
+  [PLAYER_EVENTS.STATE_UPDATED]: { player: Player };
+  [PLAYER_EVENTS.ATTRIBUTE_CHANGED]: { player: Player, key: string, value: unknown };
+  [PLAYER_EVENTS.ATTRIBUTES_CHANGED]: { player: Player, changedKeys: string[], attributes: Record<string, unknown> };
+  [PLAYER_EVENTS.AUTHENTICATION_FAILED]: { player: Player, reason: string };
+  [PLAYER_EVENTS.AUTHENTICATION_SUCCEEDED]: { player: Player };
 }

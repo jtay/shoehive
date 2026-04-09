@@ -5,12 +5,12 @@ import { CLIENT_MESSAGE_TYPES, CLIENT_COMMAND_TYPES } from "../core/commands/ind
 interface Message {
   action: string;
   tableId?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export class MessageRouter {
   private eventBus: EventBus;
-  private commandHandlers: Map<string, (player: Player, data: any) => void>;
+  private commandHandlers: Map<string, (player: Player, data: Record<string, unknown>) => void>;
 
   constructor(eventBus: EventBus) {
     this.eventBus = eventBus;
@@ -29,7 +29,7 @@ export class MessageRouter {
    * @param action - The action to register the handler for
    * @param handler - The handler function to be called when the action is received
    */
-  public registerCommandHandler({ action, handler }: { action: string, handler: (player: Player, data: any) => void }): void {
+  public registerCommandHandler({ action, handler }: { action: string, handler: (player: Player, data: Record<string, unknown>) => void }): void {
     this.commandHandlers.set(action, handler);
   }
 
@@ -84,7 +84,7 @@ export class MessageRouter {
                   return;
                 }
 
-                this.eventBus.emit('request:table:join', { player, tableId: data.tableId });
+                this.eventBus.emit('request:table:join', { player, tableId: data.tableId as string });
               } });
 
     // Create table
@@ -97,7 +97,7 @@ export class MessageRouter {
                   return;
                 }
 
-                this.eventBus.emit('request:table:create', { player, gameId: data.gameId, options: data.options });
+                this.eventBus.emit('request:table:create', { player, gameId: data.gameId as string, options: data.options as Record<string, unknown> });
               } });
   }
 
@@ -164,7 +164,7 @@ export class MessageRouter {
                   return;
                 }
 
-                this.eventBus.emit('request:table:seat:sit', { player, tableId: table.id, seatIndex: data.seatIndex });
+                this.eventBus.emit('request:table:seat:sit', { player, tableId: table.id, seatIndex: data.seatIndex as number });
               } });
 
     // Stand from seat

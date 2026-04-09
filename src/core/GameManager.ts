@@ -11,8 +11,7 @@ export interface GameDefinition {
   maxPlayers: number;
   defaultSeats: number;
   maxSeatsPerPlayer: number;
-  options?: Record<string, any>;
-  // Define which player attributes should trigger a table state update when changed
+  options?: Record<string, unknown>;
   tableRelevantPlayerAttributes?: string[];
   // Define which player attributes should trigger a lobby update when changed
   lobbyRelevantPlayerAttributes?: string[];
@@ -41,7 +40,7 @@ export class GameManager {
     this.eventBus.on({ event: TABLE_EVENTS.CREATED, listener: ({ table }: { table: Table }) => {
                 this.tables.set(table.id, table);
                 
-                const gameId = table.getAttribute({ key: "gameId" });
+                const gameId = table.getAttribute({ key: "gameId" }) as string;
                 if (gameId) {
                   if (!this.tablesByGame.has(gameId)) {
                     this.tablesByGame.set(gameId, new Set());
@@ -87,7 +86,7 @@ export class GameManager {
     const table = this.tables.get(tableId);
     if (!table) return;
 
-    const gameId = table.getAttribute({ key: "gameId" });
+    const gameId = table.getAttribute({ key: "gameId" }) as string;
     if (gameId) {
       this.tablesByGame.get(gameId)?.delete(tableId);
     }

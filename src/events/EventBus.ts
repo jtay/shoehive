@@ -38,7 +38,7 @@ export class EventBus {
   private emitter: EventEmitter;
   private debugEnabled = false;
   private debugFilter?: (event: string) => boolean;
-  private debugLogger: (event: string, ...args: any[]) => void = console.log;
+  private debugLogger: (event: string, ...args: unknown[]) => void = console.log;
   private originalEmit: EventEmitter['emit'];
 
   constructor() {
@@ -54,8 +54,8 @@ export class EventBus {
    * @param event The event to listen for
    * @param listener The callback function to execute when the event occurs
    */
-  public on({ event, listener }: { event: EventType | string, listener: (payload: any) => void }): void {
-    this.emitter.on(event, listener);
+  public on<T = unknown>({ event, listener }: { event: EventType | string, listener: (payload: T) => void }): void {
+    this.emitter.on(event, listener as (payload: unknown) => void);
   }
 
   /**
@@ -63,8 +63,8 @@ export class EventBus {
    * @param event The event to listen for
    * @param listener The callback function to execute when the event occurs
    */
-  public once({ event, listener }: { event: EventType | string, listener: (payload: any) => void }): void {
-    this.emitter.once(event, listener);
+  public once<T = unknown>({ event, listener }: { event: EventType | string, listener: (payload: T) => void }): void {
+    this.emitter.once(event, listener as (payload: unknown) => void);
   }
 
   /**
@@ -72,8 +72,8 @@ export class EventBus {
    * @param event The event to stop listening for
    * @param listener The callback function to remove
    */
-  public off({ event, listener }: { event: EventType | string, listener: (payload: any) => void }): void {
-    this.emitter.off(event, listener);
+  public off<T = unknown>({ event, listener }: { event: EventType | string, listener: (payload: T) => void }): void {
+    this.emitter.off(event, listener as (payload: unknown) => void);
   }
 
   /**
@@ -82,7 +82,7 @@ export class EventBus {
    * @param args Arguments to pass to event listeners
    * @returns Whether the event had listeners
    */
-  public emit(event: EventType | string, payload: any = {}): boolean {
+  public emit(event: EventType | string, payload: unknown = {}): boolean {
 
           const result = this.originalEmit.call(this.emitter, event, payload);
           if (this.debugEnabled) {
@@ -112,7 +112,7 @@ export class EventBus {
    * @param filter Optional filter function to only log certain events
    * @param logger Custom logger function (defaults to console.log)
    */
-  public debugMonitor({ enabled = true, filter, logger = console.log }: { enabled?: boolean, filter?: (event: string) => boolean, logger?: (event: string, ...args: any[]) => void } = {}): void {
+  public debugMonitor({ enabled = true, filter, logger = console.log }: { enabled?: boolean, filter?: (event: string) => boolean, logger?: (event: string, ...args: unknown[]) => void } = {}): void {
     this.debugEnabled = enabled;
     this.debugFilter = filter;
     this.debugLogger = logger;

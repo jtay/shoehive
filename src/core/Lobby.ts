@@ -16,7 +16,7 @@ export class Lobby {
   private eventBus: EventBus;
   private gameManager: GameManager;
   private tableFactory: TableFactory;
-  private attributes: Map<string, any>;
+  private attributes: Map<string, unknown>;
 
   constructor(eventBus: EventBus, gameManager: GameManager, tableFactory: TableFactory) {
     this.eventBus = eventBus;
@@ -41,13 +41,13 @@ export class Lobby {
               } });
     
     // Listen for player attribute changes that might affect lobby data
-    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTE_CHANGED, listener: ({ player, key, value }: { player: Player, key: string, value: any }) => {
+    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTE_CHANGED, listener: ({ player, key, value }: { player: Player, key: string, value: unknown }) => {
                 // If the player is at a table and the attribute might affect lobby display
                 const table = player.getTable();
                 if (!table) return;
                 
                 // Get the game ID for this table
-                const gameId = table.getAttribute({ key: "gameId" });
+                const gameId = table.getAttribute({ key: "gameId" }) as string;
                 if (!gameId) return;
                 
                 // Get the game definition
@@ -65,7 +65,7 @@ export class Lobby {
               } });
 
     // Listen for table attribute changes that might affect lobby display
-    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTE_CHANGED, listener: ({ table, key, value }: { table: Table, key: string, value: any }) => {
+    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTE_CHANGED, listener: ({ table, key, value }: { table: Table, key: string, value: unknown }) => {
                 const metadataAttributes = ["gameId", "gameName", "options"];
                 if (metadataAttributes.includes(key)) {
                   this.broadcastLobbyUpdate();
@@ -80,7 +80,7 @@ export class Lobby {
    * @param options Optional options for the table.
    * @returns The newly created table, or null if the game definition is not found.
    */
-  public createTable({ gameId, options }: { gameId: string, options?: Record<string, any> }): Table | null {
+  public createTable({ gameId, options }: { gameId: string, options?: Record<string, unknown> }): Table | null {
     const gameDefinition = this.gameManager.getGameDefinition({ gameId: gameId });
     if (!gameDefinition) {
       console.error(`Failed to create table: ${gameId} (game definition not found)`);
@@ -128,7 +128,7 @@ export class Lobby {
    * @param value The attribute value
    * @param notify Whether to emit an event (defaults to true)
    */
-  public setAttribute({ key, value, notify = true }: { key: string, value: any, notify?: boolean }): void {
+  public setAttribute({ key, value, notify = true }: { key: string, value: unknown, notify?: boolean }): void {
     this.attributes.set(key, value);
     
     if (notify) {
@@ -142,7 +142,7 @@ export class Lobby {
    * 
    * @param attributes Object containing attribute key-value pairs
    */
-  public setAttributes({ attributes }: { attributes: Record<string, any> }): void {
+  public setAttributes({ attributes }: { attributes: Record<string, unknown> }): void {
     const changedKeys: string[] = [];
     
     // Set all attributes first
@@ -167,7 +167,7 @@ export class Lobby {
    * @param key - The key of the attribute to get
    * @returns The value of the attribute, or undefined if it doesn't exist
    */
-  public getAttribute({ key }: { key: string }): any {
+  public getAttribute({ key }: { key: string }): unknown {
     return this.attributes.get(key);
   }
 
@@ -175,7 +175,7 @@ export class Lobby {
    * Get all attributes from the lobby.
    * @returns An object containing all lobby attributes
    */
-  public getAttributes(): Record<string, any> {
+  public getAttributes(): Record<string, unknown> {
     return Object.fromEntries(this.attributes.entries());
   }
 

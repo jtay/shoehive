@@ -13,7 +13,7 @@ import { Hand } from "./card";
 export class Seat {
   private player: Player | null = null;
   private hands: Map<string, Hand> = new Map();
-  private attributes: Map<string, any> = new Map();
+  private attributes: Map<string, unknown> = new Map();
 
   /**
    * Creates a new seat with a main hand by default.
@@ -118,7 +118,7 @@ export class Seat {
    * @param key The key of the attribute to set.
    * @param value The value of the attribute to set.
    */
-  public setAttribute({ key, value }: { key: string, value: any }): void {
+  public setAttribute({ key, value }: { key: string, value: unknown }): void {
     this.attributes.set(key, value);
   }
 
@@ -128,7 +128,7 @@ export class Seat {
    * @param key The key of the attribute to get.
    * @returns The value of the attribute or null if it does not exist.
    */
-  public getAttribute({ key }: { key: string }): any {
+  public getAttribute({ key }: { key: string }): unknown {
     return this.attributes.get(key);
   }
 
@@ -147,7 +147,7 @@ export class Seat {
    * 
    * @returns A record of all attributes.
    */
-  public getAttributes(): Record<string, any> {
+  public getAttributes(): Record<string, unknown> {
     return Object.fromEntries(this.attributes.entries());
   }
 
@@ -156,7 +156,7 @@ export class Seat {
    * 
    * @param attributes A record of attributes to set.
    */
-  public setAttributes({ attributes }: { attributes: Record<string, any> }): void {
+  public setAttributes({ attributes }: { attributes: Record<string, unknown> }): void {
     for (const [key, value] of Object.entries(attributes)) {
       this.attributes.set(key, value);
     }

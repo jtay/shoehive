@@ -53,7 +53,7 @@ export { LOBBY_EVENTS, PLAYER_EVENTS, TABLE_EVENTS };
  * }
  * ```
  */
-export type CustomEventMap = Record<string, any>;
+export type CustomEventMap = Record<string, string>;
 
 // Create union types of all event string literals
 export type PlayerEventType = typeof PLAYER_EVENTS[keyof typeof PLAYER_EVENTS];
@@ -67,8 +67,8 @@ export type BuiltInEventType = PlayerEventType | TableEventType | LobbyEventType
 export type EventType = BuiltInEventType | (CustomEventMap extends Record<string, infer E> ? E : never);
 
 // Helper type to extract the payload type for a specific event
-export type EventPayloadMap<TMap extends Record<string, any>> = {
-  [K in keyof TMap]: any;
+export type EventPayloadMap<TMap extends Record<string, unknown>> = {
+  [K in keyof TMap]: unknown;
 };
 
 /**

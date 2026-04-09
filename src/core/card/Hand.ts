@@ -12,7 +12,7 @@ import { Deck } from './Deck';
 export class Hand {
   private cards: Card[] = [];
   private id: string;
-  private attributes: Map<string, any> = new Map();
+  private attributes: Map<string, unknown> = new Map();
 
   constructor(id = "main") {
     this.id = id;
@@ -97,7 +97,7 @@ export class Hand {
    * @param key The key of the attribute to set.
    * @param value The value of the attribute to set.
    */
-  public setAttribute({ key, value }: { key: string, value: any }): void {
+  public setAttribute({ key, value }: { key: string, value: unknown }): void {
     this.attributes.set(key, value);
   }
 
@@ -107,7 +107,7 @@ export class Hand {
    * @param key The key of the attribute to get.
    * @returns The value of the attribute or null if the attribute does not exist.
    */
-  public getAttribute({ key }: { key: string }): any {
+  public getAttribute({ key }: { key: string }): unknown {
     return this.attributes.get(key);
   }
 
@@ -127,7 +127,7 @@ export class Hand {
    * 
    * @returns A representation of the hand that is safe to send to clients.
    */
-  public getVisibleState(): any {
+  public getVisibleState(): unknown {
     return {
       id: this.id,
       cards: this.getVisibleCards(),
@@ -142,7 +142,7 @@ export class Hand {
    * 
    * @returns A complete representation of the hand.
    */
-  public getFullState(): any {
+  public getFullState(): unknown {
     return {
       id: this.id,
       cards: this.getCards(),

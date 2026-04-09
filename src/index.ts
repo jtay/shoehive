@@ -101,40 +101,43 @@ export function createGameServer({ server, authModule, serverTransportModule, op
 
   messageRouter.registerCommandHandler({ action: CLIENT_COMMAND_TYPES.TABLE.GET_STATE, handler: (player, data) => {
             if (!data.tableId) return;
+            const tableId = data.tableId as string;
             
-            const table = gameManager.getTableById({ tableId: data.tableId });
+            const table = gameManager.getTableById({ tableId: tableId });
             if (table) {
               player.sendMessage({ message: {
                             type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
-                            data: table.getState()
+                            data: table.getTableState({})
                           } });
             } else {
-              console.error(`Failed to get table state: ${data.tableId}`);
+              console.error(`Failed to get table state: ${tableId}`);
             }
           } });
 
   messageRouter.registerCommandHandler({ action: CLIENT_COMMAND_TYPES.TABLE.JOIN, handler: (player, data) => {
             if (!data.tableId) return;
+            const tableId = data.tableId as string;
             
-            const table = gameManager.getTableById({ tableId: data.tableId });
+            const table = gameManager.getTableById({ tableId: tableId });
             if (table) {
               table.addPlayer({ player: player });
             } else {
-              console.error(`Failed to join table: ${data.tableId}`);
+              console.error(`Failed to join table: ${tableId}`);
             }
           } });
   
   messageRouter.registerCommandHandler({ action: CLIENT_COMMAND_TYPES.TABLE.CREATE, handler: (player, data) => {
             if (!data.gameId) {
-              console.error(`Failed to create table: ${data.gameId} (no gameId provided)`);
+              console.error(`Failed to create table (no gameId provided)`);
               return;
             }
+            const gameId = data.gameId as string;
             
-            const table = lobby.createTable({ gameId: data.gameId, options: data.options });
+            const table = lobby.createTable({ gameId: gameId, options: data.options as Record<string, unknown> });
             if (table) {
               table.addPlayer({ player: player });
             } else {
-              console.error(`Failed to create table: ${data.gameId}`);
+              console.error(`Failed to create table: ${gameId}`);
             }
           } });
   

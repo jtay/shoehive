@@ -18,7 +18,7 @@ export const LOBBY_EVENTS = {
  * You can use these payloads to listen for changes in the lobby state, or to trigger actions based on lobby events.
  */
 export interface DefaultLobbyEventPayloadMap {
-    [LOBBY_EVENTS.UPDATED]: [lobby: Lobby];
-    [LOBBY_EVENTS.ATTRIBUTE_CHANGED]: [lobby: Lobby, key: string, value: any];
-    [LOBBY_EVENTS.ATTRIBUTES_CHANGED]: [lobby: Lobby, changedKeys: string[], attributes: Record<string, any>];
+    [LOBBY_EVENTS.UPDATED]: { lobby: Lobby };
+    [LOBBY_EVENTS.ATTRIBUTE_CHANGED]: { lobby: Lobby, key: string, value: unknown };
+    [LOBBY_EVENTS.ATTRIBUTES_CHANGED]: { lobby: Lobby, changedKeys: string[], attributes: Record<string, unknown> };
 }

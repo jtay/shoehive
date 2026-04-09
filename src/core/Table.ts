@@ -14,7 +14,7 @@ export enum TableState {
 
 export interface TableOptions {
   seatCount?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**
@@ -39,7 +39,7 @@ export class Table {
   private state: TableState = TableState.WAITING;
   private readonly totalSeats: number;
   private readonly maxSeatsPerPlayer: number;
-  private attributes: Map<string, any> = new Map();
+  private attributes: Map<string, unknown> = new Map();
   private deck: Deck | null = null;
   private gameId: string;
   private options: TableOptions;
@@ -536,7 +536,7 @@ export class Table {
    * Broadcasts a message to all players at the table.
    * @param message - The message to broadcast.
    */
-  public broadcastMessage({ message }: { message: any }): void {
+  public broadcastMessage({ message }: { message: unknown }): void {
     const players = Array.from(this.players.values());
     for (const player of players) {
       player.sendMessage({ message });
@@ -572,7 +572,7 @@ export class Table {
    * @param playerId An optional playerId. If matched against a seat owner, returns proprietary hidden cards.
    * @returns The localized complete table state.
    */
-  public getTableState({ playerId }: { playerId?: string } = {}): any {
+  public getTableState({ playerId }: { playerId?: string } = {}): unknown {
     return {
       id: this.id,
       state: this.state,
@@ -589,7 +589,7 @@ export class Table {
             obj[key] = hand.getVisibleState();
           }
           return obj;
-        }, {} as Record<string, any>)
+        }, {} as Record<string, unknown>)
       })),
       attributes: Object.fromEntries(this.attributes.entries()),
       playerCount: this.players.size
@@ -602,7 +602,7 @@ export class Table {
    * 
    * @returns The table metadata.
    */
-  public getTableMetadata(): any {
+  public getTableMetadata(): unknown {
     return {
       id: this.id,
       state: this.state,
@@ -619,7 +619,7 @@ export class Table {
    * @param key - The key of the attribute to set.
    * @param value - The value of the attribute to set.
    */
-  public setAttribute({ key, value }: { key: string, value: any }): void {
+  public setAttribute({ key, value }: { key: string, value: unknown }): void {
     this.setAttributes({ attributes: { [key]: value } });
   }
 
@@ -628,7 +628,7 @@ export class Table {
    * @param key - The key of the attribute to get.
    * @returns The value of the attribute or null if the attribute does not exist.
    */
-  public getAttribute({ key }: { key: string }): any {
+  public getAttribute({ key }: { key: string }): unknown {
     return this.attributes.get(key);
   }
 
@@ -645,7 +645,7 @@ export class Table {
    * Gets all attributes from the table.
    * @returns An object containing all attributes.
    */
-  public getAttributes(): Record<string, any> {
+  public getAttributes(): Record<string, unknown> {
     return Object.fromEntries(this.attributes.entries());
   }
 
@@ -655,7 +655,7 @@ export class Table {
    * @param broadcast - Whether to broadcast the table state after updating the attributes.
    * @returns True if any attributes were changed, false otherwise.
    */
-  public setAttributes({ attributes, broadcast = false }: { attributes: Record<string, any>, broadcast?: boolean }): boolean {
+  public setAttributes({ attributes, broadcast = false }: { attributes: Record<string, unknown>, broadcast?: boolean }): boolean {
     let shouldUpdateLobby = false;
     const metadataAttributes = ["gameId", "gameName", "options"];
     const changedKeys: string[] = [];
@@ -692,7 +692,7 @@ export class Table {
    * @param attributes - An object containing key-value pairs of attributes to set.
    * @returns True if any attributes were changed, false otherwise.
    */ 
-  public updateAttributes({ attributes }: { attributes: Record<string, any> }): boolean {
+  public updateAttributes({ attributes }: { attributes: Record<string, unknown> }): boolean {
     return this.setAttributes({ attributes, broadcast: true });
   }
 
