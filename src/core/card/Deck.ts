@@ -9,7 +9,7 @@ export class Deck {
   private cards: Card[] = [];
   private discardPile: Card[] = [];
 
-  constructor(numberOfDecks: number = 1) {
+  constructor(numberOfDecks = 1) {
     this.initialize(numberOfDecks);
   }
 
@@ -66,7 +66,7 @@ export class Deck {
    * @param isVisible Whether the card should be visible.
    * @returns The drawn card or null if the deck is empty.
    */
-  public drawCard(isVisible: boolean = true): Card | null {
+  public drawCard({ isVisible = true }: { isVisible?: boolean } = {}): Card | null {
     if (this.cards.length === 0) {
       return null;
     }
@@ -82,10 +82,10 @@ export class Deck {
    * @param isVisible Whether the cards should be visible.
    * @returns An array of drawn cards or an empty array if the deck is empty.
    */
-  public drawCards(count: number, isVisible: boolean = true): Card[] {
+  public drawCards({ count, isVisible = true }: { count: number, isVisible?: boolean }): Card[] {
     const cards: Card[] = [];
     for (let i = 0; i < count; i++) {
-      const card = this.drawCard(isVisible);
+      const card = this.drawCard({ isVisible });
       if (card) {
         cards.push(card);
       } else {
@@ -100,7 +100,7 @@ export class Deck {
    * 
    * @param card The card to add to the discard pile.
    */
-  public addToDiscard(card: Card): void {
+  public addToDiscard({ card }: { card: Card }): void {
     this.discardPile.push(card);
   }
 

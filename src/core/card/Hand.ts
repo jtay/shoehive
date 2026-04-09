@@ -14,7 +14,7 @@ export class Hand {
   private id: string;
   private attributes: Map<string, any> = new Map();
 
-  constructor(id: string = "main") {
+  constructor(id = "main") {
     this.id = id;
   }
 
@@ -33,7 +33,7 @@ export class Hand {
    * @param index The index of the card to remove.
    * @returns The removed card or null if the index is out of bounds.
    */
-  public removeCard(index: number): Card | null {
+  public removeCard({ index }: { index: number }): Card | null {
     if (index < 0 || index >= this.cards.length) {
       return null;
     }
@@ -72,11 +72,11 @@ export class Hand {
    * 
    * @param deck Optional deck to discard cards to when clearing the hand
    */
-  public clear(deck?: Deck): void {
+  public clear({ deck }: { deck?: Deck } = {}): void {
     if (deck) {
       // Add all cards to the discard pile
       for (const card of this.cards) {
-        deck.addToDiscard(card);
+        deck.addToDiscard({ card });
       }
     }
     this.cards = [];

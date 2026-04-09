@@ -18,7 +18,7 @@ export class Player {
   private socket: WebSocket.WebSocket;
   private table: Table | null = null;
   private eventBus: EventBus;
-  private attributes: Map<string, any> = new Map();
+  private attributes: Map<string, unknown> = new Map();
   private disconnectCallbacks: Array<() => void> = [];
 
   constructor(socket: WebSocket.WebSocket, eventBus: EventBus, id?: string) {
@@ -49,7 +49,7 @@ export class Player {
     this.disconnectCallbacks.push(callback);
   }
 
-  public sendMessage({ message }: { message: any }): void {
+  public sendMessage({ message }: { message: unknown }): void {
     if (this.socket.readyState === WebSocket.WebSocket.OPEN) {
       this.socket.send(JSON.stringify(message));
     }
@@ -80,7 +80,7 @@ export class Player {
    * @param value The attribute value
    * @param notify Whether to emit an event (defaults to true)
    */
-  public setAttribute({ key, value, notify = true }: { key: string, value: any, notify?: boolean }): void {
+  public setAttribute({ key, value, notify = true }: { key: string, value: unknown, notify?: boolean }): void {
     this.attributes.set(key, value);
     
     if (notify) {
@@ -94,7 +94,7 @@ export class Player {
    * 
    * @param attributes Object containing attribute key-value pairs
    */
-  public setAttributes({ attributes }: { attributes: Record<string, any> }): void {
+  public setAttributes({ attributes }: { attributes: Record<string, unknown> }): void {
     const changedKeys: string[] = [];
     
     // Set all attributes first
@@ -109,7 +109,7 @@ export class Player {
       
       // Also emit individual events for backward compatibility
       for (const key of changedKeys) {
-        this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, { table: this, key, arg2: attributes[key] });
+        this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, { table: this, key, value: attributes[key] });
       }
     }
   }
@@ -119,7 +119,7 @@ export class Player {
    * @param key - The key of the attribute to get
    * @returns The value of the attribute, or undefined if it doesn't exist
    */
-  public getAttribute({ key }: { key: string }): any {
+  public getAttribute({ key }: { key: string }): unknown {
     return this.attributes.get(key);
   }
 
@@ -127,7 +127,7 @@ export class Player {
    * Get all attributes from the player.
    * @returns An object containing all player attributes
    */
-  public getAttributes(): Record<string, any> {
+  public getAttributes(): Record<string, unknown> {
     return Object.fromEntries(this.attributes.entries());
   }
 

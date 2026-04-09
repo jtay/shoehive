@@ -28,7 +28,7 @@ export class Seat {
    * 
    * @param player The player to set for the seat.
    */
-  public setPlayer(player: Player | null): void {
+  public setPlayer({ player }: { player: Player | null }): void {
     this.player = player;
   }
 
@@ -47,7 +47,7 @@ export class Seat {
    * @param handId The ID of the hand to add.
    * @returns True if the hand was added, false if it already exists.
    */
-  public addHand(handId: string): boolean {
+  public addHand({ handId }: { handId: string }): boolean {
     if (this.hands.has(handId)) {
       return false;
     }
@@ -62,7 +62,7 @@ export class Seat {
    * @param handId The ID of the hand to remove.
    * @returns True if the hand was removed, false if it does not exist.
    */
-  public removeHand(handId: string): boolean {
+  public removeHand({ handId }: { handId: string }): boolean {
     if (handId === "main") {
       return false; // Cannot remove the main hand
     }
@@ -76,7 +76,7 @@ export class Seat {
    * @param handId The ID of the hand to get.
    * @returns The hand or null if it does not exist.
    */
-  public getHand(handId: string = "main"): Hand | null {
+  public getHand({ handId = "main" }: { handId?: string } = {}): Hand | null {
     return this.hands.get(handId) || null;
   }
 
@@ -95,7 +95,7 @@ export class Seat {
    * @param handId The ID of the hand to clear.
    * @returns True if the hand was cleared, false if it does not exist.
    */
-  public clearHand(handId: string = "main"): boolean {
+  public clearHand({ handId = "main" }: { handId?: string } = {}): boolean {
     const hand = this.hands.get(handId);
     if (!hand) return false;
     
@@ -118,7 +118,7 @@ export class Seat {
    * @param key The key of the attribute to set.
    * @param value The value of the attribute to set.
    */
-  public setAttribute(key: string, value: any): void {
+  public setAttribute({ key, value }: { key: string, value: any }): void {
     this.attributes.set(key, value);
   }
 
@@ -128,7 +128,7 @@ export class Seat {
    * @param key The key of the attribute to get.
    * @returns The value of the attribute or null if it does not exist.
    */
-  public getAttribute(key: string): any {
+  public getAttribute({ key }: { key: string }): any {
     return this.attributes.get(key);
   }
 
@@ -138,7 +138,7 @@ export class Seat {
    * @param key The key of the attribute to check.
    * @returns True if the attribute exists, false otherwise.
    */
-  public hasAttribute(key: string): boolean {
+  public hasAttribute({ key }: { key: string }): boolean {
     return this.attributes.has(key);
   }
 
@@ -156,7 +156,7 @@ export class Seat {
    * 
    * @param attributes A record of attributes to set.
    */
-  public setAttributes(attributes: Record<string, any>): void {
+  public setAttributes({ attributes }: { attributes: Record<string, any> }): void {
     for (const [key, value] of Object.entries(attributes)) {
       this.attributes.set(key, value);
     }
@@ -167,7 +167,7 @@ export class Seat {
    * 
    * @param key The key of the attribute to remove.
    */
-  public removeAttribute(key: string): void {
+  public removeAttribute({ key }: { key: string }): void {
     this.attributes.delete(key);
   }
 
@@ -178,7 +178,7 @@ export class Seat {
    * @param playerId The ID of the player to check.
    * @returns True if the player can modify the seat, false otherwise.
    */
-  public canPlayerModify(playerId: string): boolean {
+  public canPlayerModify({ playerId }: { playerId: string }): boolean {
     // Only the player who owns the seat can modify their hand
     return this.player !== null && this.player.id === playerId;
   }

@@ -53,7 +53,7 @@ export { LOBBY_EVENTS, PLAYER_EVENTS, TABLE_EVENTS };
  * }
  * ```
  */
-export interface CustomEventMap {}
+export type CustomEventMap = Record<string, any>;
 
 // Create union types of all event string literals
 export type PlayerEventType = typeof PLAYER_EVENTS[keyof typeof PLAYER_EVENTS];

@@ -84,7 +84,7 @@ export class MessageRouter {
                   return;
                 }
 
-                this.eventBus.emit('request:table:join', { player, arg1: data.tableId });
+                this.eventBus.emit('request:table:join', { player, tableId: data.tableId });
               } });
 
     // Create table
@@ -97,7 +97,7 @@ export class MessageRouter {
                   return;
                 }
 
-                this.eventBus.emit('request:table:create', { player, arg1: data.gameId, arg2: data.options });
+                this.eventBus.emit('request:table:create', { player, gameId: data.gameId, options: data.options });
               } });
   }
 
@@ -115,7 +115,7 @@ export class MessageRouter {
                   return;
                 }
 
-                this.eventBus.emit('request:table:join', { player, arg1: data.tableId });
+                this.eventBus.emit('request:table:join', { player, tableId: data.tableId });
               } });
 
     // Leave table
@@ -129,7 +129,7 @@ export class MessageRouter {
                   return;
                 }
 
-                this.eventBus.emit('request:table:leave', { player, arg1: table.id });
+                this.eventBus.emit('request:table:leave', { player, tableId: table.id });
               } });
 
     // Create table
@@ -142,7 +142,7 @@ export class MessageRouter {
                   return;
                 }
 
-                this.eventBus.emit('request:table:create', { player, arg1: data.gameId, arg2: data.options });
+                this.eventBus.emit('request:table:create', { player, gameId: data.gameId, options: data.options });
               } });
 
     // Sit at seat
@@ -164,7 +164,7 @@ export class MessageRouter {
                   return;
                 }
 
-                this.eventBus.emit('request:table:seat:sit', { player, arg1: table.id, arg2: data.seatIndex });
+                this.eventBus.emit('request:table:seat:sit', { player, tableId: table.id, seatIndex: data.seatIndex });
               } });
 
     // Stand from seat
@@ -178,7 +178,7 @@ export class MessageRouter {
                   return;
                 }
 
-                this.eventBus.emit('request:table:seat:stand', { player, arg1: table.id });
+                this.eventBus.emit('request:table:seat:stand', { player, tableId: table.id });
               } });
   }
 

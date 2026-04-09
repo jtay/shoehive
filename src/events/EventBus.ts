@@ -36,7 +36,7 @@ import { EventType } from "./EventTypes";
  */
 export class EventBus {
   private emitter: EventEmitter;
-  private debugEnabled: boolean = false;
+  private debugEnabled = false;
   private debugFilter?: (event: string) => boolean;
   private debugLogger: (event: string, ...args: any[]) => void = console.log;
   private originalEmit: EventEmitter['emit'];
@@ -120,7 +120,7 @@ export class EventBus {
     // For testing purposes, add a listener to a special event named '*'
     // This doesn't actually catch all events, but it's useful for testing the listenerCount
     if (enabled) {
-      this.emitter.on('*', () => {});
+      this.emitter.on('*', () => { /* noop */ });
     } else {
       this.emitter.removeAllListeners('*');
     }

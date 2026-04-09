@@ -3,6 +3,7 @@ import * as http from "http";
 import { EventBus } from "../events/EventBus";
 import { MessageRouter } from "../events/MessageRouter";
 import { Player } from "./Player";
+import { Table } from "./Table";
 import { GameManager } from "./GameManager";
 import { Lobby } from "./Lobby";
 import { AuthModule } from "../transport/AuthModule";
@@ -27,7 +28,7 @@ export class WebSocketManager {
     messageRouter: MessageRouter,
     gameManager: GameManager,
     authModule?: AuthModule,
-    reconnectionTimeoutMs: number = 0,
+    reconnectionTimeoutMs = 0,
     lobby?: Lobby,
     tableFactory?: TableFactory
   ) {
@@ -93,7 +94,7 @@ export class WebSocketManager {
    * and sends the appropriate messages to all players.
    */
   private setupEventListeners(): void {
-    this.eventBus.on({ event: LOBBY_EVENTS.UPDATED, listener: (lobbyState) => {
+    this.eventBus.on({ event: LOBBY_EVENTS.UPDATED, listener: ({ lobbyState }: { lobbyState: any }) => {
                 const message = {
                   type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
                   data: lobbyState
@@ -106,23 +107,27 @@ export class WebSocketManager {
               } });
 
     // Add listener for lobby state requests
-    this.eventBus.on({ event: 'request:lobby:state', listener: (player) => {
+    this.eventBus.on({ event: 'request:lobby:state', listener: ({ player }: { player: Player }) => {
                 player.sendMessage({
-                  type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
-                  data: {
-                    games: this.gameManager.getAvailableGames(),
-                    tables: this.gameManager.getAllTables().map(table => table.getTableMetadata())
+                  message: {
+                    type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
+                    data: {
+                      games: this.gameManager.getAvailableGames(),
+                      tables: this.gameManager.getAllTables().map(table => table.getTableMetadata())
+                    }
                   }
                 });
               } });
 
     // Add listeners for table actions
-    this.eventBus.on({ event: 'request:table:join', listener: (player, tableId) => {
+    this.eventBus.on({ event: 'request:table:join', listener: ({ player, tableId }: { player: Player, tableId: string }) => {
                 const table = this.gameManager.getTableById({ tableId: tableId });
                 if (!table) {
                   player.sendMessage({
-                    type: CLIENT_MESSAGE_TYPES.ERROR,
-                    message: "Table not found"
+                    message: {
+                      type: CLIENT_MESSAGE_TYPES.ERROR,
+                      message: "Table not found"
+                    }
                   });
                   return;
                 }
@@ -130,36 +135,42 @@ export class WebSocketManager {
                 // Add player to table
                 const success = table.addPlayer({ player: player });
                 if (success) {
-                  player.setTable(table);
+                  player.setTable({ table: table });
                   // The table:player:joined event will trigger sending the table state
                 } else {
                   player.sendMessage({
-                    type: CLIENT_MESSAGE_TYPES.ERROR,
-                    message: "Failed to join table"
+                    message: {
+                      type: CLIENT_MESSAGE_TYPES.ERROR,
+                      message: "Failed to join table"
+                    }
                   });
                 }
               } });
 
-    this.eventBus.on({ event: 'request:table:leave', listener: (player, tableId) => {
+    this.eventBus.on({ event: 'request:table:leave', listener: ({ player, tableId }: { player: Player, tableId: string }) => {
                 const table = this.gameManager.getTableById({ tableId: tableId });
                 if (!table) {
                   player.sendMessage({
-                    type: CLIENT_MESSAGE_TYPES.ERROR,
-                    message: "Table not found"
+                    message: {
+                      type: CLIENT_MESSAGE_TYPES.ERROR,
+                      message: "Table not found"
+                    }
                   });
                   return;
                 }
                 
                 // Remove player from table
                 table.removePlayer({ playerId: player.id });
-                player.setTable(null);
+                player.setTable({ table: null });
                 
                 // Confirm to the player
                 player.sendMessage({
-                  type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
-                  data: {
-                    id: player.id,
-                    attributes: player.getAttributes()
+                  message: {
+                    type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
+                    data: {
+                      id: player.id,
+                      attributes: player.getAttributes()
+                    }
                   }
                 });
                 
@@ -167,39 +178,45 @@ export class WebSocketManager {
                 this.lobby.updateLobbyState();
               } });
 
-    this.eventBus.on({ event: 'request:table:create', listener: (player, gameId, options = {}) => {
+    this.eventBus.on({ event: 'request:table:create', listener: ({ player, gameId, options = {} }: { player: Player, gameId: string, options?: any }) => {
                 try {
                   // Create a new table
                   const table = this.lobby.createTable({ gameId: gameId, options: options });
                   if (!table) {
                     player.sendMessage({
-                      type: CLIENT_MESSAGE_TYPES.ERROR,
-                      message: "Failed to create table"
+                      message: {
+                        type: CLIENT_MESSAGE_TYPES.ERROR,
+                        message: "Failed to create table"
+                      }
                     });
                     return;
                   }
                   
                   // Automatically join the player to their new table
                   table.addPlayer({ player: player });
-                  player.setTable(table);
+                  player.setTable({ table: table });
                   
                   // Notify everyone about the new table (via lobby update)
                   this.lobby.updateLobbyState();
                 } catch (error) {
                   console.error("Error creating table:", error);
                   player.sendMessage({
-                    type: CLIENT_MESSAGE_TYPES.ERROR,
-                    message: "Failed to create table: " + (error instanceof Error ? error.message : "unknown error")
+                    message: {
+                      type: CLIENT_MESSAGE_TYPES.ERROR,
+                      message: "Failed to create table: " + (error instanceof Error ? error.message : "unknown error")
+                    }
                   });
                 }
               } });
 
-    this.eventBus.on({ event: 'request:table:seat:sit', listener: (player, tableId, seatIndex) => {
+    this.eventBus.on({ event: 'request:table:seat:sit', listener: ({ player, tableId, seatIndex }: { player: Player, tableId: string, seatIndex: number }) => {
                 const table = player.getTable();
                 if (!table) {
                   player.sendMessage({
-                    type: CLIENT_MESSAGE_TYPES.ERROR,
-                    message: "Table not found"
+                    message: {
+                      type: CLIENT_MESSAGE_TYPES.ERROR,
+                      message: "Table not found"
+                    }
                   });
                   return;
                 }
@@ -207,60 +224,70 @@ export class WebSocketManager {
                 // Validate seatIndex to ensure it's a valid number
                 if (seatIndex === undefined || seatIndex === null || typeof seatIndex !== 'number') {
                   player.sendMessage({
-                    type: CLIENT_MESSAGE_TYPES.ERROR,
-                    message: "Invalid seat index"
+                    message: {
+                      type: CLIENT_MESSAGE_TYPES.ERROR,
+                      message: "Invalid seat index"
+                    }
                   });
                   return;
                 }
                 
                 try {
                   // Emit a table event for seating the player and let the table handle it internally
-                  this.eventBus.emit(TABLE_EVENTS.PLAYER_SIT_REQUEST, player, table, seatIndex);
+                  this.eventBus.emit(TABLE_EVENTS.PLAYER_SIT_REQUEST, { player, table, seatIndex });
                   
                   // The response will be handled by the TABLE_EVENTS.PLAYER_SAT event listener
                 } catch (error) {
                   console.error("Error seating player:", error);
                   player.sendMessage({
-                    type: CLIENT_MESSAGE_TYPES.ERROR,
-                    message: "Failed to sit at seat: " + (error instanceof Error ? error.message : "unknown error")
+                    message: {
+                      type: CLIENT_MESSAGE_TYPES.ERROR,
+                      message: "Failed to sit at seat: " + (error instanceof Error ? error.message : "unknown error")
+                    }
                   });
                 }
               } });
 
-    this.eventBus.on({ event: 'request:table:seat:stand', listener: (player, tableId) => {
+    this.eventBus.on({ event: 'request:table:seat:stand', listener: ({ player, tableId }: { player: Player, tableId: string }) => {
                 const table = this.gameManager.getTableById({ tableId: tableId });
                 if (!table) {
                   player.sendMessage({
-                    type: CLIENT_MESSAGE_TYPES.ERROR,
-                    message: "Table not found"
+                    message: {
+                      type: CLIENT_MESSAGE_TYPES.ERROR,
+                      message: "Table not found"
+                    }
                   });
                   return;
                 }
                 
                 try {
                   // Emit a table event for unseating the player and let the table handle it internally
-                  this.eventBus.emit(TABLE_EVENTS.PLAYER_STAND_REQUEST, player, table);
+                  this.eventBus.emit(TABLE_EVENTS.PLAYER_STAND_REQUEST, { player, table });
                   
                   // The response will be handled by the TABLE_EVENTS.PLAYER_STOOD event listener
                 } catch (error) {
                   console.error("Error unseating player:", error);
                   player.sendMessage({
-                    type: CLIENT_MESSAGE_TYPES.ERROR,
-                    message: "Failed to stand from seat: " + (error instanceof Error ? error.message : "unknown error")
+                    message: {
+                      type: CLIENT_MESSAGE_TYPES.ERROR,
+                      message: "Failed to stand from seat: " + (error instanceof Error ? error.message : "unknown error")
+                    }
                   });
                 }
               } });
 
-    this.eventBus.on({ event: TABLE_EVENTS.PLAYER_JOINED, listener: (player, table) => {
+    this.eventBus.on({ event: TABLE_EVENTS.PLAYER_JOINED, listener: ({ player, table }: { player: Player, table: Table }) => {
                 // Send the full table state to the joining player
                 player.sendMessage({
-                  type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
-                  data: table.getTableState()
+                  message: {
+                    type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
+                    data: table.getTableState()
+                  }
                 });
               } });
 
     // Add listener for playerSeated event
-    this.eventBus.on({ event: TABLE_EVENTS.PLAYER_SAT, listener: (player, table, seatIndex) => {
+    this.eventBus.on({ event: TABLE_EVENTS.PLAYER_SAT, listener: ({ player, table, seatIndex }: { player: Player, table: Table, seatIndex: number }) => {
                 // Notify all players at the table about the change
                 table.broadcastTableState();
                 
@@ -269,7 +296,7 @@ export class WebSocketManager {
               } });
 
     // Add listener for playerUnseated event
-    this.eventBus.on({ event: TABLE_EVENTS.PLAYER_STOOD, listener: (player, table, seatIndex) => {
+    this.eventBus.on({ event: TABLE_EVENTS.PLAYER_STOOD, listener: ({ player, table, seatIndex }: { player: Player, table: Table, seatIndex: number }) => {
                 // Notify all players at the table about the change
                 table.broadcastTableState();
                 
@@ -278,25 +305,25 @@ export class WebSocketManager {
               } });
     
     // Handle table state updates
-    this.eventBus.on({ event: TABLE_EVENTS.STATE_UPDATED, listener: (table, tableState) => {
+    this.eventBus.on({ event: TABLE_EVENTS.STATE_UPDATED, listener: ({ table, state }: { table: Table, state: any }) => {
                 // No need to broadcast again as the table has already done this
                 // This event can be used by other components
               } });
     
     // Handle player attribute changes
-    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTE_CHANGED, listener: (player, key, value) => {
+    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTE_CHANGED, listener: ({ player, key, value }: { player: Player, key: string, value: any }) => {
                 // Use the new distribution method
                 this.distributePlayerUpdate({ player: player, key: key, value: value });
               } });
     
     // Handle bulk player attribute changes
-    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTES_CHANGED, listener: (player, changedKeys, attributes) => {
+    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTES_CHANGED, listener: ({ player, changedKeys, attributes }: { player: Player, changedKeys: string[], attributes: Record<string, any> }) => {
                 // Use the new bulk distribution method
                 this.distributePlayerUpdates({ player: player, attributes: attributes });
               } });
     
     // Handle table attribute changes
-    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTE_CHANGED, listener: (table, key, value) => {
+    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTE_CHANGED, listener: ({ table, key, value }: { table: Table, key: string, value: any }) => {
                 // Broadcast is handled by ATTRIBUTES_CHANGED batch event to avoid duplicates.
                 // Update lobby if this is a metadata attribute that would affect the lobby display
                 const metadataAttributes = ["gameId", "gameName", "options"];
@@ -306,8 +333,8 @@ export class WebSocketManager {
               } });
     
     // Handle bulk table attribute changes
-    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTES_CHANGED, listener: (table, changedKeys, attributes) => {
-                const gameId = table.getAttribute("gameId");
+    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTES_CHANGED, listener: ({ table, changedKeys, attributes }: { table: Table, changedKeys: string[], attributes: Record<string, any> }) => {
+                const gameId = table.getAttribute({ key: "gameId" });
                 const gameDefinition = gameId ? this.gameManager.getGameDefinition({ gameId: gameId }) : null;
                 
                 const relevantTableAttributes = gameDefinition?.relevantTableAttributes || [

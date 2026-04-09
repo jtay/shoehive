@@ -38,7 +38,7 @@ export class GameManager {
    * This listens for table creation and table emptying.
    */
   private setupEventListeners(): void {
-    this.eventBus.on({ event: TABLE_EVENTS.CREATED, listener: (table: Table) => {
+    this.eventBus.on({ event: TABLE_EVENTS.CREATED, listener: ({ table }: { table: Table }) => {
                 this.tables.set(table.id, table);
                 
                 const gameId = table.getAttribute({ key: "gameId" });
@@ -50,7 +50,7 @@ export class GameManager {
                 }
               } });
 
-    this.eventBus.on({ event: TABLE_EVENTS.EMPTY, listener: (table: Table) => {
+    this.eventBus.on({ event: TABLE_EVENTS.EMPTY, listener: ({ table }: { table: Table }) => {
                 this.removeTable({ tableId: table.id });
               } });
   }

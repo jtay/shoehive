@@ -11,9 +11,6 @@ nav_order: 3
 
 This guide will walk you through the process of building a custom game using the Shoehive framework.
 
-> [!IMPORTANT]
-> **Architectural Rule**: All Shoehive functions and methods use **typed option arguments** instead of positional arguments. All EventBus listeners receive a single options object as their only argument.
-
 ## Overview
 
 Creating a game with Shoehive involves:

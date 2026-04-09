@@ -9,9 +9,6 @@ nav_order: 2
 
 Welcome to Shoehive, the flexible WebSocket-based multiplayer game framework. This guide will help you set up a basic game server and understand the core concepts of Shoehive.
 
-> [!IMPORTANT]
-> **Architectural Rule**: All Shoehive functions and methods use **typed option arguments** instead of positional arguments. This ensures future-proof extensibility and improved readability.
-
 ## Table of Contents
 
 1. [Installation](#installation)

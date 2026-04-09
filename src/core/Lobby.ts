@@ -41,7 +41,7 @@ export class Lobby {
               } });
     
     // Listen for player attribute changes that might affect lobby data
-    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTE_CHANGED, listener: (player: Player, key: string, value: any) => {
+    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTE_CHANGED, listener: ({ player, key, value }: { player: Player, key: string, value: any }) => {
                 // If the player is at a table and the attribute might affect lobby display
                 const table = player.getTable();
                 if (!table) return;
@@ -65,7 +65,7 @@ export class Lobby {
               } });
 
     // Listen for table attribute changes that might affect lobby display
-    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTE_CHANGED, listener: (table: Table, key: string, value: any) => {
+    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTE_CHANGED, listener: ({ table, key, value }: { table: Table, key: string, value: any }) => {
                 const metadataAttributes = ["gameId", "gameName", "options"];
                 if (metadataAttributes.includes(key)) {
                   this.broadcastLobbyUpdate();
@@ -93,7 +93,7 @@ export class Lobby {
 
     // Call the setupTable function if provided in game definition options
     if (gameDefinition.options?.setupTable && typeof gameDefinition.options.setupTable === 'function') {
-      gameDefinition.options.setupTable(table);
+      gameDefinition.options.setupTable({ table });
     } else {
       console.error(`${gameId} (setupTable function not found). Continuing...`);
     }
@@ -157,7 +157,7 @@ export class Lobby {
       
       // Also emit individual events for backward compatibility
       for (const key of changedKeys) {
-        this.eventBus.emit(LOBBY_EVENTS.ATTRIBUTE_CHANGED, { table: this, key, arg2: attributes[key] });
+        this.eventBus.emit(LOBBY_EVENTS.ATTRIBUTE_CHANGED, { table: this, key, value: attributes[key] });
       }
     }
   }
