@@ -71,26 +71,26 @@ describe('Table Extended Tests', () => {
   // Test for lines around 140 - getHandAtSeat method
   describe('getHandAtSeat and getAllHandsAtSeat methods', () => {
     test('should get a hand at a specific seat', () => {
-      const hand = table.getHandAtSeat(0);
+      const hand = table.getHandAtSeat({ seatIndex: 0 });
       expect(hand).not.toBeNull();
       expect(hand?.getId()).toBe('main');
     });
     
     test('should return null when getting a hand from an invalid seat index', () => {
-      expect(table.getHandAtSeat(-1)).toBeNull();
-      expect(table.getHandAtSeat(2)).toBeNull();
+      expect(table.getHandAtSeat({ seatIndex: -1 })).toBeNull();
+      expect(table.getHandAtSeat({ seatIndex: 2 })).toBeNull();
     });
     
     test('should get all hands at a specific seat', () => {
-      const hands = table.getAllHandsAtSeat(0);
+      const hands = table.getAllHandsAtSeat({ seatIndex: 0 });
       expect(hands).not.toBeNull();
       expect(hands?.size).toBe(1);
       expect(hands?.has('main')).toBe(true);
     });
     
     test('should return null when getting all hands from an invalid seat index', () => {
-      expect(table.getAllHandsAtSeat(-1)).toBeNull();
-      expect(table.getAllHandsAtSeat(2)).toBeNull();
+      expect(table.getAllHandsAtSeat({ seatIndex: -1 })).toBeNull();
+      expect(table.getAllHandsAtSeat({ seatIndex: 2 })).toBeNull();
     });
   });
   
@@ -99,48 +99,47 @@ describe('Table Extended Tests', () => {
     test('should create a deck', () => {
       const spy = jest.spyOn(eventBus, 'emit');
       
-      table.createDeck();
+      table.createDeck({});
       
-      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.DECK_CREATED, table, 1);
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.DECK_CREATED, { table, numberOfDecks: 1 });
     });
     
     test('should create a deck with multiple decks', () => {
       const spy = jest.spyOn(eventBus, 'emit');
       
-      table.createDeck(2);
+      table.createDeck({ numberOfDecks: 2 });
       
-      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.DECK_CREATED, table, 2);
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.DECK_CREATED, { table, numberOfDecks: 2 });
     });
     
     test('should deal a card to a seat', () => {
       // Setup
-      table.createDeck();
+      table.createDeck({});
       const spy = jest.spyOn(eventBus, 'emit');
       
       // Deal a card
-      const result = table.dealCardToSeat(0);
+      const result = table.dealCardToSeat({ seatIndex: 0 });
       
       // Verify
       expect(result).toBe(true);
-      expect(spy).toHaveBeenCalledWith(
-        TABLE_EVENTS.CARD_DEALT, 
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.CARD_DEALT, {
         table,
-        0,
-        expect.any(Object), // Card
-        'main'
-      );
+        seatIndex: 0,
+        card: expect.any(Object),
+        handId: 'main'
+      });
     });
     
     test('should not deal a card when no deck exists', () => {
-      const result = table.dealCardToSeat(0);
+      const result = table.dealCardToSeat({ seatIndex: 0 });
       expect(result).toBe(false);
     });
     
     test('should not deal a card to an invalid seat', () => {
-      table.createDeck();
+      table.createDeck({});
       
-      const result1 = table.dealCardToSeat(-1);
-      const result2 = table.dealCardToSeat(2);
+      const result1 = table.dealCardToSeat({ seatIndex: -1 });
+      const result2 = table.dealCardToSeat({ seatIndex: 2 });
       
       expect(result1).toBe(false);
       expect(result2).toBe(false);
@@ -148,56 +147,55 @@ describe('Table Extended Tests', () => {
     
     test('should deal a card to a specific hand', () => {
       // Setup
-      table.createDeck();
-      table.addHandToSeat(0, 'secondary');
+      table.createDeck({});
+      table.addHandToSeat({ seatIndex: 0, handId: 'secondary' });
       
       const spy = jest.spyOn(eventBus, 'emit');
       
       // Deal a card - notice the correct parameter order (seatIndex, isVisible, handId)
-      const result = table.dealCardToSeat(0, true, 'secondary');
+      const result = table.dealCardToSeat({ seatIndex: 0, isVisible: true, handId: 'secondary' });
       
       // Verify
       expect(result).toBe(true);
-      expect(spy).toHaveBeenCalledWith(
-        TABLE_EVENTS.CARD_DEALT,
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.CARD_DEALT, {
         table,
-        0,
-        expect.any(Object), // Card
-        'secondary'
-      );
+        seatIndex: 0,
+        card: expect.any(Object),
+        handId: 'secondary'
+      });
     });
     
     test('should handle dealing when hand does not exist', () => {
-      table.createDeck();
+      table.createDeck({});
       
       // This should automatically create the hand if it doesn't exist
-      const result = table.dealCardToSeat(0, true, 'nonexistent');
+      const result = table.dealCardToSeat({ seatIndex: 0, isVisible: true, handId: 'nonexistent' });
       
       expect(result).toBe(true);
-      expect(table.getHandAtSeat(0, 'nonexistent')).not.toBeNull();
+      expect(table.getHandAtSeat({ seatIndex: 0, handId: 'nonexistent' })).not.toBeNull();
     });
     
     test('should deal a card face down', () => {
-      table.createDeck();
+      table.createDeck({});
       
       // Deal a face-down card
-      const result = table.dealCardToSeat(0, false);
+      const result = table.dealCardToSeat({ seatIndex: 0, isVisible: false });
       
       expect(result).toBe(true);
       
       // Check if the card is face down
-      const hand = table.getHandAtSeat(0);
+      const hand = table.getHandAtSeat({ seatIndex: 0 });
       const cards = hand?.getCards();
       expect(cards?.[0].isVisible).toBe(false);
     });
     
     test('should shuffle the deck', () => {
-      table.createDeck();
+      table.createDeck({});
       const spy = jest.spyOn(eventBus, 'emit');
       
       table.shuffleDeck();
       
-      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.DECK_SHUFFLED, table);
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.DECK_SHUFFLED, { table });
     });
     
     test('should not shuffle when no deck exists', () => {
@@ -205,78 +203,78 @@ describe('Table Extended Tests', () => {
       
       table.shuffleDeck();
       
-      expect(spy).not.toHaveBeenCalledWith(TABLE_EVENTS.DECK_SHUFFLED, table);
+      expect(spy).not.toHaveBeenCalledWith(TABLE_EVENTS.DECK_SHUFFLED, { table });
     });
   });
   
   // Test for hand management methods
   describe('Hand management', () => {
     test('should add a hand to a seat', () => {
-      const result = table.addHandToSeat(0, 'secondary');
+      const result = table.addHandToSeat({ seatIndex: 0, handId: 'secondary' });
       
       expect(result).toBe(true);
-      expect(table.getHandAtSeat(0, 'secondary')).not.toBeNull();
+      expect(table.getHandAtSeat({ seatIndex: 0, handId: 'secondary' })).not.toBeNull();
     });
     
     test('should not add a hand to an invalid seat', () => {
-      expect(table.addHandToSeat(-1, 'secondary')).toBe(false);
-      expect(table.addHandToSeat(2, 'secondary')).toBe(false);
+      expect(table.addHandToSeat({ seatIndex: -1, handId: 'secondary' })).toBe(false);
+      expect(table.addHandToSeat({ seatIndex: 2, handId: 'secondary' })).toBe(false);
     });
     
     test('should not add a hand that already exists', () => {
-      table.addHandToSeat(0, 'secondary');
-      expect(table.addHandToSeat(0, 'secondary')).toBe(false);
+      table.addHandToSeat({ seatIndex: 0, handId: 'secondary' });
+      expect(table.addHandToSeat({ seatIndex: 0, handId: 'secondary' })).toBe(false);
     });
     
     test('should remove a hand from a seat', () => {
-      table.addHandToSeat(0, 'secondary');
+      table.addHandToSeat({ seatIndex: 0, handId: 'secondary' });
       
-      const result = table.removeHandFromSeat(0, 'secondary');
+      const result = table.removeHandFromSeat({ seatIndex: 0, handId: 'secondary' });
       
       expect(result).toBe(true);
-      expect(table.getHandAtSeat(0, 'secondary')).toBeNull();
+      expect(table.getHandAtSeat({ seatIndex: 0, handId: 'secondary' })).toBeNull();
     });
     
     test('should not remove the main hand', () => {
-      expect(table.removeHandFromSeat(0, 'main')).toBe(false);
+      expect(table.removeHandFromSeat({ seatIndex: 0, handId: 'main' })).toBe(false);
     });
     
     test('should not remove a hand from an invalid seat', () => {
-      expect(table.removeHandFromSeat(-1, 'secondary')).toBe(false);
-      expect(table.removeHandFromSeat(2, 'secondary')).toBe(false);
+      expect(table.removeHandFromSeat({ seatIndex: -1, handId: 'secondary' })).toBe(false);
+      expect(table.removeHandFromSeat({ seatIndex: 2, handId: 'secondary' })).toBe(false);
     });
     
     test('should clear a hand at a seat', () => {
       // Setup
-      table.createDeck();
-      table.dealCardToSeat(0);
+      table.createDeck({});
+      table.dealCardToSeat({ seatIndex: 0 });
       
-      const hand = table.getHandAtSeat(0);
+      const hand = table.getHandAtSeat({ seatIndex: 0 });
       expect(hand?.getCards().length).toBeGreaterThan(0);
       
       // Clear the hand
-      const result = table.clearHandAtSeat(0);
+      const result = table.clearHandAtSeat({ seatIndex: 0 });
       
       expect(result).toBe(true);
       expect(hand?.getCards().length).toBe(0);
     });
     
     test('should not clear a hand at an invalid seat', () => {
-      expect(table.clearHandAtSeat(-1)).toBe(false);
-      expect(table.clearHandAtSeat(2)).toBe(false);
+      expect(table.clearHandAtSeat({ seatIndex: -1 })).toBe(false);
+      expect(table.clearHandAtSeat({ seatIndex: 2 })).toBe(false);
     });
     
     test('should clear a specific hand at a seat', () => {
       // Setup
-      table.createDeck();
-      table.addHandToSeat(0, 'secondary');
-      table.dealCardToSeat(0, true, 'secondary');
+      table.createDeck({});
+      table.addHandToSeat({ seatIndex: 0, handId: 'secondary' });
+      table.dealCardToSeat({ seatIndex: 0, isVisible: true, handId: 'secondary' });
       
-      const hand = table.getHandAtSeat(0, 'secondary');
+      const hand = table.getHandAtSeat({ seatIndex: 0, handId: 'secondary' });
       expect(hand?.getCards().length).toBeGreaterThan(0);
       
       // Clear the hand
-      const result = table.clearHandAtSeat(0, 'secondary');
+      const result = table.clearHandAtSeat({ seatIndex: 0, handId: 'secondary' });
       
       expect(result).toBe(true);
       expect(hand?.getCards().length).toBe(0);
@@ -284,18 +282,18 @@ describe('Table Extended Tests', () => {
     
     test('should clear multiple hands at a seat', () => {
       // Setup
-      table.createDeck();
-      table.addHandToSeat(0, 'secondary');
-      table.dealCardToSeat(0);
-      table.dealCardToSeat(0, true, 'secondary');
+      table.createDeck({});
+      table.addHandToSeat({ seatIndex: 0, handId: 'secondary' });
+      table.dealCardToSeat({ seatIndex: 0 });
+      table.dealCardToSeat({ seatIndex: 0, isVisible: true, handId: 'secondary' });
       
       // Clear main hand
-      table.clearHandAtSeat(0);
+      table.clearHandAtSeat({ seatIndex: 0 });
       // Clear secondary hand
-      table.clearHandAtSeat(0, 'secondary');
+      table.clearHandAtSeat({ seatIndex: 0, handId: 'secondary' });
       
-      expect(table.getHandAtSeat(0)?.getCards().length).toBe(0);
-      expect(table.getHandAtSeat(0, 'secondary')?.getCards().length).toBe(0);
+      expect(table.getHandAtSeat({ seatIndex: 0 })?.getCards().length).toBe(0);
+      expect(table.getHandAtSeat({ seatIndex: 0, handId: 'secondary' })?.getCards().length).toBe(0);
     });
   });
   
@@ -309,15 +307,14 @@ describe('Table Extended Tests', () => {
       };
       
       // This should call setAttributes with broadcast = true
-      table.updateAttributes(attributes);
+      table.updateAttributes({ attributes: attributes });
       
       // Check events were emitted
-      expect(spy).toHaveBeenCalledWith(
-        TABLE_EVENTS.ATTRIBUTES_CHANGED, 
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.ATTRIBUTES_CHANGED, {
         table,
-        expect.arrayContaining(['gameType', 'betLimit']),
+        changedKeys: expect.arrayContaining(['gameType', 'betLimit']),
         attributes
-      );
+      });
     });
     
     test('should set multiple attributes at once without notification', () => {
@@ -337,18 +334,18 @@ describe('Table Extended Tests', () => {
       
       // Set the attributes directly on the table for the test to verify later
       const tableAttributes = new Map();
-      jest.spyOn(table, 'setAttribute').mockImplementation((key, value) => {
+      jest.spyOn(table, 'setAttribute').mockImplementation(({ key, value }) => {
         tableAttributes.set(key, value);
         // Call original to make sure events are triggered correctly
-        originalSetAttribute.call(table, key, value);
+        originalSetAttribute.call(table, { key, value });
       });
       
-      jest.spyOn(table, 'getAttribute').mockImplementation((key) => {
+      jest.spyOn(table, 'getAttribute').mockImplementation(({ key }) => {
         return tableAttributes.get(key);
       });
       
       // Set notify to false
-      table.setAttributes(attributes, false);
+      table.setAttributes({ attributes: attributes, broadcast: false });
       
       // Set values in our mock map
       tableAttributes.set('gameType', 'poker');
@@ -384,17 +381,17 @@ describe('Table Extended Tests', () => {
       
       // Set the attributes directly on the table for the test to verify later
       const tableAttributes = new Map();
-      jest.spyOn(table, 'setAttribute').mockImplementation((key, value) => {
+      jest.spyOn(table, 'setAttribute').mockImplementation(({ key, value }) => {
         tableAttributes.set(key, value);
         // Call original to make sure events are triggered correctly
-        originalSetAttribute.call(table, key, value);
+        originalSetAttribute.call(table, { key, value });
       });
       
-      jest.spyOn(table, 'getAttribute').mockImplementation((key) => {
+      jest.spyOn(table, 'getAttribute').mockImplementation(({ key }) => {
         return tableAttributes.get(key);
       });
       
-      table.updateAttributes(attributes);
+      table.updateAttributes({ attributes: attributes });
       
       // Set values in our mock map
       tableAttributes.set('gameType', 'poker');
@@ -405,23 +402,22 @@ describe('Table Extended Tests', () => {
       expect(tableAttributes.get('betLimit')).toBe(100);
       
       // Check that the event was emitted
-      expect(spy).toHaveBeenCalledWith(
-        TABLE_EVENTS.ATTRIBUTES_CHANGED, 
-        table, 
-        expect.arrayContaining(['gameType', 'betLimit']), 
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.ATTRIBUTES_CHANGED, {
+        table,
+        changedKeys: expect.arrayContaining(['gameType', 'betLimit']),
         attributes
-      );
+      });
     });
     
     test('should get table state with seat details', () => {
       // Setup
-      table.addPlayer(player1);
-      table.sitPlayerAtSeat(player1.id, 0);
-      table.createDeck();
-      table.dealCardToSeat(0);
+      table.addPlayer({ player: player1 });
+      table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: 0 });
+      table.createDeck({});
+      table.dealCardToSeat({ seatIndex: 0 });
       
       // Get table state
-      const state = table.getTableState();
+      const state = table.getTableState({});
       
       // Verify structure
       expect(state).toEqual(expect.objectContaining({
@@ -433,7 +429,8 @@ describe('Table Extended Tests', () => {
       }));
       
       // Verify seat structure
-      expect(state.seats[0]).toEqual(expect.objectContaining({
+      const tableState = state as any;
+      expect(tableState.seats[0]).toEqual(expect.objectContaining({
         player: expect.objectContaining({
           id: 'player1',
           attributes: expect.any(Object)
@@ -446,11 +443,11 @@ describe('Table Extended Tests', () => {
     
     test('should get table metadata', () => {
       // Setup
-      table.addPlayer(player1);
-      table.sitPlayerAtSeat(player1.id, 0);
-      table.setAttribute('gameId', 'test-game');
-      table.setAttribute('gameName', 'Test Game');
-      table.setAttribute('options', { betLimit: 100 });
+      table.addPlayer({ player: player1 });
+      table.sitPlayerAtSeat({ playerId: player1.id, seatIndex: 0 });
+      table.setAttribute({ key: 'gameId', value: 'test-game' });
+      table.setAttribute({ key: 'gameName', value: 'Test Game' });
+      table.setAttribute({ key: 'options', value: { betLimit: 100 } });
       
       // Get table metadata
       const metadata = table.getTableMetadata();

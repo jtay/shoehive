@@ -1,5 +1,5 @@
-import * as http from "http";
-import { Player } from "../core/Player";
+import * as http from 'http';
+import { Player } from '../core/Player';
 
 /**
  * Interface defining authentication functionality for the Shoehive framework.
@@ -11,5 +11,5 @@ export interface AuthModule {
    * @param request The incoming HTTP request during WebSocket connection
    * @returns A promise that resolves to a player ID if authentication is successful, or null if it fails
    */
-  authenticatePlayer(request: http.IncomingMessage): Promise<string | null>;
-} 
+  authenticatePlayer(options: { request: http.IncomingMessage }): Promise<string | null>;
+}

@@ -1,5 +1,5 @@
-import { Player } from "../../core/Player";
-import { ServerTransportModule } from "../ServerTransportModule";
+import { Player } from '../../core/Player';
+import { ServerTransportModule } from '../ServerTransportModule';
 
 /**
  * A basic in-memory implementation of the ServerTransportModule.
@@ -9,19 +9,22 @@ import { ServerTransportModule } from "../ServerTransportModule";
 export class BasicServerTransportModule implements ServerTransportModule {
   // In-memory storage for player balances and bets
   private playerBalances: Map<string, number> = new Map();
-  private bets: Map<string, {
-    playerId: string;
-    amount: number;
-    status: 'pending' | 'won' | 'lost';
-    metadata?: Record<string, any>;
-  }> = new Map();
+  private bets: Map<
+    string,
+    {
+      playerId: string;
+      amount: number;
+      status: 'pending' | 'won' | 'lost';
+      metadata?: Record<string, unknown>;
+    }
+  > = new Map();
 
   /**
    * Get the current balance for a player
    * @param player The player to check balance for
    * @returns A promise that resolves to the player's balance
    */
-  public async getPlayerBalance(player: Player): Promise<number> {
+  public async getPlayerBalance({ player }: { player: Player }): Promise<number> {
     // Return the player's balance if it exists, otherwise return 0
     return this.playerBalances.get(player.id) || 0;
   }
@@ -31,7 +34,7 @@ export class BasicServerTransportModule implements ServerTransportModule {
    * @param playerId The ID of the player
    * @param amount The amount to set the balance to
    */
-  public setPlayerBalance(playerId: string, amount: number): void {
+  public setPlayerBalance({ playerId, amount }: { playerId: string; amount: number }): void {
     this.playerBalances.set(playerId, amount);
   }
 
@@ -42,11 +45,19 @@ export class BasicServerTransportModule implements ServerTransportModule {
    * @param metadata Any additional information about the bet
    * @returns A promise that resolves to a bet ID if successful
    */
-  public async createBet(player: Player, amount: number, metadata?: Record<string, any>): Promise<string> {
+  public async createBet({
+    player,
+    amount,
+    metadata,
+  }: {
+    player: Player;
+    amount: number;
+    metadata?: Record<string, unknown>;
+  }): Promise<string> {
     // Check if player has sufficient balance
-    const balance = await this.getPlayerBalance(player);
+    const balance = await this.getPlayerBalance({ player: player });
     if (balance < amount) {
-      throw new Error("Insufficient balance");
+      throw new Error('Insufficient balance');
     }
 
     // Generate a unique bet ID
@@ -60,7 +71,7 @@ export class BasicServerTransportModule implements ServerTransportModule {
       playerId: player.id,
       amount,
       status: 'pending',
-      metadata
+      metadata,
     });
 
     return betId;
@@ -73,16 +84,24 @@ export class BasicServerTransportModule implements ServerTransportModule {
    * @param metadata Any additional information about the win
    * @returns A promise that resolves to true if successful
    */
-  public async markBetWon(betId: string, winAmount: number, metadata?: Record<string, any>): Promise<boolean> {
+  public async markBetWon({
+    betId,
+    winAmount,
+    metadata,
+  }: {
+    betId: string;
+    winAmount: number;
+    metadata?: Record<string, unknown>;
+  }): Promise<boolean> {
     // Check if bet exists
     const bet = this.bets.get(betId);
     if (!bet) {
-      throw new Error("Bet not found");
+      throw new Error('Bet not found');
     }
 
     // Check if bet is already settled
     if (bet.status !== 'pending') {
-      throw new Error("Bet already settled");
+      throw new Error('Bet already settled');
     }
 
     // Update bet status
@@ -105,16 +124,22 @@ export class BasicServerTransportModule implements ServerTransportModule {
    * @param metadata Any additional information about the loss
    * @returns A promise that resolves to true if successful
    */
-  public async markBetLost(betId: string, metadata?: Record<string, any>): Promise<boolean> {
+  public async markBetLost({
+    betId,
+    metadata,
+  }: {
+    betId: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<boolean> {
     // Check if bet exists
     const bet = this.bets.get(betId);
     if (!bet) {
-      throw new Error("Bet not found");
+      throw new Error('Bet not found');
     }
 
     // Check if bet is already settled
     if (bet.status !== 'pending') {
-      throw new Error("Bet already settled");
+      throw new Error('Bet already settled');
     }
 
     // Update bet status
@@ -132,15 +157,15 @@ export class BasicServerTransportModule implements ServerTransportModule {
    * @param playerId The ID of the player
    * @returns An array of bets for the player
    */
-  public getPlayerBets(playerId: string): Array<{ id: string, bet: any }> {
-    const playerBets: Array<{ id: string, bet: any }> = [];
-    
+  public getPlayerBets({ playerId }: { playerId: string }): Array<{ id: string; bet: unknown }> {
+    const playerBets: Array<{ id: string; bet: unknown }> = [];
+
     this.bets.forEach((bet, id) => {
       if (bet.playerId === playerId) {
         playerBets.push({ id, bet });
       }
     });
-    
+
     return playerBets;
   }
-} 
+}

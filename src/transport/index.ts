@@ -12,4 +12,4 @@ export * from './implementations';
 export interface TransportModule {
   auth: AuthModule;
   server: ServerTransportModule;
-} 
+}

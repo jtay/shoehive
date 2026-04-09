@@ -35,7 +35,7 @@ describe('Table Uncovered Lines Tests', () => {
   describe('dealCardToHand method', () => {
     test('should deal a card directly to a hand object', () => {
       // Create a deck
-      table.createDeck();
+      table.createDeck({});
       
       // Create a hand
       const hand = new Hand('test-hand');
@@ -44,19 +44,19 @@ describe('Table Uncovered Lines Tests', () => {
       const emitSpy = jest.spyOn(eventBus, 'emit');
       
       // Deal a card to the hand
-      const result = table.dealCardToHand(hand);
+      const result = table.dealCardToHand({ hand: hand });
       
       // Verify the card was dealt
       expect(result).toBe(true);
       expect(hand.getCards().length).toBe(1);
       
       // Verify events were emitted
-      expect(emitSpy).toHaveBeenCalledWith(
-        TABLE_EVENTS.CARD_DEALT,
+      expect(emitSpy).toHaveBeenCalledWith(TABLE_EVENTS.CARD_DEALT, {
         table,
-        expect.any(Object), // Card
-        'test-hand'
-      );
+        seatIndex: -1,
+        card: expect.any(Object),
+        handId: 'test-hand'
+      });
     });
     
     test('should return false when dealing a card to hand with no deck', () => {
@@ -64,7 +64,7 @@ describe('Table Uncovered Lines Tests', () => {
       const hand = new Hand('test-hand');
       
       // Try to deal a card
-      const result = table.dealCardToHand(hand);
+      const result = table.dealCardToHand({ hand: hand });
       
       // Verify it fails
       expect(result).toBe(false);
@@ -73,7 +73,7 @@ describe('Table Uncovered Lines Tests', () => {
     
     test('should return false when no card can be drawn from empty deck', () => {
       // Create a deck
-      table.createDeck();
+      table.createDeck({});
       
       // Create a hand
       const hand = new Hand('test-hand');
@@ -83,7 +83,7 @@ describe('Table Uncovered Lines Tests', () => {
       jest.spyOn(deck, 'drawCard').mockReturnValue(null);
       
       // Try to deal a card
-      const result = table.dealCardToHand(hand);
+      const result = table.dealCardToHand({ hand: hand });
       
       // Verify it fails
       expect(result).toBe(false);
@@ -95,36 +95,36 @@ describe('Table Uncovered Lines Tests', () => {
   describe('removePlayer method', () => {
     test('should emit TABLE_EVENTS.EMPTY when last player is removed', () => {
       // Add a player
-      table.addPlayer(player);
+      table.addPlayer({ player: player });
       
       // Spy on eventBus.emit
       const emitSpy = jest.spyOn(eventBus, 'emit');
       
       // Remove the player
-      const result = table.removePlayer(player.id);
+      const result = table.removePlayer({ playerId: player.id });
       
       // Verify player was removed
       expect(result).toBe(true);
       
       // Verify TABLE_EVENTS.EMPTY was emitted
-      expect(emitSpy).toHaveBeenCalledWith(TABLE_EVENTS.EMPTY, table);
+      expect(emitSpy).toHaveBeenCalledWith(TABLE_EVENTS.EMPTY, { table });
     });
     
     test('should remove player from all seats they occupy', () => {
       // Add a player
-      table.addPlayer(player);
+      table.addPlayer({ player: player });
       
       // Sit the player at a seat
-      table.sitPlayerAtSeat(player.id, 0);
+      table.sitPlayerAtSeat({ playerId: player.id, seatIndex: 0 });
       
       // Verify player is at the seat
-      expect(table.getPlayerAtSeat(0)).toBe(player);
+      expect(table.getPlayerAtSeat({ seatIndex: 0 })).toBe(player);
       
       // Remove the player
-      table.removePlayer(player.id);
+      table.removePlayer({ playerId: player.id });
       
       // Verify player is no longer at the seat
-      expect(table.getPlayerAtSeat(0)).toBeNull();
+      expect(table.getPlayerAtSeat({ seatIndex: 0 })).toBeNull();
     });
   });
   
@@ -132,23 +132,24 @@ describe('Table Uncovered Lines Tests', () => {
   describe('table state and metadata methods', () => {
     test('should include attributes in table state', () => {
       // Set some attributes
-      table.setAttribute('gameType', 'poker');
-      table.setAttribute('betLimit', 100);
+      table.setAttribute({ key: 'gameType', value: 'poker' });
+      table.setAttribute({ key: 'betLimit', value: 100 });
       
       // Add a player and sit them at a seat
-      table.addPlayer(player);
-      table.sitPlayerAtSeat(player.id, 0);
+      table.addPlayer({ player: player });
+      table.sitPlayerAtSeat({ playerId: player.id, seatIndex: 0 });
       
       // Add a hand and deal a card to it
-      table.createDeck();
-      table.addHandToSeat(0, 'secondary');
-      table.dealCardToSeat(0, true, 'secondary');
+      table.createDeck({});
+      table.addHandToSeat({ seatIndex: 0, handId: 'secondary' });
+      table.dealCardToSeat({ seatIndex: 0, isVisible: true, handId: 'secondary' });
       
       // Get the table state
-      const tableState = table.getTableState();
+      const tableState = table.getTableState({}) as any;
       
       // Verify table state has the attributes
       expect(tableState.attributes).toEqual({
+        gameId: 'default',
         gameType: 'poker',
         betLimit: 100
       });
@@ -164,15 +165,15 @@ describe('Table Uncovered Lines Tests', () => {
     
     test('should include player count and game information in metadata', () => {
       // Set some attributes
-      table.setAttribute('gameId', 'poker-game');
-      table.setAttribute('gameName', 'Texas Hold\'em');
-      table.setAttribute('options', { ante: 10, blinds: [5, 10] });
+      table.setAttribute({ key: 'gameId', value: 'poker-game' });
+      table.setAttribute({ key: 'gameName', value: 'Texas Hold\'em' });
+      table.setAttribute({ key: 'options', value: { ante: 10, blinds: [5, 10] } });
       
       // Add a player
-      table.addPlayer(player);
+      table.addPlayer({ player: player });
       
       // Get the table metadata
-      const metadata = table.getTableMetadata();
+      const metadata = table.getTableMetadata() as any;
       
       // Verify metadata includes player count
       expect(metadata.playerCount).toBe(1);
@@ -188,28 +189,27 @@ describe('Table Uncovered Lines Tests', () => {
   describe('removeAttribute method', () => {
     test('should remove an attribute and emit an event', () => {
       // Set an attribute
-      table.setAttribute('gameType', 'poker');
+      table.setAttribute({ key: 'gameType', value: 'poker' });
       
       // Verify the attribute exists
-      expect(table.getAttribute('gameType')).toBe('poker');
+      expect(table.getAttribute({ key: 'gameType' })).toBe('poker');
       
       // Spy on eventBus.emit
       const emitSpy = jest.spyOn(eventBus, 'emit');
       
       // Remove the attribute
-      table.removeAttribute('gameType');
+      table.removeAttribute({ key: 'gameType' });
       
       // Verify the attribute was removed
-      expect(table.hasAttribute('gameType')).toBe(false);
-      expect(table.getAttribute('gameType')).toBeUndefined();
+      expect(table.hasAttribute({ key: 'gameType' })).toBe(false);
+      expect(table.getAttribute({ key: 'gameType' })).toBeUndefined();
       
       // Verify an event was emitted
-      expect(emitSpy).toHaveBeenCalledWith(
-        TABLE_EVENTS.ATTRIBUTE_CHANGED,
+      expect(emitSpy).toHaveBeenCalledWith(TABLE_EVENTS.ATTRIBUTE_CHANGED, {
         table,
-        'gameType',
-        undefined
-      );
+        key: 'gameType',
+        value: undefined
+      });
     });
     
     test('should handle removing non-existent attributes', () => {
@@ -217,15 +217,14 @@ describe('Table Uncovered Lines Tests', () => {
       const emitSpy = jest.spyOn(eventBus, 'emit');
       
       // Remove a non-existent attribute
-      table.removeAttribute('nonExistentAttribute');
+      table.removeAttribute({ key: 'nonExistentAttribute' });
       
       // Verify an event was still emitted
-      expect(emitSpy).toHaveBeenCalledWith(
-        TABLE_EVENTS.ATTRIBUTE_CHANGED,
+      expect(emitSpy).toHaveBeenCalledWith(TABLE_EVENTS.ATTRIBUTE_CHANGED, {
         table,
-        'nonExistentAttribute',
-        undefined
-      );
+        key: 'nonExistentAttribute',
+        value: undefined
+      });
     });
   });
 }); 

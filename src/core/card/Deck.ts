@@ -2,20 +2,20 @@ import { Card, CardSuit, CardRank } from './types';
 
 /**
  * A deck of [Card](/core/card/types#card)s.
- * 
+ *
  * Supports shuffling, drawing cards, and resetting from the discard pile.
  */
 export class Deck {
   private cards: Card[] = [];
   private discardPile: Card[] = [];
 
-  constructor(numberOfDecks: number = 1) {
+  constructor(numberOfDecks = 1) {
     this.initialize(numberOfDecks);
   }
 
   /**
    * Initializes the deck.
-   * 
+   *
    * @param numberOfDecks The number of decks to initialize.
    */
   private initialize(numberOfDecks: number): void {
@@ -24,20 +24,16 @@ export class Deck {
       for (const suit of Object.values(CardSuit)) {
         for (const rank of Object.values(CardRank)) {
           let value: number | undefined;
-          
+
           // Assign default card values (can be customized by game-specific logic)
           if (rank === CardRank.ACE) {
             value = 11; // Default Ace value, games can handle it differently
-          } else if (
-            rank === CardRank.JACK || 
-            rank === CardRank.QUEEN || 
-            rank === CardRank.KING
-          ) {
+          } else if (rank === CardRank.JACK || rank === CardRank.QUEEN || rank === CardRank.KING) {
             value = 10;
           } else {
             value = parseInt(rank, 10) || undefined;
           }
-          
+
           this.cards.push({
             suit,
             rank,
@@ -62,11 +58,11 @@ export class Deck {
 
   /**
    * Draws a card from the deck.
-   * 
+   *
    * @param isVisible Whether the card should be visible.
    * @returns The drawn card or null if the deck is empty.
    */
-  public drawCard(isVisible: boolean = true): Card | null {
+  public drawCard({ isVisible = true }: { isVisible?: boolean } = {}): Card | null {
     if (this.cards.length === 0) {
       return null;
     }
@@ -77,15 +73,15 @@ export class Deck {
 
   /**
    * Draws multiple cards from the deck.
-   * 
+   *
    * @param count The number of cards to draw.
    * @param isVisible Whether the cards should be visible.
    * @returns An array of drawn cards or an empty array if the deck is empty.
    */
-  public drawCards(count: number, isVisible: boolean = true): Card[] {
+  public drawCards({ count, isVisible = true }: { count: number; isVisible?: boolean }): Card[] {
     const cards: Card[] = [];
     for (let i = 0; i < count; i++) {
-      const card = this.drawCard(isVisible);
+      const card = this.drawCard({ isVisible });
       if (card) {
         cards.push(card);
       } else {
@@ -97,10 +93,10 @@ export class Deck {
 
   /**
    * Adds a card to the discard pile.
-   * 
+   *
    * @param card The card to add to the discard pile.
    */
-  public addToDiscard(card: Card): void {
+  public addToDiscard({ card }: { card: Card }): void {
     this.discardPile.push(card);
   }
 
@@ -115,7 +111,7 @@ export class Deck {
 
   /**
    * Gets the number of remaining cards in the deck.
-   * 
+   *
    * @returns The number of remaining cards in the deck.
    */
   public getRemainingCards(): number {
@@ -124,10 +120,10 @@ export class Deck {
 
   /**
    * Gets the number of discarded cards.
-   * 
+   *
    * @returns The number of discarded cards.
    */
   public getDiscardedCards(): number {
     return this.discardPile.length;
   }
-} 
+}

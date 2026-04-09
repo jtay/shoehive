@@ -10,7 +10,7 @@ describe('Seat', () => {
   });
   
   test('should initialize with a main hand', () => {
-    const hand = seat.getHand('main');
+    const hand = seat.getHand({ handId: 'main' });
     expect(hand).not.toBeNull();
     expect(hand?.getId()).toBe('main');
   });
@@ -19,53 +19,53 @@ describe('Seat', () => {
     expect(seat.getPlayer()).toBeNull();
     
     const mockPlayer = { id: 'player-id' } as Player;
-    seat.setPlayer(mockPlayer);
+    seat.setPlayer({ player: mockPlayer });
     expect(seat.getPlayer()).toBe(mockPlayer);
     
-    seat.setPlayer(null);
+    seat.setPlayer({ player: null });
     expect(seat.getPlayer()).toBeNull();
   });
   
   test('should add a hand', () => {
-    expect(seat.addHand('secondary')).toBe(true);
-    const hand = seat.getHand('secondary');
+    expect(seat.addHand({ handId: 'secondary' })).toBe(true);
+    const hand = seat.getHand({ handId: 'secondary' });
     expect(hand).not.toBeNull();
     expect(hand?.getId()).toBe('secondary');
   });
   
   test('should not add a hand if it already exists', () => {
-    seat.addHand('secondary');
-    expect(seat.addHand('secondary')).toBe(false);
+    seat.addHand({ handId: 'secondary' });
+    expect(seat.addHand({ handId: 'secondary' })).toBe(false);
   });
   
   test('should remove a hand', () => {
-    seat.addHand('secondary');
-    expect(seat.removeHand('secondary')).toBe(true);
-    expect(seat.getHand('secondary')).toBeNull();
+    seat.addHand({ handId: 'secondary' });
+    expect(seat.removeHand({ handId: 'secondary' })).toBe(true);
+    expect(seat.getHand({ handId: 'secondary' })).toBeNull();
   });
   
   test('should not remove the main hand', () => {
-    expect(seat.removeHand('main')).toBe(false);
-    expect(seat.getHand('main')).not.toBeNull();
+    expect(seat.removeHand({ handId: 'main' })).toBe(false);
+    expect(seat.getHand({ handId: 'main' })).not.toBeNull();
   });
   
   test('should not remove a non-existent hand', () => {
-    expect(seat.removeHand('non-existent')).toBe(false);
+    expect(seat.removeHand({ handId: 'non-existent' })).toBe(false);
   });
   
   test('should get a hand', () => {
-    const hand = seat.getHand();
+    const hand = seat.getHand({});
     expect(hand).not.toBeNull();
     expect(hand?.getId()).toBe('main');
   });
   
   test('should return null for non-existent hand', () => {
-    expect(seat.getHand('non-existent')).toBeNull();
+    expect(seat.getHand({ handId: 'non-existent' })).toBeNull();
   });
   
   test('should get all hands', () => {
-    seat.addHand('secondary');
-    seat.addHand('tertiary');
+    seat.addHand({ handId: 'secondary' });
+    seat.addHand({ handId: 'tertiary' });
     
     const hands = seat.getAllHands();
     expect(hands.size).toBe(3);
@@ -75,27 +75,27 @@ describe('Seat', () => {
   });
   
   test('should clear a hand', () => {
-    const mainHand = seat.getHand('main');
+    const mainHand = seat.getHand({ handId: 'main' });
     const mockCard = {
       suit: CardSuit.HEARTS,
       rank: CardRank.TEN,
       isVisible: true
     };
-    mainHand?.addCard(mockCard);
+    mainHand?.addCard({ card: mockCard });
     
-    expect(seat.clearHand('main')).toBe(true);
+    expect(seat.clearHand({ handId: 'main' })).toBe(true);
     expect(mainHand?.getCards().length).toBe(0);
   });
   
   test('should not clear a non-existent hand', () => {
-    expect(seat.clearHand('non-existent')).toBe(false);
+    expect(seat.clearHand({ handId: 'non-existent' })).toBe(false);
   });
   
   test('should clear all hands', () => {
-    seat.addHand('secondary');
+    seat.addHand({ handId: 'secondary' });
     
-    const mainHand = seat.getHand('main');
-    const secondaryHand = seat.getHand('secondary');
+    const mainHand = seat.getHand({ handId: 'main' });
+    const secondaryHand = seat.getHand({ handId: 'secondary' });
     
     const mockCard1 = {
       suit: CardSuit.HEARTS,
@@ -109,8 +109,8 @@ describe('Seat', () => {
       isVisible: true
     };
     
-    mainHand?.addCard(mockCard1);
-    secondaryHand?.addCard(mockCard2);
+    mainHand?.addCard({ card: mockCard1 });
+    secondaryHand?.addCard({ card: mockCard2 });
     
     seat.clearAllHands();
     
@@ -119,19 +119,19 @@ describe('Seat', () => {
   });
   
   test('should set and get attributes', () => {
-    seat.setAttribute('color', 'red');
-    expect(seat.getAttribute('color')).toBe('red');
+    seat.setAttribute({ key: 'color', value: 'red' });
+    expect(seat.getAttribute({ key: 'color' })).toBe('red');
   });
   
   test('should check if an attribute exists', () => {
-    expect(seat.hasAttribute('color')).toBe(false);
-    seat.setAttribute('color', 'red');
-    expect(seat.hasAttribute('color')).toBe(true);
+    expect(seat.hasAttribute({ key: 'color' })).toBe(false);
+    seat.setAttribute({ key: 'color', value: 'red' });
+    expect(seat.hasAttribute({ key: 'color' })).toBe(true);
   });
   
   test('should get all attributes', () => {
-    seat.setAttribute('color', 'red');
-    seat.setAttribute('position', 1);
+    seat.setAttribute({ key: 'color', value: 'red' });
+    seat.setAttribute({ key: 'position', value: 1 });
     
     const attributes = seat.getAttributes();
     expect(attributes).toEqual({
@@ -141,34 +141,34 @@ describe('Seat', () => {
   });
   
   test('should set multiple attributes at once', () => {
-    seat.setAttributes({
-      color: 'red',
-      position: 1,
-      active: true
-    });
+    seat.setAttributes({ attributes: {
+                color: 'red',
+                position: 1,
+                active: true
+              } });
     
-    expect(seat.getAttribute('color')).toBe('red');
-    expect(seat.getAttribute('position')).toBe(1);
-    expect(seat.getAttribute('active')).toBe(true);
+    expect(seat.getAttribute({ key: 'color' })).toBe('red');
+    expect(seat.getAttribute({ key: 'position' })).toBe(1);
+    expect(seat.getAttribute({ key: 'active' })).toBe(true);
   });
   
   test('should remove an attribute', () => {
-    seat.setAttribute('color', 'red');
-    expect(seat.hasAttribute('color')).toBe(true);
+    seat.setAttribute({ key: 'color', value: 'red' });
+    expect(seat.hasAttribute({ key: 'color' })).toBe(true);
     
-    seat.removeAttribute('color');
-    expect(seat.hasAttribute('color')).toBe(false);
+    seat.removeAttribute({ key: 'color' });
+    expect(seat.hasAttribute({ key: 'color' })).toBe(false);
   });
   
   test('should check if a player can modify the seat', () => {
     const mockPlayer = { id: 'player-id' } as Player;
-    seat.setPlayer(mockPlayer);
+    seat.setPlayer({ player: mockPlayer });
     
-    expect(seat.canPlayerModify('player-id')).toBe(true);
-    expect(seat.canPlayerModify('different-player')).toBe(false);
+    expect(seat.canPlayerModify({ playerId: 'player-id' })).toBe(true);
+    expect(seat.canPlayerModify({ playerId: 'different-player' })).toBe(false);
   });
   
   test('should return false for canPlayerModify if no player is set', () => {
-    expect(seat.canPlayerModify('player-id')).toBe(false);
+    expect(seat.canPlayerModify({ playerId: 'player-id' })).toBe(false);
   });
 }); 
