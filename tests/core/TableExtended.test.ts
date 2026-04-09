@@ -101,7 +101,7 @@ describe('Table Extended Tests', () => {
       
       table.createDeck({});
       
-      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.DECK_CREATED, table, 1);
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.DECK_CREATED, { table, numberOfDecks: 1 });
     });
     
     test('should create a deck with multiple decks', () => {
@@ -109,7 +109,7 @@ describe('Table Extended Tests', () => {
       
       table.createDeck({ numberOfDecks: 2 });
       
-      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.DECK_CREATED, table, 2);
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.DECK_CREATED, { table, numberOfDecks: 2 });
     });
     
     test('should deal a card to a seat', () => {
@@ -122,13 +122,12 @@ describe('Table Extended Tests', () => {
       
       // Verify
       expect(result).toBe(true);
-      expect(spy).toHaveBeenCalledWith(
-        TABLE_EVENTS.CARD_DEALT, 
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.CARD_DEALT, {
         table,
-        0,
-        expect.any(Object), // Card
-        'main'
-      );
+        seatIndex: 0,
+        card: expect.any(Object),
+        handId: 'main'
+      });
     });
     
     test('should not deal a card when no deck exists', () => {
@@ -158,13 +157,12 @@ describe('Table Extended Tests', () => {
       
       // Verify
       expect(result).toBe(true);
-      expect(spy).toHaveBeenCalledWith(
-        TABLE_EVENTS.CARD_DEALT,
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.CARD_DEALT, {
         table,
-        0,
-        expect.any(Object), // Card
-        'secondary'
-      );
+        seatIndex: 0,
+        card: expect.any(Object),
+        handId: 'secondary'
+      });
     });
     
     test('should handle dealing when hand does not exist', () => {
@@ -197,7 +195,7 @@ describe('Table Extended Tests', () => {
       
       table.shuffleDeck();
       
-      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.DECK_SHUFFLED, table);
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.DECK_SHUFFLED, { table });
     });
     
     test('should not shuffle when no deck exists', () => {
@@ -205,7 +203,7 @@ describe('Table Extended Tests', () => {
       
       table.shuffleDeck();
       
-      expect(spy).not.toHaveBeenCalledWith(TABLE_EVENTS.DECK_SHUFFLED, table);
+      expect(spy).not.toHaveBeenCalledWith(TABLE_EVENTS.DECK_SHUFFLED, { table });
     });
   });
   
@@ -312,12 +310,11 @@ describe('Table Extended Tests', () => {
       table.updateAttributes({ attributes: attributes });
       
       // Check events were emitted
-      expect(spy).toHaveBeenCalledWith(
-        TABLE_EVENTS.ATTRIBUTES_CHANGED, 
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.ATTRIBUTES_CHANGED, {
         table,
-        expect.arrayContaining(['gameType', 'betLimit']),
+        changedKeys: expect.arrayContaining(['gameType', 'betLimit']),
         attributes
-      );
+      });
     });
     
     test('should set multiple attributes at once without notification', () => {
@@ -337,13 +334,13 @@ describe('Table Extended Tests', () => {
       
       // Set the attributes directly on the table for the test to verify later
       const tableAttributes = new Map();
-      jest.spyOn(table, 'setAttribute').mockImplementation((key, value) => {
+      jest.spyOn(table, 'setAttribute').mockImplementation(({ key, value }) => {
         tableAttributes.set(key, value);
         // Call original to make sure events are triggered correctly
-        originalSetAttribute.call(table, key, value);
+        originalSetAttribute.call(table, { key, value });
       });
       
-      jest.spyOn(table, 'getAttribute').mockImplementation((key) => {
+      jest.spyOn(table, 'getAttribute').mockImplementation(({ key }) => {
         return tableAttributes.get(key);
       });
       
@@ -384,13 +381,13 @@ describe('Table Extended Tests', () => {
       
       // Set the attributes directly on the table for the test to verify later
       const tableAttributes = new Map();
-      jest.spyOn(table, 'setAttribute').mockImplementation((key, value) => {
+      jest.spyOn(table, 'setAttribute').mockImplementation(({ key, value }) => {
         tableAttributes.set(key, value);
         // Call original to make sure events are triggered correctly
-        originalSetAttribute.call(table, key, value);
+        originalSetAttribute.call(table, { key, value });
       });
       
-      jest.spyOn(table, 'getAttribute').mockImplementation((key) => {
+      jest.spyOn(table, 'getAttribute').mockImplementation(({ key }) => {
         return tableAttributes.get(key);
       });
       
@@ -405,12 +402,11 @@ describe('Table Extended Tests', () => {
       expect(tableAttributes.get('betLimit')).toBe(100);
       
       // Check that the event was emitted
-      expect(spy).toHaveBeenCalledWith(
-        TABLE_EVENTS.ATTRIBUTES_CHANGED, 
-        table, 
-        expect.arrayContaining(['gameType', 'betLimit']), 
+      expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.ATTRIBUTES_CHANGED, {
+        table,
+        changedKeys: expect.arrayContaining(['gameType', 'betLimit']),
         attributes
-      );
+      });
     });
     
     test('should get table state with seat details', () => {
@@ -433,7 +429,8 @@ describe('Table Extended Tests', () => {
       }));
       
       // Verify seat structure
-      expect(state.seats[0]).toEqual(expect.objectContaining({
+      const tableState = state as any;
+      expect(tableState.seats[0]).toEqual(expect.objectContaining({
         player: expect.objectContaining({
           id: 'player1',
           attributes: expect.any(Object)

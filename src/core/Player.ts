@@ -30,7 +30,7 @@ export class Player {
 
   private setupSocketListeners(): void {
     this.socket.on('close', () => {
-      this.eventBus.emit(PLAYER_EVENTS.DISCONNECTED, { table: this });
+      this.eventBus.emit(PLAYER_EVENTS.DISCONNECTED, { player: this });
 
       // Call all disconnect callbacks
       this.disconnectCallbacks.forEach((callback) => callback());
@@ -92,7 +92,7 @@ export class Player {
     this.attributes.set(key, value);
 
     if (notify) {
-      this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, { table: this, key, value });
+      this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, { player: this, key, value });
     }
   }
 
@@ -114,7 +114,7 @@ export class Player {
     // Then emit a single event for all changes
     if (changedKeys.length > 0) {
       this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTES_CHANGED, {
-        table: this,
+        player: this,
         changedKeys,
         attributes,
       });
@@ -122,7 +122,7 @@ export class Player {
       // Also emit individual events for backward compatibility
       for (const key of changedKeys) {
         this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, {
-          table: this,
+          player: this,
           key,
           value: attributes[key],
         });

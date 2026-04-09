@@ -77,9 +77,9 @@ describe('Advanced GameManager Tests', () => {
     expect(table3).not.toBeNull();
     
     // Manually trigger TABLE_CREATED event since our test isn't emitting it
-    eventBus.emit(TABLE_EVENTS.CREATED, { arg0: table1! });
-    eventBus.emit(TABLE_EVENTS.CREATED, { arg0: table2! });
-    eventBus.emit(TABLE_EVENTS.CREATED, { arg0: table3! });
+    eventBus.emit(TABLE_EVENTS.CREATED, { table: table1! });
+    eventBus.emit(TABLE_EVENTS.CREATED, { table: table2! });
+    eventBus.emit(TABLE_EVENTS.CREATED, { table: table3! });
     
     // Check that we can get all tables for the game
     const tablesForGame = gameManager.getTablesForGame({ gameId: 'test-game' });
@@ -149,9 +149,9 @@ describe('Advanced GameManager Tests', () => {
     const table3 = lobby.createTable({ gameId: 'game-2' })!;
     
     // Manually trigger TABLE_CREATED events
-    eventBus.emit(TABLE_EVENTS.CREATED, { table1 });
-    eventBus.emit(TABLE_EVENTS.CREATED, { table2 });
-    eventBus.emit(TABLE_EVENTS.CREATED, { table3 });
+    eventBus.emit(TABLE_EVENTS.CREATED, { table: table1 });
+    eventBus.emit(TABLE_EVENTS.CREATED, { table: table2 });
+    eventBus.emit(TABLE_EVENTS.CREATED, { table: table3 });
     
     // Verify tables are tracked properly
     expect(gameManager.getTablesForGame({ gameId: 'game-1' }).length).toBe(2);

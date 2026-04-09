@@ -44,9 +44,9 @@ describe('Custom Events Integration', () => {
     eventBus.emit(TABLE_EVENTS.PLAYER_JOINED, { player, table });
     
     // Verify all handlers were called with correct arguments
-    expect(playerConnectedHandler).toHaveBeenCalledWith(player);
-    expect(pokerHandDealtHandler).toHaveBeenCalledWith(player, cards);
-    expect(tablePlayerJoinedHandler).toHaveBeenCalledWith(player, table);
+    expect(playerConnectedHandler).toHaveBeenCalledWith({ player });
+    expect(pokerHandDealtHandler).toHaveBeenCalledWith({ player, cards });
+    expect(tablePlayerJoinedHandler).toHaveBeenCalledWith({ player, table });
   });
 
   test('should support one-time listeners for custom events', () => {
@@ -63,7 +63,7 @@ describe('Custom Events Integration', () => {
     
     // Handler should only be called once
     expect(foldHandler).toHaveBeenCalledTimes(1);
-    expect(foldHandler).toHaveBeenCalledWith(player);
+    expect(foldHandler).toHaveBeenCalledWith({ player });
   });
 
   test('should remove listeners for custom events', () => {
@@ -87,17 +87,17 @@ describe('Custom Events Integration', () => {
     eventBus.debugMonitor({ enabled: true, filter: (eventName) => eventName.startsWith('poker:'), logger: mockLogger });
     
     // Emit both built-in and custom events
-    eventBus.emit(PLAYER_EVENTS.CONNECTED, { id: 'player1' });
-    eventBus.emit(POKER_EVENTS.BETTING_ROUND_STARTED, { arg0: { id: 'table1' }, arg1: 10 });
-    eventBus.emit(TABLE_EVENTS.CREATED, { id: 'table2' });
-    eventBus.emit(POKER_EVENTS.PLAYER_RAISED, { arg0: { id: 'player2' }, arg1: 20 });
+    eventBus.emit(PLAYER_EVENTS.CONNECTED, { player: { id: 'player1' } });
+    eventBus.emit(POKER_EVENTS.BETTING_ROUND_STARTED, { table: { id: 'table1' }, minBet: 10 });
+    eventBus.emit(TABLE_EVENTS.CREATED, { table: { id: 'table2' } });
+    eventBus.emit(POKER_EVENTS.PLAYER_RAISED, { player: { id: 'player2' }, amount: 20 });
     
     // Only poker events should be logged
     expect(mockLogger).toHaveBeenCalledTimes(2);
-    expect(mockLogger).toHaveBeenCalledWith('[EVENT] poker:betting:started', { id: 'table1' }, 10);
-    expect(mockLogger).toHaveBeenCalledWith('[EVENT] poker:player:raised', { id: 'player2' }, 20);
-    expect(mockLogger).not.toHaveBeenCalledWith('[EVENT] player:connected', { id: 'player1' });
-    expect(mockLogger).not.toHaveBeenCalledWith('[EVENT] table:created', { id: 'table2' });
+    expect(mockLogger).toHaveBeenCalledWith('[EVENT] poker:betting:started', { table: { id: 'table1' }, minBet: 10 });
+    expect(mockLogger).toHaveBeenCalledWith('[EVENT] poker:player:raised', { player: { id: 'player2' }, amount: 20 });
+    expect(mockLogger).not.toHaveBeenCalledWith('[EVENT] player:connected', { player: { id: 'player1' } });
+    expect(mockLogger).not.toHaveBeenCalledWith('[EVENT] table:created', { table: { id: 'table2' } });
   });
 
   test('should allow creation of game-specific event wrappers', () => {
@@ -109,11 +109,11 @@ describe('Custom Events Integration', () => {
         this.eventBus = eventBus;
       }
       
-      public onHandDealt({ listener }: { listener: (player: any, cards: any[]) => void }): void {
+      public onHandDealt({ listener }: { listener: (payload: { player: any, cards: any[] }) => void }): void {
         this.eventBus.on({ event: POKER_EVENTS.HAND_DEALT, listener: listener });
       }
       
-      public onBettingRoundStarted({ listener }: { listener: (table: any, minBet: number) => void }): void {
+      public onBettingRoundStarted({ listener }: { listener: (payload: { table: any, minBet: number }) => void }): void {
         this.eventBus.on({ event: POKER_EVENTS.BETTING_ROUND_STARTED, listener: listener });
       }
       
@@ -146,8 +146,8 @@ describe('Custom Events Integration', () => {
     pokerEvents.emitBettingRoundStarted({ table: table, minBet: 25 });
     
     // Verify listeners were called with correct arguments
-    expect(handDealtListener).toHaveBeenCalledWith(player, cards);
-    expect(bettingStartedListener).toHaveBeenCalledWith(table, 25);
+    expect(handDealtListener).toHaveBeenCalledWith({ player: player, cards: cards });
+    expect(bettingStartedListener).toHaveBeenCalledWith({ table: table, minBet: 25 });
   });
 
   test('should combine built-in and custom events in monitoring', () => {
@@ -176,8 +176,8 @@ describe('Custom Events Integration', () => {
     eventBus.emit(combinedEvents.POKER.SHOWDOWN, { players: [player] });
     
     // Verify all handlers were called
-    expect(playerConnectedHandler).toHaveBeenCalledWith(player);
-    expect(tableCreatedHandler).toHaveBeenCalledWith(table);
+    expect(playerConnectedHandler).toHaveBeenCalledWith({ player });
+    expect(tableCreatedHandler).toHaveBeenCalledWith({ table });
     expect(pokerShowdownHandler).toHaveBeenCalledWith({ players: [player] });
   });
 }); 

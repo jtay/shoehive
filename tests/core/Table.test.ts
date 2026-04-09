@@ -78,10 +78,10 @@ describe('Table', () => {
     const result = table.addPlayer({ player: player1 });
     
     expect(result).toBe(true);
-    expect(player1.setTable).toHaveBeenCalledWith(table);
+    expect(player1.setTable).toHaveBeenCalledWith({ table });
     expect(table.getPlayerCount()).toBe(1);
     expect(table.getPlayers()).toContain(player1);
-    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.PLAYER_JOINED, player1, table);
+    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.PLAYER_JOINED, { player: player1, table });
   });
   
   test('should not add player if already at another table', () => {
@@ -100,10 +100,10 @@ describe('Table', () => {
     const result = table.removePlayer({ playerId: player1.id });
     
     expect(result).toBe(true);
-    expect(player1.setTable).toHaveBeenCalledWith(null);
+    expect(player1.setTable).toHaveBeenCalledWith({ table: null });
     expect(table.getPlayerCount()).toBe(0);
-    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.PLAYER_LEFT, player1, table);
-    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.EMPTY, table);
+    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.PLAYER_LEFT, { player: player1, table });
+    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.EMPTY, { table });
   });
   
   test('should return false when removing non-existent player', () => {
@@ -119,7 +119,7 @@ describe('Table', () => {
     
     expect(result).toBe(true);
     expect(table.getSeats()[0].getPlayer()).toBe(player1);
-    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.PLAYER_SAT, player1, table, 0);
+    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.PLAYER_SAT, { player: player1, table, seatIndex: 0 });
   });
   
   test('should not sit player if seat index is invalid', () => {
@@ -168,7 +168,7 @@ describe('Table', () => {
     
     expect(result).toBe(true);
     expect(table.getSeats()[0].getPlayer()).toBeNull();
-    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.PLAYER_STOOD, player1, table, 0);
+    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.PLAYER_STOOD, { player: player1, table, seatIndex: 0 });
   });
   
   test('should return false when removing from invalid seat index', () => {
@@ -203,11 +203,11 @@ describe('Table', () => {
     
     table.setState({ state: TableState.ACTIVE });
     expect(table.getState()).toBe(TableState.ACTIVE);
-    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.STATE_UPDATED, table, TableState.ACTIVE);
+    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.STATE_UPDATED, { table, state: TableState.ACTIVE });
     
     table.setState({ state: TableState.ENDED });
     expect(table.getState()).toBe(TableState.ENDED);
-    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.STATE_UPDATED, table, TableState.ENDED);
+    expect(spy).toHaveBeenCalledWith(TABLE_EVENTS.STATE_UPDATED, { table, state: TableState.ENDED });
   });
   
   test('should broadcast message to all players', () => {
@@ -217,8 +217,8 @@ describe('Table', () => {
     const message = { type: 'test', data: 'broadcast' };
     table.broadcastMessage({ message: message });
     
-    expect(player1.sendMessage).toHaveBeenCalledWith(message);
-    expect(player2.sendMessage).toHaveBeenCalledWith(message);
+    expect(player1.sendMessage).toHaveBeenCalledWith({ message: message });
+    expect(player2.sendMessage).toHaveBeenCalledWith({ message: message });
   });
   
   test('should manage attributes correctly', () => {

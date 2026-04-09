@@ -53,14 +53,14 @@ describe('BasicServerTransportModule', () => {
     transportModule.setPlayerBalance({ playerId: mockPlayer.id, amount: 1000 });
     
     // Create bet
-    const betId = await transportModule.createBet({ player: { player: mockPlayer, amount: 500 } });
+    const betId = await transportModule.createBet({ player: mockPlayer, amount: 500 });
     
     // Check balance was reduced
     const newBalance = await transportModule.getPlayerBalance({ player: mockPlayer });
     expect(newBalance).toBe(500);
     
     // Check bet was created
-    const bets = transportModule.getPlayerBets({ playerId: mockPlayer.id });
+    const bets = transportModule.getPlayerBets({ playerId: mockPlayer.id }) as any[];
     expect(bets.length).toBe(1);
     expect(bets[0].id).toBe(betId);
     expect(bets[0].bet.amount).toBe(500);
@@ -71,7 +71,7 @@ describe('BasicServerTransportModule', () => {
     transportModule.setPlayerBalance({ playerId: mockPlayer.id, amount: 100 });
     
     await expect(
-      transportModule.createBet({ player: { player: mockPlayer, amount: 500 } })
+      transportModule.createBet({ player: mockPlayer, amount: 500 })
     ).rejects.toThrow('Insufficient balance');
     
     // Balance should remain unchanged
@@ -82,62 +82,62 @@ describe('BasicServerTransportModule', () => {
   test('should mark bet as won and update balance', async () => {
     // Setup
     transportModule.setPlayerBalance({ playerId: mockPlayer.id, amount: 1000 });
-    const betId = await transportModule.createBet({ player: { player: mockPlayer, amount: 500 } });
+    const betId = await transportModule.createBet({ player: mockPlayer, amount: 500 });
     
     // Mark bet as won
-    await transportModule.markBetWon({ betId: { betId: betId, winAmount: 1200 } });
+    await transportModule.markBetWon({ betId: betId, winAmount: 1200 });
     
     // Check balance was updated
     const newBalance = await transportModule.getPlayerBalance({ player: mockPlayer });
     expect(newBalance).toBe(1700); // Initial 1000 - bet 500 + win 1200
     
     // Check bet status
-    const bets = transportModule.getPlayerBets({ playerId: mockPlayer.id });
+    const bets = transportModule.getPlayerBets({ playerId: mockPlayer.id }) as any[];
     expect(bets[0].bet.status).toBe('won');
   });
   
   test('should mark bet as lost without changing balance', async () => {
     // Setup
     transportModule.setPlayerBalance({ playerId: mockPlayer.id, amount: 1000 });
-    const betId = await transportModule.createBet({ player: { player: mockPlayer, amount: 500 } });
+    const betId = await transportModule.createBet({ player: mockPlayer, amount: 500 });
     
     // Mark bet as lost
-    await transportModule.markBetLost({ betId: { betId: betId } });
+    await transportModule.markBetLost({ betId: betId });
     
     // Check balance remains the same (after initial deduction)
     const newBalance = await transportModule.getPlayerBalance({ player: mockPlayer });
     expect(newBalance).toBe(500);
     
     // Check bet status
-    const bets = transportModule.getPlayerBets({ playerId: mockPlayer.id });
+    const bets = transportModule.getPlayerBets({ playerId: mockPlayer.id }) as any[];
     expect(bets[0].bet.status).toBe('lost');
   });
   
   test('should throw error when marking non-existent bet', async () => {
     await expect(
-      transportModule.markBetWon({ betId: { betId: 'non-existent-bet', winAmount: 100 } })
+      transportModule.markBetWon({ betId: 'non-existent-bet', winAmount: 100 })
     ).rejects.toThrow('Bet not found');
     
     await expect(
-      transportModule.markBetLost({ betId: { betId: 'non-existent-bet' } })
+      transportModule.markBetLost({ betId: 'non-existent-bet' })
     ).rejects.toThrow('Bet not found');
   });
   
   test('should throw error when marking already settled bet', async () => {
     // Setup
     transportModule.setPlayerBalance({ playerId: mockPlayer.id, amount: 1000 });
-    const betId = await transportModule.createBet({ player: { player: mockPlayer, amount: 500 } });
+    const betId = await transportModule.createBet({ player: mockPlayer, amount: 500 });
     
     // Mark bet as won
-    await transportModule.markBetWon({ betId: { betId: betId, winAmount: 1000 } });
+    await transportModule.markBetWon({ betId: betId, winAmount: 1000 });
     
     // Try to mark again
     await expect(
-      transportModule.markBetWon({ betId: { betId: betId, winAmount: 1000 } })
+      transportModule.markBetWon({ betId: betId, winAmount: 1000 })
     ).rejects.toThrow('Bet already settled');
     
     await expect(
-      transportModule.markBetLost({ betId: { betId: betId } })
+      transportModule.markBetLost({ betId: betId })
     ).rejects.toThrow('Bet already settled');
   });
   
@@ -150,7 +150,7 @@ describe('BasicServerTransportModule', () => {
     const betId = await transportModule.createBet({ player: mockPlayer, amount: 500, metadata: metadata });
     
     // Check metadata was stored
-    const bets = transportModule.getPlayerBets({ playerId: mockPlayer.id });
+    const bets = transportModule.getPlayerBets({ playerId: mockPlayer.id }) as any[];
     expect(bets[0].bet.metadata).toEqual(metadata);
     
     // Update with more metadata on win
@@ -158,7 +158,7 @@ describe('BasicServerTransportModule', () => {
     await transportModule.markBetWon({ betId: betId, winAmount: 1000, metadata: winMetadata });
     
     // Check metadata was updated
-    const updatedBets = transportModule.getPlayerBets({ playerId: mockPlayer.id });
+    const updatedBets = transportModule.getPlayerBets({ playerId: mockPlayer.id }) as any[];
     expect(updatedBets[0].bet.metadata).toEqual({
       ...metadata,
       ...winMetadata
@@ -174,19 +174,19 @@ describe('BasicServerTransportModule', () => {
     transportModule.setPlayerBalance({ playerId: anotherPlayer.id, amount: 1000 });
     
     // Create bets for both players
-    await transportModule.createBet({ player: { player: mockPlayer, amount: 300 } });
-    await transportModule.createBet({ player: { player: mockPlayer, amount: 200 } });
-    await transportModule.createBet({ player: { player: anotherPlayer, amount: 400 } });
+    await transportModule.createBet({ player: mockPlayer, amount: 300 });
+    await transportModule.createBet({ player: mockPlayer, amount: 200 });
+    await transportModule.createBet({ player: anotherPlayer, amount: 400 });
     
     // Get bets for first player
-    const playerBets = transportModule.getPlayerBets({ playerId: mockPlayer.id });
+    const playerBets = transportModule.getPlayerBets({ playerId: mockPlayer.id }) as any[];
     expect(playerBets.length).toBe(2);
     expect(playerBets[0].bet.amount).toBe(300);
     expect(playerBets[1].bet.amount).toBe(200);
     
     // Get bets for second player
-    const anotherPlayerBets = transportModule.getPlayerBets({ playerId: anotherPlayer.id });
+    const anotherPlayerBets = transportModule.getPlayerBets({ playerId: anotherPlayer.id }) as any[];
     expect(anotherPlayerBets.length).toBe(1);
     expect(anotherPlayerBets[0].bet.amount).toBe(400);
   });
-}); 
+});

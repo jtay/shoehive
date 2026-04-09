@@ -5,32 +5,16 @@ import { TableFactory } from '../../src/core/TableFactory';
 import { Table } from '../../src/core/Table';
 import { Player } from '../../src/core/Player';
 import { PLAYER_EVENTS, TABLE_EVENTS, LOBBY_EVENTS } from '../../src/events/EventTypes';
+import * as WebSocket from 'ws';
 
-// Mock the Table class
-jest.mock('../../src/core/Table', () => {
-  return {
-    Table: jest.fn().mockImplementation(() => ({
-      id: 'mock-table-id',
-      setAttribute: jest.fn(),
-      getAttribute: jest.fn().mockImplementation((key) => {
-        if (key === 'gameId') return 'test-game';
-        return null;
-      }),
-      getTableMetadata: jest.fn().mockReturnValue({
-        id: 'mock-table-id',
-        gameId: 'test-game'
-      })
-    }))
-  };
-});
+// Mock ws
+jest.mock('ws');
 
 describe('Lobby', () => {
   let gameManager: GameManager;
   let lobby: Lobby;
   let eventBus: EventBus;
   let tableFactory: TableFactory;
-  let mockTable: jest.Mocked<Table>;
-  let mockPlayer: jest.Mocked<Player>;
   
   beforeEach(() => {
     jest.clearAllMocks();
@@ -38,26 +22,25 @@ describe('Lobby', () => {
     // Create a new event bus
     eventBus = new EventBus();
     
-    // Create a mocked table factory
-    tableFactory = {
-      createTable: jest.fn().mockImplementation(() => {
-        return mockTable;
-      })
-    } as unknown as TableFactory;
-    
-    // Create a mock table
-    mockTable = new Table(eventBus, 4, 1, 'mock-table-id') as unknown as jest.Mocked<Table>;
-    
-    // Create a mock player
-    mockPlayer = {
-      id: 'mock-player-id',
-      getTable: jest.fn().mockReturnValue(mockTable)
-    } as unknown as jest.Mocked<Player>;
+    // Create actual TableFactory
+    tableFactory = new TableFactory(eventBus);
     
     // Create a new game manager and lobby
     gameManager = new GameManager(eventBus, tableFactory);
     lobby = new Lobby(eventBus, gameManager, tableFactory);
   });
+
+  // Test helper to create real players
+  const createTestPlayer = (id: string) => {
+    const mockSocket = {
+      readyState: WebSocket.WebSocket.OPEN,
+      send: jest.fn(),
+      on: jest.fn(),
+      close: jest.fn()
+    } as unknown as WebSocket.WebSocket;
+    
+    return new Player(mockSocket, eventBus, id);
+  };
 
   describe('Attribute Management', () => {
     test('should manage single attributes correctly', () => {
@@ -78,12 +61,11 @@ describe('Lobby', () => {
       
       lobby.setAttribute({ key: 'status', value: 'open' });
       
-      expect(emitSpy).toHaveBeenCalledWith(
-        LOBBY_EVENTS.ATTRIBUTE_CHANGED,
-        lobby,
-        'status',
-        'open'
-      );
+      expect(emitSpy).toHaveBeenCalledWith(LOBBY_EVENTS.ATTRIBUTE_CHANGED, {
+        table: lobby,
+        key: 'status',
+        value: 'open'
+      });
     });
 
     test('should not emit ATTRIBUTE_CHANGED event if notify is false', () => {
@@ -118,12 +100,11 @@ describe('Lobby', () => {
       
       lobby.setAttributes({ attributes: attributes });
       
-      expect(emitSpy).toHaveBeenCalledWith(
-        LOBBY_EVENTS.ATTRIBUTES_CHANGED,
-        lobby,
-        ['theme', 'status'],
+      expect(emitSpy).toHaveBeenCalledWith(LOBBY_EVENTS.ATTRIBUTES_CHANGED, {
+        table: lobby,
+        changedKeys: ['theme', 'status'],
         attributes
-      );
+      });
     });
 
     test('should get all attributes', () => {
@@ -157,24 +138,29 @@ describe('Lobby', () => {
     // Register game
     gameManager.registerGame({ gameDefinition: gameDefinition });
     
+    // Create a table
+    const table = lobby.createTable({ gameId: 'test-game' })!;
+    
     // Clear emit history
     emitSpy.mockClear();
     
     // Emit table created event
-    eventBus.emit(TABLE_EVENTS.CREATED, { mockTable });
+    eventBus.emit(TABLE_EVENTS.CREATED, { table });
     
     // Expect lobby state event was emitted
     expect(emitSpy).toHaveBeenCalledWith(
       LOBBY_EVENTS.UPDATED, 
-      expect.objectContaining({
-        games: expect.arrayContaining([gameDefinition]),
-        tables: expect.arrayContaining([
-          expect.objectContaining({
-            id: 'mock-table-id',
-            gameId: 'test-game'
-          })
-        ])
-      })
+      {
+        lobbyState: expect.objectContaining({
+          games: expect.arrayContaining([gameDefinition]),
+          tables: expect.arrayContaining([
+            expect.objectContaining({
+              id: table.id,
+              gameId: 'test-game'
+            })
+          ])
+        })
+      }
     );
   });
   
@@ -187,10 +173,12 @@ describe('Lobby', () => {
     // Expect lobby state event was emitted
     expect(emitSpy).toHaveBeenCalledWith(
       LOBBY_EVENTS.UPDATED, 
-      expect.objectContaining({
-        games: expect.any(Array),
-        tables: expect.any(Array)
-      })
+      {
+        lobbyState: expect.objectContaining({
+          games: expect.any(Array),
+          tables: expect.any(Array)
+        })
+      }
     );
   });
   
@@ -209,11 +197,16 @@ describe('Lobby', () => {
     
     gameManager.registerGame({ gameDefinition: gameDefinition });
     
+    // Create a table and add a player to it
+    const table = lobby.createTable({ gameId: 'test-game' })!;
+    const player = createTestPlayer('test-player');
+    table.addPlayer({ player });
+    
     const emitSpy = jest.spyOn(eventBus, 'emit');
     emitSpy.mockClear();
     
-    // Emit player attribute changed event for a relevant attribute
-    eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, { mockPlayer, arg1: 'status', arg2: 'ready' });
+    // Emit player attribute changed event
+    eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, { player, key: 'status', value: 'ready' });
     
     // Expect lobby state event was emitted
     expect(emitSpy).toHaveBeenCalledWith(
@@ -235,19 +228,19 @@ describe('Lobby', () => {
     
     gameManager.registerGame({ gameDefinition: gameDefinition });
     
+    const tableFactorySpy = jest.spyOn(tableFactory, 'createTable');
     const table = lobby.createTable({ gameId: 'test-game' });
     
-    expect(tableFactory.createTable).toHaveBeenCalledWith(
-      gameDefinition.defaultSeats,
-      gameDefinition.maxSeatsPerPlayer,
-      undefined,
-      'test-game',
-      undefined
-    );
+    expect(tableFactorySpy).toHaveBeenCalledWith({
+      totalSeats: gameDefinition.defaultSeats,
+      maxSeatsPerPlayer: gameDefinition.maxSeatsPerPlayer,
+      id: undefined,
+      gameId: 'test-game',
+      options: undefined
+    });
     
     expect(table).not.toBeNull();
-    // mockTable.setAttribute is called for 'gameName'
-    expect(mockTable.setAttribute).toHaveBeenCalledWith('gameName', 'Test Game');
+    expect(table!.getAttribute({ key: 'gameName' })).toBe('Test Game');
   });
   
   test('should create a table with options', () => {
@@ -264,16 +257,14 @@ describe('Lobby', () => {
     gameManager.registerGame({ gameDefinition: gameDefinition });
     
     const options = { startingChips: 1000 };
-    lobby.createTable({ gameId: 'test-game', options: options });
-    
-    // We pass options to createTable now, Lobby no longer calls setAttribute('options')
+    const table = lobby.createTable({ gameId: 'test-game', options: options });
+    expect(table).not.toBeNull();
   });
   
   test('should return null when creating a table for a non-existent game', () => {
     const table = lobby.createTable({ gameId: 'non-existent-game' });
     
     expect(table).toBeNull();
-    expect(tableFactory.createTable).not.toHaveBeenCalled();
   });
   
   test('should call setupTable function if provided in game definition', () => {
@@ -293,8 +284,8 @@ describe('Lobby', () => {
     };
     
     gameManager.registerGame({ gameDefinition: gameDefinition });
-    lobby.createTable({ gameId: 'test-game' });
+    const table = lobby.createTable({ gameId: 'test-game' });
     
-    expect(setupTableMock).toHaveBeenCalledWith(mockTable);
+    expect(setupTableMock).toHaveBeenCalledWith({ table: table });
   });
-}); 
+});

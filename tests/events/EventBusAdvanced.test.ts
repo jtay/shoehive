@@ -88,13 +88,13 @@ describe('Advanced EventBus Tests', () => {
     // Test with default parameters
     eventBus.debugMonitor({});
     eventBus.emit('test:event', { arg0: 1, arg1: 2, arg2: 3 });
-    expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:event', 1, 2, 3);
+    expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:event', { arg0: 1, arg1: 2, arg2: 3 });
     mockLogger.mockClear();
     
     // Test with only enabled parameter
     eventBus.debugMonitor({ enabled: true });
     eventBus.emit('test:event', { arg0: 1, arg1: 2, arg2: 3 });
-    expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:event', 1, 2, 3);
+    expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:event', { arg0: 1, arg1: 2, arg2: 3 });
     mockLogger.mockClear();
     
     // Test with enabled and filter parameters
@@ -102,7 +102,7 @@ describe('Advanced EventBus Tests', () => {
     eventBus.debugMonitor({ enabled: true, filter: filter });
     eventBus.emit('test:event', { arg0: 1, arg1: 2, arg2: 3 });
     expect(filter).toHaveBeenCalledWith('test:event');
-    expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:event', 1, 2, 3);
+    expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:event', { arg0: 1, arg1: 2, arg2: 3 });
     mockLogger.mockClear();
     
     // Test with all parameters
@@ -110,7 +110,7 @@ describe('Advanced EventBus Tests', () => {
     eventBus.debugMonitor({ enabled: true, filter: filter, logger: customLogger });
     eventBus.emit('test:event', { arg0: 1, arg1: 2, arg2: 3 });
     expect(filter).toHaveBeenCalledWith('test:event');
-    expect(customLogger).toHaveBeenCalledWith('[EVENT] test:event', 1, 2, 3);
+    expect(customLogger).toHaveBeenCalledWith('[EVENT] test:event', { arg0: 1, arg1: 2, arg2: 3 });
     expect(mockLogger).not.toHaveBeenCalled();
   });
   

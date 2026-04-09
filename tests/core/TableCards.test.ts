@@ -76,7 +76,7 @@ describe('Table Card Functionality', () => {
       table.createDeck({});
       
       expect(table.getDeck()).not.toBeNull();
-      expect(spy).toHaveBeenCalledWith('table:deck:created', table, 1);
+      expect(spy).toHaveBeenCalledWith('table:deck:created', { table, numberOfDecks: 1 });
     });
     
     test('should create a deck with multiple decks', () => {
@@ -95,7 +95,7 @@ describe('Table Card Functionality', () => {
       
       table.createDeck({});
       expect(table.shuffleDeck()).toBe(true);
-      expect(spy).toHaveBeenCalledWith('table:deck:shuffled', table);
+      expect(spy).toHaveBeenCalledWith('table:deck:shuffled', { table });
     });
     
     test('should draw a card from the deck', () => {
@@ -109,7 +109,7 @@ describe('Table Card Functionality', () => {
       
       expect(card).not.toBeNull();
       expect(card!.isVisible).toBe(true);
-      expect(spy).toHaveBeenCalledWith('table:deck:card:drawn', table, card);
+      expect(spy).toHaveBeenCalledWith('table:deck:card:drawn', { table, card });
       
       const hiddenCard = table.drawCard({ isVisible: false });
       expect(hiddenCard!.isVisible).toBe(false);
@@ -132,7 +132,7 @@ describe('Table Card Functionality', () => {
       const hand = table.getHandAtSeat({ seatIndex: 0, handId: 'split' });
       expect(hand).not.toBeNull();
       expect(hand!.getId()).toBe('split');
-      expect(spy).toHaveBeenCalledWith('table:seat:hand:added', table, 0, 'split');
+      expect(spy).toHaveBeenCalledWith('table:seat:hand:added', { table, seatIndex: 0, handId: 'split' });
     });
     
     test('should not add duplicate hand id', () => {
@@ -152,7 +152,7 @@ describe('Table Card Functionality', () => {
       expect(table.removeHandFromSeat({ seatIndex: 0, handId: 'split' })).toBe(true);
       
       expect(table.getHandAtSeat({ seatIndex: 0, handId: 'split' })).toBeNull();
-      expect(spy).toHaveBeenCalledWith('table:seat:hand:removed', table, 0, 'split');
+      expect(spy).toHaveBeenCalledWith('table:seat:hand:removed', { table, seatIndex: 0, handId: 'split' });
     });
     
     test('should not remove main hand', () => {
@@ -194,7 +194,7 @@ describe('Table Card Functionality', () => {
       
       const handAfter = table.getHandAtSeat({ seatIndex: 0 });
       expect(handAfter!.getCards().length).toBe(0);
-      expect(spy).toHaveBeenCalledWith('table:seat:hand:cleared', table, 0, 'main');
+      expect(spy).toHaveBeenCalledWith('table:seat:hand:cleared', { table, seatIndex: 0, handId: 'main' });
     });
     
     test('should not clear hand on invalid seat', () => {
@@ -225,7 +225,7 @@ describe('Table Card Functionality', () => {
       expect(table.getHandAtSeat({ seatIndex: 0 })!.getCards().length).toBe(0);
       expect(table.getHandAtSeat({ seatIndex: 0, handId: 'split' })!.getCards().length).toBe(0);
       expect(table.getHandAtSeat({ seatIndex: 1 })!.getCards().length).toBe(0);
-      expect(spy).toHaveBeenCalledWith('table:seats:hands:cleared', table);
+      expect(spy).toHaveBeenCalledWith('table:seats:hands:cleared', { table });
     });
   });
   
@@ -242,13 +242,12 @@ describe('Table Card Functionality', () => {
       expect(hand!.getCards()[0].isVisible).toBe(true);
       
       // Check event emission with correct parameters
-      expect(spy).toHaveBeenCalledWith(
-        'table:card:dealt', 
+      expect(spy).toHaveBeenCalledWith('table:card:dealt', {
         table, 
-        0, 
-        hand!.getCards()[0], 
-        'main'
-      );
+        seatIndex: 0, 
+        card: hand!.getCards()[0], 
+        handId: 'main'
+      });
     });
     
     test('should deal a hidden card to a seat', () => {

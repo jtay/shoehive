@@ -51,13 +51,12 @@ describe('Table Uncovered Lines Tests', () => {
       expect(hand.getCards().length).toBe(1);
       
       // Verify events were emitted
-      expect(emitSpy).toHaveBeenCalledWith(
-        TABLE_EVENTS.CARD_DEALT,
+      expect(emitSpy).toHaveBeenCalledWith(TABLE_EVENTS.CARD_DEALT, {
         table,
-        -1, // seatIndex is -1 because hand is not attached to a seat here
-        expect.any(Object), // Card
-        'test-hand'
-      );
+        seatIndex: -1,
+        card: expect.any(Object),
+        handId: 'test-hand'
+      });
     });
     
     test('should return false when dealing a card to hand with no deck', () => {
@@ -108,7 +107,7 @@ describe('Table Uncovered Lines Tests', () => {
       expect(result).toBe(true);
       
       // Verify TABLE_EVENTS.EMPTY was emitted
-      expect(emitSpy).toHaveBeenCalledWith(TABLE_EVENTS.EMPTY, table);
+      expect(emitSpy).toHaveBeenCalledWith(TABLE_EVENTS.EMPTY, { table });
     });
     
     test('should remove player from all seats they occupy', () => {
@@ -146,7 +145,7 @@ describe('Table Uncovered Lines Tests', () => {
       table.dealCardToSeat({ seatIndex: 0, isVisible: true, handId: 'secondary' });
       
       // Get the table state
-      const tableState = table.getTableState({});
+      const tableState = table.getTableState({}) as any;
       
       // Verify table state has the attributes
       expect(tableState.attributes).toEqual({
@@ -174,7 +173,7 @@ describe('Table Uncovered Lines Tests', () => {
       table.addPlayer({ player: player });
       
       // Get the table metadata
-      const metadata = table.getTableMetadata();
+      const metadata = table.getTableMetadata() as any;
       
       // Verify metadata includes player count
       expect(metadata.playerCount).toBe(1);
@@ -206,12 +205,11 @@ describe('Table Uncovered Lines Tests', () => {
       expect(table.getAttribute({ key: 'gameType' })).toBeUndefined();
       
       // Verify an event was emitted
-      expect(emitSpy).toHaveBeenCalledWith(
-        TABLE_EVENTS.ATTRIBUTE_CHANGED,
+      expect(emitSpy).toHaveBeenCalledWith(TABLE_EVENTS.ATTRIBUTE_CHANGED, {
         table,
-        'gameType',
-        undefined
-      );
+        key: 'gameType',
+        value: undefined
+      });
     });
     
     test('should handle removing non-existent attributes', () => {
@@ -222,12 +220,11 @@ describe('Table Uncovered Lines Tests', () => {
       table.removeAttribute({ key: 'nonExistentAttribute' });
       
       // Verify an event was still emitted
-      expect(emitSpy).toHaveBeenCalledWith(
-        TABLE_EVENTS.ATTRIBUTE_CHANGED,
+      expect(emitSpy).toHaveBeenCalledWith(TABLE_EVENTS.ATTRIBUTE_CHANGED, {
         table,
-        'nonExistentAttribute',
-        undefined
-      );
+        key: 'nonExistentAttribute',
+        value: undefined
+      });
     });
   });
 }); 

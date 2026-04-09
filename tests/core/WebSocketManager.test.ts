@@ -135,22 +135,26 @@ describe('WebSocketManager', () => {
     
     // Manually call the sendInitialState method directly
     // @ts-ignore - Accessing private method for testing
-    webSocketManager.sendInitialState(mockPlayer);
+    webSocketManager.sendInitialState({ player: mockPlayer as unknown as Player });
     
     // Verify player was sent messages with appropriate types
-    expect(mockPlayer.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-      type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
-      data: expect.objectContaining({
-        id: 'test-player',
-        attributes: {}
+    expect(mockPlayer.sendMessage).toHaveBeenCalledWith({
+      message: expect.objectContaining({
+        type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
+        data: expect.objectContaining({
+          id: 'test-player',
+          attributes: {}
+        })
       })
-    }));
+    });
     
     // Should also send lobby state
-    expect(mockPlayer.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-      type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
-      data: expect.any(Object)
-    }));
+    expect(mockPlayer.sendMessage).toHaveBeenCalledWith({
+      message: expect.objectContaining({
+        type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
+        data: expect.any(Object)
+      })
+    });
   });
   
   test('should handle authentication', async () => {
@@ -176,7 +180,7 @@ describe('WebSocketManager', () => {
     await connectionHandler(mockSocket, mockRequest);
     
     // Authentication should be called
-    expect(authModule.authenticatePlayer).toHaveBeenCalledWith(mockRequest);
+    expect(authModule.authenticatePlayer).toHaveBeenCalledWith({ request: mockRequest });
     
     // Player should be created with the authenticated ID
     expect(Player).toHaveBeenCalledWith(mockSocket, eventBus, 'auth-player-123');
@@ -223,7 +227,7 @@ describe('WebSocketManager', () => {
     messageRouter.processMessage({ player: mockPlayer as unknown as Player, messageStr: message });
     
     // Verify messageRouter.processMessage was called
-    expect(processMessageSpy).toHaveBeenCalledWith(mockPlayer, message);
+    expect(processMessageSpy).toHaveBeenCalledWith({ player: mockPlayer, messageStr: message });
   });
   
   // TEST EVENT LISTENERS
@@ -239,7 +243,7 @@ describe('WebSocketManager', () => {
     
     const mockTable = {
       id: 'test-table',
-      getAttribute: jest.fn().mockImplementation(key => {
+      getAttribute: jest.fn().mockImplementation(({ key }) => {
         if (key === 'gameId') return 'test-game';
         return null;
       }),
@@ -258,13 +262,15 @@ describe('WebSocketManager', () => {
     webSocketManager.distributePlayerUpdate({ player: mockPlayer as unknown as Player, key: 'name', value: 'Player 1 Updated' });
     
     // Player should receive their own update
-    expect(mockPlayer.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-      type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
-      data: expect.objectContaining({
-        id: 'test-player',
-        attributes: expect.any(Object)
+    expect(mockPlayer.sendMessage).toHaveBeenCalledWith({
+      message: expect.objectContaining({
+        type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
+        data: expect.objectContaining({
+          id: 'test-player',
+          attributes: expect.any(Object)
+        })
       })
-    }));
+    });
     
     // Table state should be broadcast since 'name' is table relevant
     expect(mockTable.broadcastTableState).toHaveBeenCalled();
@@ -281,7 +287,7 @@ describe('WebSocketManager', () => {
     
     const mockTable = {
       id: 'test-table',
-      getAttribute: jest.fn().mockImplementation(key => {
+      getAttribute: jest.fn().mockImplementation(({ key }) => {
         if (key === 'gameId') return 'test-game';
         return null;
       }),
@@ -300,13 +306,15 @@ describe('WebSocketManager', () => {
     webSocketManager.distributePlayerUpdates({ player: mockPlayer as unknown as Player, attributes: { name: 'Player 1 Updated', age: 26 } });
     
     // Player should receive their own update
-    expect(mockPlayer.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-      type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
-      data: expect.objectContaining({
-        id: 'test-player',
-        attributes: expect.any(Object)
+    expect(mockPlayer.sendMessage).toHaveBeenCalledWith({
+      message: expect.objectContaining({
+        type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
+        data: expect.objectContaining({
+          id: 'test-player',
+          attributes: expect.any(Object)
+        })
       })
-    }));
+    });
     
     // Table state should be broadcast since 'name' is table relevant
     expect(mockTable.broadcastTableState).toHaveBeenCalled();
@@ -323,7 +331,7 @@ describe('WebSocketManager', () => {
     
     const mockTable = {
       id: 'test-table',
-      getAttribute: jest.fn().mockImplementation(key => {
+      getAttribute: jest.fn().mockImplementation(({ key }) => {
         if (key === 'gameId') return 'test-game';
         return null;
       }),
@@ -376,14 +384,18 @@ describe('WebSocketManager', () => {
     eventBus.emit(LOBBY_EVENTS.UPDATED, { lobbyState });
     
     // All players should receive the lobby state
-    expect(mockPlayer1.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-      type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
-      data: lobbyState
-    }));
-    expect(mockPlayer2.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-      type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
-      data: lobbyState
-    }));
+    expect(mockPlayer1.sendMessage).toHaveBeenCalledWith({
+      message: expect.objectContaining({
+        type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
+        data: lobbyState
+      })
+    });
+    expect(mockPlayer2.sendMessage).toHaveBeenCalledWith({
+      message: expect.objectContaining({
+        type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
+        data: lobbyState
+      })
+    });
   });
   
   // TEST RECONNECTION LOGIC
@@ -439,7 +451,7 @@ describe('WebSocketManager', () => {
     expect(mockPlayer1.disconnect).toHaveBeenCalled();
     
     // Original player should receive the hot-swapped socket
-    expect(mockPlayer1.setSocket).toHaveBeenCalledWith(newMockSocket);
+    expect(mockPlayer1.setSocket).toHaveBeenCalledWith({ socket: newMockSocket });
   });
   
   test('should handle player timeouts and removal', () => {
@@ -459,7 +471,7 @@ describe('WebSocketManager', () => {
     };
     
     let disconnectCallback: Function | null = null;
-    mockPlayer.onDisconnect.mockImplementation((callback: Function) => {
+    mockPlayer.onDisconnect.mockImplementation(({ callback }: { callback: Function }) => {
       disconnectCallback = callback;
       return mockPlayer;
     });
@@ -470,7 +482,7 @@ describe('WebSocketManager', () => {
     
     // Setup disconnect handler (this is normally done in createOrReconnectPlayer)
     // @ts-ignore - Accessing private method for testing
-    webSocketManager.setupPlayerDisconnectHandler(mockPlayer as unknown as Player);
+    webSocketManager.setupPlayerDisconnectHandler({ player: mockPlayer as unknown as Player });
     
     // Verify onDisconnect was called
     expect(mockPlayer.onDisconnect).toHaveBeenCalled();
@@ -481,7 +493,7 @@ describe('WebSocketManager', () => {
     }
     
     // Check that player is marked as disconnected
-    expect(mockPlayer.setAttribute).toHaveBeenCalledWith('connectionStatus', 'disconnected');
+    expect(mockPlayer.setAttribute).toHaveBeenCalledWith({ key: 'connectionStatus', value: 'disconnected' });
     
     // Fast forward past the timeout
     jest.advanceTimersByTime(600001); // Just past the 10 minute timeout
@@ -545,7 +557,7 @@ describe('WebSocketManager', () => {
     expect(mockPlayer.disconnect).toHaveBeenCalled();
     
     // Player should be removed from table
-    expect(mockTable.removePlayer).toHaveBeenCalledWith('disconnect-test');
+    expect(mockTable.removePlayer).toHaveBeenCalledWith({ playerId: 'disconnect-test' });
     
     // Player should be removed from players map
     // @ts-ignore - Accessing private property for testing
@@ -574,7 +586,7 @@ describe('WebSocketManager', () => {
     const now = Date.now();
     const disconnectedPlayer1 = {
       id: 'dc-player-1',
-      getAttribute: jest.fn().mockImplementation(key => {
+      getAttribute: jest.fn().mockImplementation(({ key }) => {
         if (key === 'connectionStatus') return 'disconnected';
         if (key === 'disconnectedAt') return now - 60000; // 1 minute ago
         if (key === 'reconnectionAvailableUntil') return now + 540000; // 9 minutes left
@@ -584,7 +596,7 @@ describe('WebSocketManager', () => {
     
     const disconnectedPlayer2 = {
       id: 'dc-player-2',
-      getAttribute: jest.fn().mockImplementation(key => {
+      getAttribute: jest.fn().mockImplementation(({ key }) => {
         if (key === 'connectionStatus') return 'disconnected';
         if (key === 'disconnectedAt') return now - 300000; // 5 minutes ago
         if (key === 'reconnectionAvailableUntil') return now + 300000; // 5 minutes left
@@ -594,7 +606,7 @@ describe('WebSocketManager', () => {
     
     const connectedPlayer = {
       id: 'connected-player',
-      getAttribute: jest.fn().mockImplementation(key => {
+      getAttribute: jest.fn().mockImplementation(({ key }) => {
         if (key === 'connectionStatus') return 'connected';
         return null;
       })
@@ -625,4 +637,4 @@ describe('WebSocketManager', () => {
     // Allow for small timing differences (give or take 100ms)
     expect(Math.abs(disconnectedPlayers[1].timeLeftMs - 300000)).toBeLessThanOrEqual(100);
   });
-}); 
+});

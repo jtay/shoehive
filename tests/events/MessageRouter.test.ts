@@ -43,7 +43,7 @@ describe('MessageRouter', () => {
     messageRouter = new MessageRouter(eventBus);
     
     // Create a mock socket
-    mockSocket = new WebSocket.WebSocket(null);
+    mockSocket = new WebSocket.WebSocket('ignored');
     
     // Create a mock player with the required arguments
     mockPlayer = new Player(mockSocket, eventBus, 'mock-player-id') as unknown as jest.Mocked<Player>;
@@ -80,7 +80,7 @@ describe('MessageRouter', () => {
     messageRouter.processMessage({ player: mockPlayer, messageStr: JSON.stringify(message) });
     
     // Verify event was emitted
-    expect(emitSpy).toHaveBeenCalledWith('client:unhandled:action', mockPlayer, message);
+    expect(emitSpy).toHaveBeenCalledWith('client:unhandled:action', { player: mockPlayer, message });
   });
   
   test('should handle invalid JSON message format', () => {
@@ -89,8 +89,10 @@ describe('MessageRouter', () => {
     
     // Verify error message was sent
     expect(mockPlayer.sendMessage).toHaveBeenCalledWith({
-      type: CLIENT_MESSAGE_TYPES.ERROR,
-      message: 'Failed to process message'
+      message: {
+        type: CLIENT_MESSAGE_TYPES.ERROR,
+        message: 'Failed to process message'
+      }
     });
   });
   
@@ -100,8 +102,10 @@ describe('MessageRouter', () => {
     
     // Verify error message was sent
     expect(mockPlayer.sendMessage).toHaveBeenCalledWith({
-      type: CLIENT_MESSAGE_TYPES.ERROR,
-      message: 'Invalid message format: missing or invalid action'
+      message: {
+        type: CLIENT_MESSAGE_TYPES.ERROR,
+        message: 'Invalid message format: missing or invalid action'
+      }
     });
   });
   
@@ -111,8 +115,10 @@ describe('MessageRouter', () => {
     
     // Verify error message was sent
     expect(mockPlayer.sendMessage).toHaveBeenCalledWith({
-      type: CLIENT_MESSAGE_TYPES.ERROR,
-      message: 'Invalid message format: missing or invalid action'
+      message: {
+        type: CLIENT_MESSAGE_TYPES.ERROR,
+        message: 'Invalid message format: missing or invalid action'
+      }
     });
   });
   
@@ -191,15 +197,17 @@ describe('MessageRouter', () => {
       // Verify that the event bus was used since no handler was found
       expect(emitSpy).toHaveBeenCalledWith(
         'client:UNKNOWN_COMMAND',
-        mockPlayer,
-        expect.objectContaining({
-          action: 'UNKNOWN_COMMAND',
-          data: { foo: 'bar' }
-        })
+        {
+          player: mockPlayer,
+          message: expect.objectContaining({
+            action: 'UNKNOWN_COMMAND',
+            data: { foo: 'bar' }
+          })
+        }
       );
       
       // Restore console.error
       consoleErrorSpy.mockRestore();
     });
   });
-}); 
+});

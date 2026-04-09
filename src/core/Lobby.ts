@@ -49,7 +49,7 @@ export class Lobby {
     // Listen for player attribute changes that might affect lobby data
     this.eventBus.on({
       event: PLAYER_EVENTS.ATTRIBUTE_CHANGED,
-      listener: ({ player, key, value }: { player: Player; key: string; value: unknown }) => {
+      listener: ({ player, key, valueNode: _value }: { player: Player; key: string; valueNode: unknown }) => {
         // If the player is at a table and the attribute might affect lobby display
         const table = player.getTable();
         if (!table) return;

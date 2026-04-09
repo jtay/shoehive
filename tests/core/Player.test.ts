@@ -124,7 +124,7 @@ describe('Player', () => {
     const closeHandler = mockSocket.on.mock.calls.find((call: any[]) => call[0] === 'close')[1];
     closeHandler();
     
-    expect(spy).toHaveBeenCalledWith(PLAYER_EVENTS.DISCONNECTED, player);
+    expect(spy).toHaveBeenCalledWith(PLAYER_EVENTS.DISCONNECTED, { player });
   });
   
   test('should get all attributes', () => {
@@ -145,12 +145,11 @@ describe('Player', () => {
     
     player.setAttribute({ key: 'status', value: 'ready' });
     
-    expect(spy).toHaveBeenCalledWith(
-      PLAYER_EVENTS.ATTRIBUTE_CHANGED,
+    expect(spy).toHaveBeenCalledWith(PLAYER_EVENTS.ATTRIBUTE_CHANGED, {
       player,
-      'status',
-      'ready'
-    );
+      key: 'status',
+      value: 'ready'
+    });
   });
   
   test('should not emit ATTRIBUTE_CHANGED event if notify is false', () => {

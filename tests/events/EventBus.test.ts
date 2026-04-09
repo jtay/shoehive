@@ -12,10 +12,11 @@ describe('EventBus', () => {
     const mockListener = jest.fn();
     eventBus.on({ event: 'testEvent', listener: mockListener });
     
-    eventBus.emit('testEvent', { arg0: 'arg1', arg1: 'arg2' });
+    const payload = { arg0: 'arg1', arg1: 'arg2' };
+    eventBus.emit('testEvent', payload);
     
     expect(mockListener).toHaveBeenCalledTimes(1);
-    expect(mockListener).toHaveBeenCalledWith('arg1', 'arg2');
+    expect(mockListener).toHaveBeenCalledWith(payload);
   });
 
   test('should handle multiple listeners for the same event', () => {
@@ -25,12 +26,13 @@ describe('EventBus', () => {
     eventBus.on({ event: 'multipleListeners', listener: mockListener1 });
     eventBus.on({ event: 'multipleListeners', listener: mockListener2 });
     
-    eventBus.emit('multipleListeners', { arg0: 'data' });
+    const payload = { arg0: 'data' };
+    eventBus.emit('multipleListeners', payload);
     
     expect(mockListener1).toHaveBeenCalledTimes(1);
-    expect(mockListener1).toHaveBeenCalledWith('data');
+    expect(mockListener1).toHaveBeenCalledWith(payload);
     expect(mockListener2).toHaveBeenCalledTimes(1);
-    expect(mockListener2).toHaveBeenCalledWith('data');
+    expect(mockListener2).toHaveBeenCalledWith(payload);
   });
 
   test('should handle once listener', () => {
@@ -42,7 +44,7 @@ describe('EventBus', () => {
     eventBus.emit('onceEvent', { arg0: 'second' });
     
     expect(mockListener).toHaveBeenCalledTimes(1);
-    expect(mockListener).toHaveBeenCalledWith('first');
+    expect(mockListener).toHaveBeenCalledWith({ arg0: 'first' });
   });
 
   test('should remove listener with off', () => {
@@ -88,8 +90,8 @@ describe('EventBus', () => {
     eventBus.emit(PLAYER_EVENTS.CONNECTED, { player });
     eventBus.emit(TABLE_EVENTS.CREATED, { table });
     
-    expect(playerConnectedListener).toHaveBeenCalledWith(player);
-    expect(tableCreatedListener).toHaveBeenCalledWith(table);
+    expect(playerConnectedListener).toHaveBeenCalledWith({ player });
+    expect(tableCreatedListener).toHaveBeenCalledWith({ table });
   });
   
   test('should handle custom events', () => {
@@ -112,8 +114,8 @@ describe('EventBus', () => {
     eventBus.emit(POKER_EVENTS.HAND_DEALT, { player, cards });
     eventBus.emit(POKER_EVENTS.BETTING_ROUND_STARTED, { table, arg1: 10 });
     
-    expect(handDealtListener).toHaveBeenCalledWith(player, cards);
-    expect(bettingStartedListener).toHaveBeenCalledWith(table, 10);
+    expect(handDealtListener).toHaveBeenCalledWith({ player, cards });
+    expect(bettingStartedListener).toHaveBeenCalledWith({ table, arg1: 10 });
   });
   
   test('should enable debug monitoring with default logger', () => {
@@ -127,15 +129,16 @@ describe('EventBus', () => {
     // The EventBus adds a listener for the special '*' event
     expect(eventBus.listenerCount({ event: '*' })).toBe(1);
     
-    // Create a mock event handler to trigger with the wildcard
+    // Create a mock event handler
     const mockHandler = jest.fn();
     eventBus.on({ event: 'testDebugEvent', listener: mockHandler });
     
     // Emit an event that should be logged
-    eventBus.emit('testDebugEvent', { arg0: 'arg1', arg1: 'arg2' });
+    const payload = { arg0: 'arg1', arg1: 'arg2' };
+    eventBus.emit('testDebugEvent', payload);
     
     // Check the handler was called
-    expect(mockHandler).toHaveBeenCalledWith('arg1', 'arg2');
+    expect(mockHandler).toHaveBeenCalledWith(payload);
     
     // Restore console.log
     console.log = originalConsoleLog;
@@ -154,9 +157,9 @@ describe('EventBus', () => {
     
     // The logger should only be called for events matching the filter
     expect(mockLogger).toHaveBeenCalledTimes(2);
-    expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:included', 'data1');
-    expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:also:included', 'data3');
-    expect(mockLogger).not.toHaveBeenCalledWith('[EVENT] other:excluded', 'data2');
+    expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:included', { arg0: 'data1' });
+    expect(mockLogger).toHaveBeenCalledWith('[EVENT] test:also:included', { arg0: 'data3' });
+    expect(mockLogger).not.toHaveBeenCalledWith('[EVENT] other:excluded', { arg0: 'data2' });
   });
   
   test('should use custom logger in debug monitor', () => {
@@ -196,4 +199,4 @@ describe('EventBus', () => {
     eventBus.emit('test:event2', { arg0: 'data2' });
     expect(mockLogger).not.toHaveBeenCalled();
   });
-}); 
+});

@@ -181,7 +181,7 @@ describe('Table Player and Seat Management', () => {
       table.setAttribute({ key: 'betLimit', value: 100 });
       
       // Get table state
-      const tableState = table.getTableState({});
+      const tableState = table.getTableState({}) as any;
       
       // Verify table state
       expect(tableState).toHaveProperty('id', 'test-table-id');
@@ -195,7 +195,7 @@ describe('Table Player and Seat Management', () => {
       expect(tableState.seats[0].player).toHaveProperty('id', players[0].id);
       
       // Get table metadata
-      const metadata = table.getTableMetadata();
+      const metadata = table.getTableMetadata() as any;
       
       // Verify metadata - metadata has a flat structure
       expect(metadata).toHaveProperty('id', 'test-table-id');
