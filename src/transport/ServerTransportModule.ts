@@ -1,4 +1,4 @@
-import { Player } from "../core/Player";
+import { Player } from '../core/Player';
 
 /**
  * Interface for handling server-side transport operations like player balances and bets.
@@ -11,7 +11,7 @@ export interface ServerTransportModule {
    * @returns A promise that resolves to the player's balance
    */
   getPlayerBalance(options: { player: Player }): Promise<number>;
-  
+
   /**
    * Create a bet for a player
    * @param player The player making the bet
@@ -19,8 +19,12 @@ export interface ServerTransportModule {
    * @param metadata Any additional information about the bet
    * @returns A promise that resolves to a bet ID if successful
    */
-  createBet(options: { player: Player, amount: number, metadata?: Record<string, unknown> }): Promise<string>;
-  
+  createBet(options: {
+    player: Player;
+    amount: number;
+    metadata?: Record<string, unknown>;
+  }): Promise<string>;
+
   /**
    * Mark a bet as won and award the player
    * @param betId The ID of the bet to mark as won
@@ -28,13 +32,17 @@ export interface ServerTransportModule {
    * @param metadata Any additional information about the win
    * @returns A promise that resolves to true if successful
    */
-  markBetWon(options: { betId: string, winAmount: number, metadata?: Record<string, unknown> }): Promise<boolean>;
-  
+  markBetWon(options: {
+    betId: string;
+    winAmount: number;
+    metadata?: Record<string, unknown>;
+  }): Promise<boolean>;
+
   /**
    * Mark a bet as lost
    * @param betId The ID of the bet to mark as lost
    * @param metadata Any additional information about the loss
    * @returns A promise that resolves to true if successful
    */
-  markBetLost(options: { betId: string, metadata?: Record<string, unknown> }): Promise<boolean>;
-} 
+  markBetLost(options: { betId: string; metadata?: Record<string, unknown> }): Promise<boolean>;
+}

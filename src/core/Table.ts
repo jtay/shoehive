@@ -1,15 +1,15 @@
-import { EventBus } from "../events/EventBus";
-import { TABLE_EVENTS } from "../events/TableEvents";
-import { Player } from "./Player";
-import { Card, Deck, Hand } from "./card/index";
-import { Seat } from "./Seat";
-import crypto from "crypto";
-import { CLIENT_MESSAGE_TYPES } from "./commands/index";
+import { EventBus } from '../events/EventBus';
+import { TABLE_EVENTS } from '../events/TableEvents';
+import { Player } from './Player';
+import { Card, Deck, Hand } from './card/index';
+import { Seat } from './Seat';
+import crypto from 'crypto';
+import { CLIENT_MESSAGE_TYPES } from './commands/index';
 
 export enum TableState {
-  WAITING = "waiting",
-  ACTIVE = "active", 
-  ENDED = "ended"
+  WAITING = 'waiting',
+  ACTIVE = 'active',
+  ENDED = 'ended',
 }
 
 export interface TableOptions {
@@ -19,12 +19,12 @@ export interface TableOptions {
 
 /**
  * Represents a game table with players, seats, and game state.
- * 
+ *
  * ✅ Attribute Support
- * 
+ *
  * The Table class manages a group of players and seats for a specific game.
  * It emits various events to notify other components about changes in the table state.
- * 
+ *
  * This class is responsible for:
  * - Managing player connections and disconnections
  * - Handling player messages and commands
@@ -50,7 +50,7 @@ export class Table {
     maxSeatsPerPlayer: number,
     id?: string,
     gameId?: string,
-    options: TableOptions = {}
+    options: TableOptions = {},
   ) {
     this.id = id || crypto.randomUUID();
     this.eventBus = eventBus;
@@ -58,56 +58,71 @@ export class Table {
     this.maxSeatsPerPlayer = maxSeatsPerPlayer;
     this.gameId = gameId || 'default';
     this.options = options;
-    
+
     // Initialize seats with Seat objects
     this.seats = new Array(totalSeats).fill(null).map(() => new Seat());
-    
+
     // Listen for player sit and stand request events
     this.setupEventListeners();
-    
+
     // Set initial attributes without emitting events yet
-    this.attributes.set("gameId", this.gameId);
+    this.attributes.set('gameId', this.gameId);
     if (this.options && Object.keys(this.options).length > 0) {
-      this.attributes.set("options", this.options);
+      this.attributes.set('options', this.options);
     }
-    
+
     // Emit table created event
     this.eventBus.emit(TABLE_EVENTS.CREATED, { table: this });
   }
 
   // Cached listener references for proper cleanup and memory leak prevention
-  private handleSitRequest = ({ player, table, seatIndex }: { player: Player, table: Table, seatIndex: number }) => {
+  private handleSitRequest = ({
+    player,
+    table,
+    seatIndex,
+  }: {
+    player: Player;
+    table: Table;
+    seatIndex: number;
+  }) => {
     if (table.id !== this.id) return;
     try {
       const success = this.sitPlayerAtSeat({ playerId: player.id, seatIndex });
       if (!success) {
-        player.sendMessage({ message: { type: CLIENT_MESSAGE_TYPES.ERROR, message: "Failed to sit at seat" } });
+        player.sendMessage({
+          message: { type: CLIENT_MESSAGE_TYPES.ERROR, message: 'Failed to sit at seat' },
+        });
       }
     } catch (error) {
-      console.error("Error handling sit request:", error);
+      console.error('Error handling sit request:', error);
       player.sendMessage({
         message: {
           type: CLIENT_MESSAGE_TYPES.ERROR,
-          message: "Failed to sit at seat: " + (error instanceof Error ? error.message : "unknown error")
-        }
+          message:
+            'Failed to sit at seat: ' + (error instanceof Error ? error.message : 'unknown error'),
+        },
       });
     }
   };
 
-  private handleStandRequest = ({ player, table }: { player: Player, table: Table }) => {
+  private handleStandRequest = ({ player, table }: { player: Player; table: Table }) => {
     if (table.id !== this.id) return;
     try {
       const success = this.standPlayerUp({ playerId: player.id });
       if (!success) {
-        player.sendMessage({ message: { type: CLIENT_MESSAGE_TYPES.ERROR, message: "Failed to stand from seat" } });
+        player.sendMessage({
+          message: { type: CLIENT_MESSAGE_TYPES.ERROR, message: 'Failed to stand from seat' },
+        });
       }
     } catch (error) {
-      console.error("Error handling stand request:", error);
+      console.error('Error handling stand request:', error);
       player.sendMessage({
         message: {
           type: CLIENT_MESSAGE_TYPES.ERROR,
-          message: "Failed to stand from seat: " + (error instanceof Error ? error.message : "unknown error")
-        }
+          message:
+            'Failed to stand from seat: ' +
+            (error instanceof Error ? error.message : 'unknown error'),
+        },
       });
     }
   };
@@ -117,7 +132,10 @@ export class Table {
    */
   private setupEventListeners(): void {
     this.eventBus.on({ event: TABLE_EVENTS.PLAYER_SIT_REQUEST, listener: this.handleSitRequest });
-    this.eventBus.on({ event: TABLE_EVENTS.PLAYER_STAND_REQUEST, listener: this.handleStandRequest });
+    this.eventBus.on({
+      event: TABLE_EVENTS.PLAYER_STAND_REQUEST,
+      listener: this.handleStandRequest,
+    });
   }
 
   /**
@@ -125,7 +143,10 @@ export class Table {
    */
   public destroy(): void {
     this.eventBus.off({ event: TABLE_EVENTS.PLAYER_SIT_REQUEST, listener: this.handleSitRequest });
-    this.eventBus.off({ event: TABLE_EVENTS.PLAYER_STAND_REQUEST, listener: this.handleStandRequest });
+    this.eventBus.off({
+      event: TABLE_EVENTS.PLAYER_STAND_REQUEST,
+      listener: this.handleStandRequest,
+    });
   }
 
   /*
@@ -155,7 +176,7 @@ export class Table {
    */
   public shuffleDeck(): boolean {
     if (!this.deck) return false;
-    
+
     this.deck.shuffle();
     this.eventBus.emit(TABLE_EVENTS.DECK_SHUFFLED, { table: this });
     return true;
@@ -168,7 +189,7 @@ export class Table {
    */
   public drawCard({ isVisible = true }: { isVisible?: boolean } = {}): Card | null {
     if (!this.deck) return null;
-    
+
     const card = this.deck.drawCard({ isVisible });
     if (card) {
       this.eventBus.emit(TABLE_EVENTS.DECK_CARD_DRAWN, { table: this, card });
@@ -184,36 +205,36 @@ export class Table {
    * @returns True if the card was dealt, false if no deck exists.
    */
   public dealCardToSeat({
-    seatIndex, 
-    isVisible = true, 
-    handId = "main"
+    seatIndex,
+    isVisible = true,
+    handId = 'main',
   }: {
-    seatIndex: number,
-    isVisible?: boolean,
-    handId?: string
+    seatIndex: number;
+    isVisible?: boolean;
+    handId?: string;
   }): boolean {
     if (!this.deck) return false;
-    
+
     if (seatIndex < 0 || seatIndex >= this.totalSeats) {
       return false;
     }
-    
+
     const card = this.deck.drawCard({ isVisible });
     if (!card) return false;
-    
+
     const seat = this.getSeat({ seatIndex });
     if (!seat) return false;
-    
+
     // Create the hand if it doesn't exist
     if (!seat.getHand({ handId })) {
       seat.addHand({ handId });
     }
-    
+
     const hand = seat.getHand({ handId });
     if (!hand) return false;
-    
+
     hand.addCard({ card });
-    
+
     this.eventBus.emit(TABLE_EVENTS.CARD_DEALT, { table: this, seatIndex, card, handId });
     return true;
   }
@@ -224,7 +245,13 @@ export class Table {
    * @param handId - The ID of the hand to get.
    * @returns The hand object or null if no hand exists.
    */
-  public getHandAtSeat({ seatIndex, handId = "main" }: { seatIndex: number, handId?: string }): Hand | null {    
+  public getHandAtSeat({
+    seatIndex,
+    handId = 'main',
+  }: {
+    seatIndex: number;
+    handId?: string;
+  }): Hand | null {
     const seat = this.getSeat({ seatIndex });
     if (!seat) return null;
 
@@ -245,21 +272,26 @@ export class Table {
     // Find the seat index for this hand
     let seatIndex = -1;
     for (let i = 0; i < this.seats.length; i++) {
-        const seat = this.getSeat({ seatIndex: i });
-        if (seat) {
-            // Check all hands at this seat
-            for (const [_, h] of seat.getAllHands()) {
-                if (h === hand) {
-                    seatIndex = i;
-                    break;
-                }
-            }
+      const seat = this.getSeat({ seatIndex: i });
+      if (seat) {
+        // Check all hands at this seat
+        for (const [_, h] of seat.getAllHands()) {
+          if (h === hand) {
+            seatIndex = i;
+            break;
+          }
         }
-        if (seatIndex !== -1) break;
+      }
+      if (seatIndex !== -1) break;
     }
 
     hand.addCard({ card });
-    this.eventBus.emit(TABLE_EVENTS.CARD_DEALT, { table: this, seatIndex, card, handId: hand.getId() });
+    this.eventBus.emit(TABLE_EVENTS.CARD_DEALT, {
+      table: this,
+      seatIndex,
+      card,
+      handId: hand.getId(),
+    });
     return true;
   }
 
@@ -272,7 +304,7 @@ export class Table {
     if (seatIndex < 0 || seatIndex >= this.totalSeats) {
       return null;
     }
-    
+
     const seat = this.getSeat({ seatIndex });
     if (!seat) return null;
 
@@ -285,10 +317,16 @@ export class Table {
    * @param handId - The ID of the hand to clear.
    * @returns True if the hand was cleared, false if no seat exists.
    */
-  public clearHandAtSeat({ seatIndex, handId = "main" }: { seatIndex: number, handId?: string }): boolean {
+  public clearHandAtSeat({
+    seatIndex,
+    handId = 'main',
+  }: {
+    seatIndex: number;
+    handId?: string;
+  }): boolean {
     const seat = this.getSeat({ seatIndex });
     if (!seat) return false;
-    
+
     const result = seat.clearHand({ handId });
     if (result) {
       this.eventBus.emit(TABLE_EVENTS.SEAT_HAND_CLEARED, { table: this, seatIndex, handId });
@@ -315,10 +353,10 @@ export class Table {
    * @param handId - The ID of the hand to add.
    * @returns True if the hand was added, false if no seat exists.
    */
-  public addHandToSeat({ seatIndex, handId }: { seatIndex: number, handId: string }): boolean {
+  public addHandToSeat({ seatIndex, handId }: { seatIndex: number; handId: string }): boolean {
     const seat = this.getSeat({ seatIndex });
     if (!seat) return false;
-    
+
     const result = seat.addHand({ handId });
     if (result) {
       this.eventBus.emit(TABLE_EVENTS.SEAT_HAND_ADDED, { table: this, seatIndex, handId });
@@ -332,10 +370,10 @@ export class Table {
    * @param handId - The ID of the hand to remove.
    * @returns True if the hand was removed, false if no seat exists.
    */
-  public removeHandFromSeat({ seatIndex, handId }: { seatIndex: number, handId: string }): boolean {
+  public removeHandFromSeat({ seatIndex, handId }: { seatIndex: number; handId: string }): boolean {
     const seat = this.getSeat({ seatIndex });
     if (!seat) return false;
-    
+
     const result = seat.removeHand({ handId });
     if (result) {
       this.eventBus.emit(TABLE_EVENTS.SEAT_HAND_REMOVED, { table: this, seatIndex, handId });
@@ -395,7 +433,13 @@ export class Table {
    * @param seatIndex - The index of the seat to sit the player at.
    * @returns True if the player was seated, false if the seat is invalid or already taken.
    */
-  public sitPlayerAtSeat({ playerId, seatIndex }: { playerId: string, seatIndex: number }): boolean {
+  public sitPlayerAtSeat({
+    playerId,
+    seatIndex,
+  }: {
+    playerId: string;
+    seatIndex: number;
+  }): boolean {
     const seat = this.getSeat({ seatIndex });
     if (!seat) return false;
 
@@ -403,7 +447,7 @@ export class Table {
     if (!player) return false;
 
     if (player) {
-        if(this.getPlayerAtSeat({ seatIndex })) return false;
+      if (this.getPlayerAtSeat({ seatIndex })) return false;
     }
 
     // Check if player is already seated at too many seats
@@ -444,7 +488,7 @@ export class Table {
     for (const seat of this.seats) {
       // Skip null or undefined seats
       if (!seat) continue;
-      
+
       try {
         const player = seat.getPlayer();
         if (player && player.id === playerId) {
@@ -473,7 +517,7 @@ export class Table {
   public setState({ state }: { state: TableState }): void {
     this.state = state;
     this.eventBus.emit(TABLE_EVENTS.STATE_UPDATED, { table: this, state });
-    
+
     // Also broadcast the full table state to all players when state enum changes
     this.broadcastTableState();
   }
@@ -505,10 +549,10 @@ export class Table {
     }
 
     // Ensure seat exists at this index
-    if(!this.seats[seatIndex] || typeof this.seats[seatIndex] !== 'object') {
+    if (!this.seats[seatIndex] || typeof this.seats[seatIndex] !== 'object') {
       this.seats[seatIndex] = new Seat();
     }
-    
+
     return this.seats[seatIndex];
   }
 
@@ -555,8 +599,8 @@ export class Table {
       player.sendMessage({
         message: {
           type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
-          data: personalTableState
-        }
+          data: personalTableState,
+        },
       });
     }
 
@@ -568,7 +612,7 @@ export class Table {
   /**
    * Gets the complete table state including all attributes and game state.
    * Modifies output arrays to reveal hidden cards strictly to their seated owner.
-   * 
+   *
    * @param playerId An optional playerId. If matched against a seat owner, returns proprietary hidden cards.
    * @returns The localized complete table state.
    */
@@ -576,41 +620,46 @@ export class Table {
     return {
       id: this.id,
       state: this.state,
-      seats: this.seats.map(seat => ({
-        player: seat.getPlayer() ? {
-          id: seat.getPlayer()!.id,
-          attributes: seat.getPlayer()!.getAttributes()
-        } : null,
-        hands: Array.from(seat.getAllHands() || new Map()).reduce((obj, [key, hand]) => {
-          // If the requester owns the seat, map full visibility array
-          if (playerId && seat.getPlayer()?.id === playerId) {
-            obj[key] = hand.getFullState();
-          } else {
-            obj[key] = hand.getVisibleState();
-          }
-          return obj;
-        }, {} as Record<string, unknown>)
+      seats: this.seats.map((seat) => ({
+        player: seat.getPlayer()
+          ? {
+              id: seat.getPlayer()!.id,
+              attributes: seat.getPlayer()!.getAttributes(),
+            }
+          : null,
+        hands: Array.from(seat.getAllHands() || new Map()).reduce(
+          (obj, [key, hand]) => {
+            // If the requester owns the seat, map full visibility array
+            if (playerId && seat.getPlayer()?.id === playerId) {
+              obj[key] = hand.getFullState();
+            } else {
+              obj[key] = hand.getVisibleState();
+            }
+            return obj;
+          },
+          {} as Record<string, unknown>,
+        ),
       })),
       attributes: Object.fromEntries(this.attributes.entries()),
-      playerCount: this.players.size
+      playerCount: this.players.size,
     };
   }
 
   /**
    * Gets the table metadata for lobby display.
    * This includes only the essential information needed to display in the lobby.
-   * 
+   *
    * @returns The table metadata.
    */
   public getTableMetadata(): unknown {
     return {
       id: this.id,
       state: this.state,
-      seats: this.seats.map(seat => seat.getPlayer()?.id || null),
+      seats: this.seats.map((seat) => seat.getPlayer()?.id || null),
       playerCount: this.players.size,
-      gameId: this.getAttribute({ key: "gameId" }),
-      gameName: this.getAttribute({ key: "gameName" }),
-      options: this.getAttribute({ key: "options" })
+      gameId: this.getAttribute({ key: 'gameId' }),
+      gameName: this.getAttribute({ key: 'gameName' }),
+      options: this.getAttribute({ key: 'options' }),
     };
   }
 
@@ -619,7 +668,7 @@ export class Table {
    * @param key - The key of the attribute to set.
    * @param value - The value of the attribute to set.
    */
-  public setAttribute({ key, value }: { key: string, value: unknown }): void {
+  public setAttribute({ key, value }: { key: string; value: unknown }): void {
     this.setAttributes({ attributes: { [key]: value } });
   }
 
@@ -655,35 +704,41 @@ export class Table {
    * @param broadcast - Whether to broadcast the table state after updating the attributes.
    * @returns True if any attributes were changed, false otherwise.
    */
-  public setAttributes({ attributes, broadcast = false }: { attributes: Record<string, unknown>, broadcast?: boolean }): boolean {
+  public setAttributes({
+    attributes,
+    broadcast = false,
+  }: {
+    attributes: Record<string, unknown>;
+    broadcast?: boolean;
+  }): boolean {
     let shouldUpdateLobby = false;
-    const metadataAttributes = ["gameId", "gameName", "options"];
+    const metadataAttributes = ['gameId', 'gameName', 'options'];
     const changedKeys: string[] = [];
-    
+
     // Set all attributes
     for (const [key, value] of Object.entries(attributes)) {
       this.attributes.set(key, value);
       changedKeys.push(key);
-      
+
       // Check if any metadata attributes were changed
       if (metadataAttributes.includes(key)) {
         shouldUpdateLobby = true;
       }
-      
+
       // Emit individual events for backwards compatibility
       this.eventBus.emit(TABLE_EVENTS.ATTRIBUTE_CHANGED, { table: this, key, value });
     }
-    
+
     // Emit a bulk event if any attributes were changed
     if (changedKeys.length > 0) {
       this.eventBus.emit(TABLE_EVENTS.ATTRIBUTES_CHANGED, { table: this, changedKeys, attributes });
     }
-    
+
     // Broadcast the table state if requested
     if (broadcast && changedKeys.length > 0) {
       this.broadcastTableState();
     }
-    
+
     return shouldUpdateLobby;
   }
 
@@ -691,7 +746,7 @@ export class Table {
    * Updates the attributes of the table. Emits TABLE_EVENTS.ATTRIBUTES_CHANGED when any attributes are updated.
    * @param attributes - An object containing key-value pairs of attributes to set.
    * @returns True if any attributes were changed, false otherwise.
-   */ 
+   */
   public updateAttributes({ attributes }: { attributes: Record<string, unknown> }): boolean {
     return this.setAttributes({ attributes, broadcast: true });
   }
@@ -712,14 +767,14 @@ export class Table {
    */
   public standPlayerUp({ playerId }: { playerId: string }): boolean {
     let success = false;
-    
+
     // Find all seats the player is sitting at
     for (let i = 0; i < this.seats.length; i++) {
       const seat = this.getSeat({ seatIndex: i });
       if (!seat) continue;
 
       const player = seat.getPlayer();
-      
+
       if (player && player.id === playerId) {
         // Remove player from this seat
         if (this.removePlayerFromSeat({ seatIndex: i })) {
@@ -727,7 +782,7 @@ export class Table {
         }
       }
     }
-    
+
     return success;
   }
-} 
+}

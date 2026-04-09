@@ -1,15 +1,15 @@
-import * as WebSocket from "ws";
-import * as http from "http";
-import { EventBus } from "../events/EventBus";
-import { MessageRouter } from "../events/MessageRouter";
-import { Player } from "./Player";
-import { Table } from "./Table";
-import { GameManager } from "./GameManager";
-import { Lobby } from "./Lobby";
-import { AuthModule } from "../transport/AuthModule";
-import { PLAYER_EVENTS, TABLE_EVENTS, LOBBY_EVENTS } from "../events/EventTypes";
-import { CLIENT_MESSAGE_TYPES } from "./commands/index";
-import { TableFactory } from "./TableFactory";
+import * as WebSocket from 'ws';
+import * as http from 'http';
+import { EventBus } from '../events/EventBus';
+import { MessageRouter } from '../events/MessageRouter';
+import { Player } from './Player';
+import { Table } from './Table';
+import { GameManager } from './GameManager';
+import { Lobby } from './Lobby';
+import { AuthModule } from '../transport/AuthModule';
+import { PLAYER_EVENTS, TABLE_EVENTS, LOBBY_EVENTS } from '../events/EventTypes';
+import { CLIENT_MESSAGE_TYPES } from './commands/index';
+import { TableFactory } from './TableFactory';
 
 export class WebSocketManager {
   private wss: WebSocket.Server;
@@ -30,7 +30,7 @@ export class WebSocketManager {
     authModule?: AuthModule,
     reconnectionTimeoutMs = 0,
     lobby?: Lobby,
-    tableFactory?: TableFactory
+    tableFactory?: TableFactory,
   ) {
     this.wss = new WebSocket.Server({ server });
     this.eventBus = eventBus;
@@ -38,10 +38,10 @@ export class WebSocketManager {
     this.gameManager = gameManager;
     this.authModule = authModule;
     this.reconnectionTimeoutMs = reconnectionTimeoutMs;
-    
+
     // Create a new Lobby if not provided
     this.lobby = lobby || new Lobby(eventBus, gameManager, tableFactory!);
-    
+
     this.setupConnectionHandler();
     this.setupEventListeners();
   }
@@ -52,40 +52,42 @@ export class WebSocketManager {
    * and handles incoming messages.
    */
   private setupConnectionHandler(): void {
-    this.wss.on("connection", async (socket: WebSocket.WebSocket, request: http.IncomingMessage) => {
-      try {
-        // Authenticate the connection if an auth provider is available
-        let playerId: string | null = null;
-        
-        if (this.authModule) {
-          playerId = await this.authModule.authenticatePlayer({ request: request });
-          
-          if (!playerId) {
-            socket.close(1008, "Authentication failed");
-            return;
+    this.wss.on(
+      'connection',
+      async (socket: WebSocket.WebSocket, request: http.IncomingMessage) => {
+        try {
+          // Authenticate the connection if an auth provider is available
+          let playerId: string | null = null;
+
+          if (this.authModule) {
+            playerId = await this.authModule.authenticatePlayer({ request: request });
+
+            if (!playerId) {
+              socket.close(1008, 'Authentication failed');
+              return;
+            }
           }
+
+          // Create a new player or reconnect an existing one
+          const player = this.createOrReconnectPlayer({ socket: socket, playerId: playerId });
+
+          // Handle messages
+          socket.on('message', (data: WebSocket.Data) => {
+            const message = data.toString();
+            this.messageRouter.processMessage({ player: player, messageStr: message });
+          });
+
+          // Send initial state to the player
+          this.sendInitialState({ player: player });
+
+          // Emit player connected event
+          this.eventBus.emit(PLAYER_EVENTS.CONNECTED, { player });
+        } catch (error) {
+          console.error('Connection error:', error);
+          socket.close(1011, 'Internal server error');
         }
-        
-        // Create a new player or reconnect an existing one
-        const player = this.createOrReconnectPlayer({ socket: socket, playerId: playerId });
-        
-        // Handle messages
-        socket.on("message", (data: WebSocket.Data) => {
-          const message = data.toString();
-          this.messageRouter.processMessage({ player: player, messageStr: message });
-        });
-        
-        // Send initial state to the player
-        this.sendInitialState({ player: player });
-        
-        // Emit player connected event
-        this.eventBus.emit(PLAYER_EVENTS.CONNECTED, { player });
-        
-      } catch (error) {
-        console.error("Connection error:", error);
-        socket.close(1011, "Internal server error");
-      }
-    });
+      },
+    );
   }
 
   /**
@@ -94,300 +96,414 @@ export class WebSocketManager {
    * and sends the appropriate messages to all players.
    */
   private setupEventListeners(): void {
-    this.eventBus.on({ event: LOBBY_EVENTS.UPDATED, listener: ({ lobbyState }: { lobbyState: unknown }) => {
-                const message = {
-                  type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
-                  data: lobbyState
-                };
-                
-                // Send to all players
-                this.players.forEach(player => {
-                  player.sendMessage({ message: message });
-                });
-              } });
+    this.eventBus.on({
+      event: LOBBY_EVENTS.UPDATED,
+      listener: ({ lobbyState }: { lobbyState: unknown }) => {
+        const message = {
+          type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
+          data: lobbyState,
+        };
+
+        // Send to all players
+        this.players.forEach((player) => {
+          player.sendMessage({ message: message });
+        });
+      },
+    });
 
     // Add listener for lobby state requests
-    this.eventBus.on({ event: 'request:lobby:state', listener: ({ player }: { player: Player }) => {
-                player.sendMessage({
-                  message: {
-                    type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
-                    data: {
-                      games: this.gameManager.getAvailableGames(),
-                      tables: this.gameManager.getAllTables().map(table => table.getTableMetadata())
-                    }
-                  }
-                });
-              } });
+    this.eventBus.on({
+      event: 'request:lobby:state',
+      listener: ({ player }: { player: Player }) => {
+        player.sendMessage({
+          message: {
+            type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
+            data: {
+              games: this.gameManager.getAvailableGames(),
+              tables: this.gameManager.getAllTables().map((table) => table.getTableMetadata()),
+            },
+          },
+        });
+      },
+    });
 
     // Add listeners for table actions
-    this.eventBus.on({ event: 'request:table:join', listener: ({ player, tableId }: { player: Player, tableId: string }) => {
-                const table = this.gameManager.getTableById({ tableId: tableId });
-                if (!table) {
-                  player.sendMessage({
-                    message: {
-                      type: CLIENT_MESSAGE_TYPES.ERROR,
-                      message: "Table not found"
-                    }
-                  });
-                  return;
-                }
-                
-                // Add player to table
-                const success = table.addPlayer({ player: player });
-                if (success) {
-                  player.setTable({ table: table });
-                  // The table:player:joined event will trigger sending the table state
-                } else {
-                  player.sendMessage({
-                    message: {
-                      type: CLIENT_MESSAGE_TYPES.ERROR,
-                      message: "Failed to join table"
-                    }
-                  });
-                }
-              } });
+    this.eventBus.on({
+      event: 'request:table:join',
+      listener: ({ player, tableId }: { player: Player; tableId: string }) => {
+        const table = this.gameManager.getTableById({ tableId: tableId });
+        if (!table) {
+          player.sendMessage({
+            message: {
+              type: CLIENT_MESSAGE_TYPES.ERROR,
+              message: 'Table not found',
+            },
+          });
+          return;
+        }
 
-    this.eventBus.on({ event: 'request:table:leave', listener: ({ player, tableId }: { player: Player, tableId: string }) => {
-                const table = this.gameManager.getTableById({ tableId: tableId });
-                if (!table) {
-                  player.sendMessage({
-                    message: {
-                      type: CLIENT_MESSAGE_TYPES.ERROR,
-                      message: "Table not found"
-                    }
-                  });
-                  return;
-                }
-                
-                // Remove player from table
-                table.removePlayer({ playerId: player.id });
-                player.setTable({ table: null });
-                
-                // Confirm to the player
-                player.sendMessage({
-                  message: {
-                    type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
-                    data: {
-                      id: player.id,
-                      attributes: player.getAttributes()
-                    }
-                  }
-                });
-                
-                // Update lobby state for all players
-                this.lobby.updateLobbyState();
-              } });
+        // Add player to table
+        const success = table.addPlayer({ player: player });
+        if (success) {
+          player.setTable({ table: table });
+          // The table:player:joined event will trigger sending the table state
+        } else {
+          player.sendMessage({
+            message: {
+              type: CLIENT_MESSAGE_TYPES.ERROR,
+              message: 'Failed to join table',
+            },
+          });
+        }
+      },
+    });
 
-    this.eventBus.on({ event: 'request:table:create', listener: ({ player, gameId, options = {} }: { player: Player, gameId: string, options?: Record<string, unknown> }) => {
-                try {
-                  // Create a new table
-                  const table = this.lobby.createTable({ gameId: gameId, options: options });
-                  if (!table) {
-                    player.sendMessage({
-                      message: {
-                        type: CLIENT_MESSAGE_TYPES.ERROR,
-                        message: "Failed to create table"
-                      }
-                    });
-                    return;
-                  }
-                  
-                  // Automatically join the player to their new table
-                  table.addPlayer({ player: player });
-                  player.setTable({ table: table });
-                  
-                  // Notify everyone about the new table (via lobby update)
-                  this.lobby.updateLobbyState();
-                } catch (error) {
-                  console.error("Error creating table:", error);
-                  player.sendMessage({
-                    message: {
-                      type: CLIENT_MESSAGE_TYPES.ERROR,
-                      message: "Failed to create table: " + (error instanceof Error ? error.message : "unknown error")
-                    }
-                  });
-                }
-              } });
+    this.eventBus.on({
+      event: 'request:table:leave',
+      listener: ({ player, tableId }: { player: Player; tableId: string }) => {
+        const table = this.gameManager.getTableById({ tableId: tableId });
+        if (!table) {
+          player.sendMessage({
+            message: {
+              type: CLIENT_MESSAGE_TYPES.ERROR,
+              message: 'Table not found',
+            },
+          });
+          return;
+        }
 
-    this.eventBus.on({ event: 'request:table:seat:sit', listener: ({ player, tableId, seatIndex }: { player: Player, tableId: string, seatIndex: number }) => {
-                const table = player.getTable();
-                if (!table) {
-                  player.sendMessage({
-                    message: {
-                      type: CLIENT_MESSAGE_TYPES.ERROR,
-                      message: "Table not found"
-                    }
-                  });
-                  return;
-                }
-                
-                // Validate seatIndex to ensure it's a valid number
-                if (seatIndex === undefined || seatIndex === null || typeof seatIndex !== 'number') {
-                  player.sendMessage({
-                    message: {
-                      type: CLIENT_MESSAGE_TYPES.ERROR,
-                      message: "Invalid seat index"
-                    }
-                  });
-                  return;
-                }
-                
-                try {
-                  // Emit a table event for seating the player and let the table handle it internally
-                  this.eventBus.emit(TABLE_EVENTS.PLAYER_SIT_REQUEST, { player, table, seatIndex });
-                  
-                  // The response will be handled by the TABLE_EVENTS.PLAYER_SAT event listener
-                } catch (error) {
-                  console.error("Error seating player:", error);
-                  player.sendMessage({
-                    message: {
-                      type: CLIENT_MESSAGE_TYPES.ERROR,
-                      message: "Failed to sit at seat: " + (error instanceof Error ? error.message : "unknown error")
-                    }
-                  });
-                }
-              } });
+        // Remove player from table
+        table.removePlayer({ playerId: player.id });
+        player.setTable({ table: null });
 
-    this.eventBus.on({ event: 'request:table:seat:stand', listener: ({ player, tableId }: { player: Player, tableId: string }) => {
-                const table = this.gameManager.getTableById({ tableId: tableId });
-                if (!table) {
-                  player.sendMessage({
-                    message: {
-                      type: CLIENT_MESSAGE_TYPES.ERROR,
-                      message: "Table not found"
-                    }
-                  });
-                  return;
-                }
-                
-                try {
-                  // Emit a table event for unseating the player and let the table handle it internally
-                  this.eventBus.emit(TABLE_EVENTS.PLAYER_STAND_REQUEST, { player, table });
-                  
-                  // The response will be handled by the TABLE_EVENTS.PLAYER_STOOD event listener
-                } catch (error) {
-                  console.error("Error unseating player:", error);
-                  player.sendMessage({
-                    message: {
-                      type: CLIENT_MESSAGE_TYPES.ERROR,
-                      message: "Failed to stand from seat: " + (error instanceof Error ? error.message : "unknown error")
-                    }
-                  });
-                }
-              } });
+        // Confirm to the player
+        player.sendMessage({
+          message: {
+            type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
+            data: {
+              id: player.id,
+              attributes: player.getAttributes(),
+            },
+          },
+        });
 
-    this.eventBus.on({ event: TABLE_EVENTS.PLAYER_JOINED, listener: ({ player, table }: { player: Player, table: Table }) => {
-                // Send the full table state to the joining player
-                player.sendMessage({
-                  message: {
-                    type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
-                    data: table.getTableState()
-                  }
-                });
-              } });
+        // Update lobby state for all players
+        this.lobby.updateLobbyState();
+      },
+    });
+
+    this.eventBus.on({
+      event: 'request:table:create',
+      listener: ({
+        player,
+        gameId,
+        options = {},
+      }: {
+        player: Player;
+        gameId: string;
+        options?: Record<string, unknown>;
+      }) => {
+        try {
+          // Create a new table
+          const table = this.lobby.createTable({ gameId: gameId, options: options });
+          if (!table) {
+            player.sendMessage({
+              message: {
+                type: CLIENT_MESSAGE_TYPES.ERROR,
+                message: 'Failed to create table',
+              },
+            });
+            return;
+          }
+
+          // Automatically join the player to their new table
+          table.addPlayer({ player: player });
+          player.setTable({ table: table });
+
+          // Notify everyone about the new table (via lobby update)
+          this.lobby.updateLobbyState();
+        } catch (error) {
+          console.error('Error creating table:', error);
+          player.sendMessage({
+            message: {
+              type: CLIENT_MESSAGE_TYPES.ERROR,
+              message:
+                'Failed to create table: ' +
+                (error instanceof Error ? error.message : 'unknown error'),
+            },
+          });
+        }
+      },
+    });
+
+    this.eventBus.on({
+      event: 'request:table:seat:sit',
+      listener: ({
+        player,
+        tableId,
+        seatIndex,
+      }: {
+        player: Player;
+        tableId: string;
+        seatIndex: number;
+      }) => {
+        const table = player.getTable();
+        if (!table) {
+          player.sendMessage({
+            message: {
+              type: CLIENT_MESSAGE_TYPES.ERROR,
+              message: 'Table not found',
+            },
+          });
+          return;
+        }
+
+        // Validate seatIndex to ensure it's a valid number
+        if (seatIndex === undefined || seatIndex === null || typeof seatIndex !== 'number') {
+          player.sendMessage({
+            message: {
+              type: CLIENT_MESSAGE_TYPES.ERROR,
+              message: 'Invalid seat index',
+            },
+          });
+          return;
+        }
+
+        try {
+          // Emit a table event for seating the player and let the table handle it internally
+          this.eventBus.emit(TABLE_EVENTS.PLAYER_SIT_REQUEST, { player, table, seatIndex });
+
+          // The response will be handled by the TABLE_EVENTS.PLAYER_SAT event listener
+        } catch (error) {
+          console.error('Error seating player:', error);
+          player.sendMessage({
+            message: {
+              type: CLIENT_MESSAGE_TYPES.ERROR,
+              message:
+                'Failed to sit at seat: ' +
+                (error instanceof Error ? error.message : 'unknown error'),
+            },
+          });
+        }
+      },
+    });
+
+    this.eventBus.on({
+      event: 'request:table:seat:stand',
+      listener: ({ player, tableId }: { player: Player; tableId: string }) => {
+        const table = this.gameManager.getTableById({ tableId: tableId });
+        if (!table) {
+          player.sendMessage({
+            message: {
+              type: CLIENT_MESSAGE_TYPES.ERROR,
+              message: 'Table not found',
+            },
+          });
+          return;
+        }
+
+        try {
+          // Emit a table event for unseating the player and let the table handle it internally
+          this.eventBus.emit(TABLE_EVENTS.PLAYER_STAND_REQUEST, { player, table });
+
+          // The response will be handled by the TABLE_EVENTS.PLAYER_STOOD event listener
+        } catch (error) {
+          console.error('Error unseating player:', error);
+          player.sendMessage({
+            message: {
+              type: CLIENT_MESSAGE_TYPES.ERROR,
+              message:
+                'Failed to stand from seat: ' +
+                (error instanceof Error ? error.message : 'unknown error'),
+            },
+          });
+        }
+      },
+    });
+
+    this.eventBus.on({
+      event: TABLE_EVENTS.PLAYER_JOINED,
+      listener: ({ player, table }: { player: Player; table: Table }) => {
+        // Send the full table state to the joining player
+        player.sendMessage({
+          message: {
+            type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
+            data: table.getTableState(),
+          },
+        });
+      },
+    });
 
     // Add listener for playerSeated event
-    this.eventBus.on({ event: TABLE_EVENTS.PLAYER_SAT, listener: ({ player, table, seatIndex }: { player: Player, table: Table, seatIndex: number }) => {
-                // Notify all players at the table about the change
-                table.broadcastTableState();
-                
-                // Update lobby for all players to see seat changes
-                this.lobby.updateLobbyState();
-              } });
+    this.eventBus.on({
+      event: TABLE_EVENTS.PLAYER_SAT,
+      listener: ({
+        player,
+        table,
+        seatIndex,
+      }: {
+        player: Player;
+        table: Table;
+        seatIndex: number;
+      }) => {
+        // Notify all players at the table about the change
+        table.broadcastTableState();
+
+        // Update lobby for all players to see seat changes
+        this.lobby.updateLobbyState();
+      },
+    });
 
     // Add listener for playerUnseated event
-    this.eventBus.on({ event: TABLE_EVENTS.PLAYER_STOOD, listener: ({ player, table, seatIndex }: { player: Player, table: Table, seatIndex: number }) => {
-                // Notify all players at the table about the change
-                table.broadcastTableState();
-                
-                // Update lobby for all players to see seat changes
-                this.lobby.updateLobbyState();
-              } });
-    
+    this.eventBus.on({
+      event: TABLE_EVENTS.PLAYER_STOOD,
+      listener: ({
+        player,
+        table,
+        seatIndex,
+      }: {
+        player: Player;
+        table: Table;
+        seatIndex: number;
+      }) => {
+        // Notify all players at the table about the change
+        table.broadcastTableState();
+
+        // Update lobby for all players to see seat changes
+        this.lobby.updateLobbyState();
+      },
+    });
+
     // Handle table state updates
-    this.eventBus.on({ event: TABLE_EVENTS.STATE_UPDATED, listener: ({ table, state }: { table: Table, state: unknown }) => {
-                // No need to broadcast again as the table has already done this
-                // This event can be used by other components
-              } });
-    
+    this.eventBus.on({
+      event: TABLE_EVENTS.STATE_UPDATED,
+      listener: ({ table, state }: { table: Table; state: unknown }) => {
+        // No need to broadcast again as the table has already done this
+        // This event can be used by other components
+      },
+    });
+
     // Handle player attribute changes
-    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTE_CHANGED, listener: ({ player, key, value }: { player: Player, key: string, value: unknown }) => {
-                // Use the new distribution method
-                this.distributePlayerUpdate({ player: player, key: key, value: value });
-              } });
-    
+    this.eventBus.on({
+      event: PLAYER_EVENTS.ATTRIBUTE_CHANGED,
+      listener: ({ player, key, value }: { player: Player; key: string; value: unknown }) => {
+        // Use the new distribution method
+        this.distributePlayerUpdate({ player: player, key: key, value: value });
+      },
+    });
+
     // Handle bulk player attribute changes
-    this.eventBus.on({ event: PLAYER_EVENTS.ATTRIBUTES_CHANGED, listener: ({ player, changedKeys, attributes }: { player: Player, changedKeys: string[], attributes: Record<string, unknown> }) => {
-                // Use the new bulk distribution method
-                this.distributePlayerUpdates({ player: player, attributes: attributes });
-              } });
-    
+    this.eventBus.on({
+      event: PLAYER_EVENTS.ATTRIBUTES_CHANGED,
+      listener: ({
+        player,
+        changedKeys,
+        attributes,
+      }: {
+        player: Player;
+        changedKeys: string[];
+        attributes: Record<string, unknown>;
+      }) => {
+        // Use the new bulk distribution method
+        this.distributePlayerUpdates({ player: player, attributes: attributes });
+      },
+    });
+
     // Handle table attribute changes
-    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTE_CHANGED, listener: ({ table, key, value }: { table: Table, key: string, value: unknown }) => {
-                // Broadcast is handled by ATTRIBUTES_CHANGED batch event to avoid duplicates.
-                // Update lobby if this is a metadata attribute that would affect the lobby display
-                const metadataAttributes = ["gameId", "gameName", "options"];
-                if (metadataAttributes.includes(key)) {
-                  this.lobby.updateLobbyState();
-                }
-              } });
-    
+    this.eventBus.on({
+      event: TABLE_EVENTS.ATTRIBUTE_CHANGED,
+      listener: ({ table, key, value }: { table: Table; key: string; value: unknown }) => {
+        // Broadcast is handled by ATTRIBUTES_CHANGED batch event to avoid duplicates.
+        // Update lobby if this is a metadata attribute that would affect the lobby display
+        const metadataAttributes = ['gameId', 'gameName', 'options'];
+        if (metadataAttributes.includes(key)) {
+          this.lobby.updateLobbyState();
+        }
+      },
+    });
+
     // Handle bulk table attribute changes
-    this.eventBus.on({ event: TABLE_EVENTS.ATTRIBUTES_CHANGED, listener: ({ table, changedKeys, attributes }: { table: Table, changedKeys: string[], attributes: Record<string, unknown> }) => {
-                const gameId = table.getAttribute({ key: "gameId" }) as string;
-                const gameDefinition = gameId ? this.gameManager.getGameDefinition({ gameId: gameId }) : null;
-                
-                const relevantTableAttributes = gameDefinition?.relevantTableAttributes || [
-                  "status", "turn", "pot", "board", "phase", "winner"
-                ];
-                
-                // Broadcast if any relevant attributes were changed
-                if (changedKeys.some((key: string) => relevantTableAttributes.includes(key))) {
-                  table.broadcastTableState();
-                }
-                
-                // we need to check if we should update the lobby
-                const metadataAttributes = ["gameId", "gameName", "options"];
-                const shouldUpdateLobby = changedKeys.some((key: string) => metadataAttributes.includes(key));
-                
-                if (shouldUpdateLobby) {
-                  this.lobby.updateLobbyState();
-                }
-              } });
+    this.eventBus.on({
+      event: TABLE_EVENTS.ATTRIBUTES_CHANGED,
+      listener: ({
+        table,
+        changedKeys,
+        attributes,
+      }: {
+        table: Table;
+        changedKeys: string[];
+        attributes: Record<string, unknown>;
+      }) => {
+        const gameId = table.getAttribute({ key: 'gameId' }) as string;
+        const gameDefinition = gameId
+          ? this.gameManager.getGameDefinition({ gameId: gameId })
+          : null;
+
+        const relevantTableAttributes = gameDefinition?.relevantTableAttributes || [
+          'status',
+          'turn',
+          'pot',
+          'board',
+          'phase',
+          'winner',
+        ];
+
+        // Broadcast if any relevant attributes were changed
+        if (changedKeys.some((key: string) => relevantTableAttributes.includes(key))) {
+          table.broadcastTableState();
+        }
+
+        // we need to check if we should update the lobby
+        const metadataAttributes = ['gameId', 'gameName', 'options'];
+        const shouldUpdateLobby = changedKeys.some((key: string) =>
+          metadataAttributes.includes(key),
+        );
+
+        if (shouldUpdateLobby) {
+          this.lobby.updateLobbyState();
+        }
+      },
+    });
   }
 
   /**
    * Sends the initial state to a player.
    * This includes player details and lobby state.
-   * 
+   *
    * @param player The player to send the initial state to.
    */
   private sendInitialState({ player }: { player: Player }): void {
     // Send player details
-    player.sendMessage({ message: {
-                type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
-                data: {
-                  id: player.id,
-                  attributes: player.getAttributes()
-                }
-              } });
+    player.sendMessage({
+      message: {
+        type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
+        data: {
+          id: player.id,
+          attributes: player.getAttributes(),
+        },
+      },
+    });
 
     // Send available games and tables (lobby state)
-    player.sendMessage({ message: {
-                type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
-                data: {
-                  games: this.gameManager.getAvailableGames(),
-                  tables: this.gameManager.getAllTables().map(table => table.getTableMetadata())
-                }
-              } });
-    
+    player.sendMessage({
+      message: {
+        type: CLIENT_MESSAGE_TYPES.LOBBY.STATE,
+        data: {
+          games: this.gameManager.getAvailableGames(),
+          tables: this.gameManager.getAllTables().map((table) => table.getTableMetadata()),
+        },
+      },
+    });
+
     // If the player is already at a table, send the full table state
     const table = player.getTable();
     if (table) {
-      player.sendMessage({ message: {
-                    type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
-                    data: table.getTableState({})
-                  } });
+      player.sendMessage({
+        message: {
+          type: CLIENT_MESSAGE_TYPES.TABLE.STATE,
+          data: table.getTableState({}),
+        },
+      });
     }
   }
 
@@ -395,37 +511,55 @@ export class WebSocketManager {
    * Distribute player updates to relevant players.
    * This notifies the player about their own changes and also updates
    * any tables they're part of.
-   * 
+   *
    * @param player The player whose state changed
    * @param key The attribute that changed
    * @param value The new value
    * @param updateTableState Whether to update the table state
    */
-  public distributePlayerUpdate({ player, key, value, updateTableState = true }: { player: Player, key: string, value: unknown, updateTableState?: boolean }): void {
+  public distributePlayerUpdate({
+    player,
+    key,
+    value,
+    updateTableState = true,
+  }: {
+    player: Player;
+    key: string;
+    value: unknown;
+    updateTableState?: boolean;
+  }): void {
     // Notify the player about their own attribute changes
-    player.sendMessage({ message: {
-                type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
-                data: {
-                  id: player.id,
-                  attributes: player.getAttributes()
-                }
-              } });
+    player.sendMessage({
+      message: {
+        type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
+        data: {
+          id: player.id,
+          attributes: player.getAttributes(),
+        },
+      },
+    });
 
     // If player is at a table and we should update table state
     const table = player.getTable();
     if (table && updateTableState) {
       // Get the game ID for this table
-      const gameId = table.getAttribute({ key: "gameId" }) as string;
+      const gameId = table.getAttribute({ key: 'gameId' }) as string;
       if (!gameId) return;
-      
+
       // Get the game definition
       const gameDefinition = this.gameManager.getGameDefinition({ gameId: gameId });
-      
+
       // Use the game-specific table relevant attributes, or fall back to defaults
       const tableRelevantAttributes = gameDefinition?.tableRelevantPlayerAttributes || [
-        "name", "avatar", "chips", "status", "isReady", "role", "team"
+        'name',
+        'avatar',
+        'chips',
+        'status',
+        'isReady',
+        'role',
+        'team',
       ];
-      
+
       // Only broadcast if this attribute affects the table display
       if (tableRelevantAttributes.includes(key)) {
         table.broadcastTableState();
@@ -435,41 +569,57 @@ export class WebSocketManager {
 
   /**
    * Distribute multiple player updates to relevant players.
-   * 
+   *
    * @param player The player whose state changed
    * @param attributes The attributes that changed
    * @param updateTableState Whether to update the table state
    */
-  public distributePlayerUpdates({ player, attributes, updateTableState = true }: { player: Player, attributes: Record<string, unknown>, updateTableState?: boolean }): void {
+  public distributePlayerUpdates({
+    player,
+    attributes,
+    updateTableState = true,
+  }: {
+    player: Player;
+    attributes: Record<string, unknown>;
+    updateTableState?: boolean;
+  }): void {
     // Notify the player about their own attribute changes
-    player.sendMessage({ message: {
-                type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
-                data: {
-                  id: player.id,
-                  attributes: player.getAttributes()
-                }
-              } });
-    
+    player.sendMessage({
+      message: {
+        type: CLIENT_MESSAGE_TYPES.PLAYER.STATE,
+        data: {
+          id: player.id,
+          attributes: player.getAttributes(),
+        },
+      },
+    });
+
     // If player is at a table and we should update table state
     const table = player.getTable();
     if (table && updateTableState) {
       // Get the game ID for this table
-      const gameId = table.getAttribute({ key: "gameId" }) as string;
+      const gameId = table.getAttribute({ key: 'gameId' }) as string;
       if (!gameId) return;
-      
+
       // Get the game definition
       const gameDefinition = this.gameManager.getGameDefinition({ gameId: gameId });
-      
+
       // Use the game-specific table relevant attributes, or fall back to defaults
       const tableRelevantAttributes = gameDefinition?.tableRelevantPlayerAttributes || [
-        "name", "avatar", "chips", "status", "isReady", "role", "team"
+        'name',
+        'avatar',
+        'chips',
+        'status',
+        'isReady',
+        'role',
+        'team',
       ];
-      
+
       // Only broadcast if any of the changed attributes are relevant to the table
-      const relevantChanges = Object.keys(attributes).some(key => 
-        tableRelevantAttributes.includes(key)
+      const relevantChanges = Object.keys(attributes).some((key) =>
+        tableRelevantAttributes.includes(key),
       );
-      
+
       if (relevantChanges) {
         table.broadcastTableState();
       }
@@ -478,97 +628,105 @@ export class WebSocketManager {
 
   /**
    * Creates a new player or reconnects an existing one.
-   * 
+   *
    * @param socket The WebSocket connection.
    * @param playerId The player ID.
    * @returns The player object.
    */
-  private createOrReconnectPlayer({ socket, playerId }: { socket: WebSocket.WebSocket, playerId: string | null }): Player {
+  private createOrReconnectPlayer({
+    socket,
+    playerId,
+  }: {
+    socket: WebSocket.WebSocket;
+    playerId: string | null;
+  }): Player {
     if (playerId && this.players.has(playerId)) {
       // Handle reconnection
       const existingPlayer = this.players.get(playerId)!;
       // Disconnect existing socket if any
       existingPlayer.disconnect();
-      
+
       // Re-bind the socket connection directly entirely bypassing new object creation
       existingPlayer.setSocket({ socket: socket });
-      
+
       // Clear any existing disconnect timeout for this player
       if (this.disconnectionTimeouts.has(playerId)) {
         clearTimeout(this.disconnectionTimeouts.get(playerId)!);
         this.disconnectionTimeouts.delete(playerId);
       }
-      
+
       this.eventBus.emit(PLAYER_EVENTS.RECONNECTED, { existingPlayer });
       return existingPlayer;
     } else {
       // Create new player
       const player = new Player(socket, this.eventBus, playerId || undefined);
       this.players.set(player.id, player);
-      
+
       // Setup disconnect handler for the new player
       this.setupPlayerDisconnectHandler({ player: player });
-      
+
       return player;
     }
   }
 
   /**
    * Setup disconnect handler for a player to manage reconnection timeout
-   * 
+   *
    * @param player The player to set up disconnect handler for
    */
   private setupPlayerDisconnectHandler({ player }: { player: Player }): void {
-    player.onDisconnect({ callback: () => {
-                // Only set timeout if reconnection timeout is enabled
-                if (this.reconnectionTimeoutMs > 0) {
-                  // Mark player as temporarily disconnected
-                  player.setAttribute({ key: 'connectionStatus', value: 'disconnected' });
-                  
-                  // Set timeout to remove player if they don't reconnect
-                  const timeout = setTimeout(() => {
-                    this.removePlayerPermanently({ playerId: player.id });
-                  }, this.reconnectionTimeoutMs);
-                  
-                  this.disconnectionTimeouts.set(player.id, timeout);
-                } else {
-                  // If timeout is disabled, remove player immediately
-                  this.removePlayerPermanently({ playerId: player.id });
-                }
-              } });
+    player.onDisconnect({
+      callback: () => {
+        // Only set timeout if reconnection timeout is enabled
+        if (this.reconnectionTimeoutMs > 0) {
+          // Mark player as temporarily disconnected
+          player.setAttribute({ key: 'connectionStatus', value: 'disconnected' });
+
+          // Set timeout to remove player if they don't reconnect
+          const timeout = setTimeout(() => {
+            this.removePlayerPermanently({ playerId: player.id });
+          }, this.reconnectionTimeoutMs);
+
+          this.disconnectionTimeouts.set(player.id, timeout);
+        } else {
+          // If timeout is disabled, remove player immediately
+          this.removePlayerPermanently({ playerId: player.id });
+        }
+      },
+    });
   }
 
   /**
    * Permanently remove a player from the game server
-   * 
+   *
    * @param playerId The ID of the player to remove
    */
   private removePlayerPermanently({ playerId }: { playerId: string }): void {
     const player = this.players.get(playerId);
     if (!player) return;
-    
+
     // If player is at a table, remove them
     const table = player.getTable();
     if (table) {
       table.removePlayer({ playerId: playerId });
     }
-    
+
     // Remove player from the game server
     this.players.delete(playerId);
-    
+
     // Clean up any stored timeout
     if (this.disconnectionTimeouts.has(playerId)) {
       clearTimeout(this.disconnectionTimeouts.get(playerId)!);
       this.disconnectionTimeouts.delete(playerId);
     }
-    
+
     // Emit a player removed event
     this.eventBus.emit(PLAYER_EVENTS.REMOVED, { player });
   }
 
   /**
    * Gets a player by their ID.
-   * 
+   *
    * @param playerId The ID of the player to get.
    * @returns The player object or undefined if the player does not exist.
    */
@@ -579,7 +737,7 @@ export class WebSocketManager {
   /**
    * Disconnects a player by their ID without waiting for timeout.
    * This bypasses the reconnection timeout and immediately removes the player.
-   * 
+   *
    * @param playerId The ID of the player to disconnect.
    */
   public disconnectPlayer({ playerId }: { playerId: string }): void {
@@ -587,27 +745,27 @@ export class WebSocketManager {
     if (player) {
       // Close the socket connection
       player.disconnect();
-      
+
       // Remove any timeout and immediately remove the player
       if (this.disconnectionTimeouts.has(playerId)) {
         clearTimeout(this.disconnectionTimeouts.get(playerId)!);
         this.disconnectionTimeouts.delete(playerId);
       }
-      
+
       this.removePlayerPermanently({ playerId: playerId });
     }
   }
-  
+
   /**
    * Gets the current reconnection timeout in milliseconds
    */
   public getReconnectionTimeout(): number {
     return this.reconnectionTimeoutMs;
   }
-  
+
   /**
    * Sets the reconnection timeout in milliseconds
-   * 
+   *
    * @param timeoutMs The timeout in milliseconds (0 to disable reconnection)
    */
   public setReconnectionTimeout({ timeoutMs }: { timeoutMs: number }): void {
@@ -617,7 +775,7 @@ export class WebSocketManager {
   /**
    * Gets information about temporarily disconnected players.
    * This is useful for monitoring and debugging connection issues.
-   * 
+   *
    * @returns Array of objects containing information about disconnected players
    */
   public getDisconnectedPlayers(): Array<{
@@ -633,29 +791,31 @@ export class WebSocketManager {
       reconnectionAvailableUntil: number;
       timeLeftMs: number;
     }> = [];
-    
-    this.players.forEach(player => {
+
+    this.players.forEach((player) => {
       if (player.getAttribute({ key: 'connectionStatus' }) === 'disconnected') {
         const disconnectedAt = player.getAttribute({ key: 'disconnectedAt' }) as number;
-        const reconnectionAvailableUntil = player.getAttribute({ key: 'reconnectionAvailableUntil' }) as number;
-        
+        const reconnectionAvailableUntil = player.getAttribute({
+          key: 'reconnectionAvailableUntil',
+        }) as number;
+
         if (disconnectedAt && reconnectionAvailableUntil) {
           result.push({
             id: player.id,
             disconnectedAt,
             reconnectionAvailableUntil,
-            timeLeftMs: Math.max(0, reconnectionAvailableUntil - now)
+            timeLeftMs: Math.max(0, reconnectionAvailableUntil - now),
           });
         }
       }
     });
-    
+
     return result;
   }
 
   /**
    * Gets the current number of connected players.
-   * 
+   *
    * @returns The number of connected players
    */
   public getConnectedPlayerCount(): number {

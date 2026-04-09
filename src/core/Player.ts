@@ -1,17 +1,17 @@
-import { EventBus } from "../events/EventBus";
-import { PLAYER_EVENTS } from "../events/EventTypes";
-import { Table } from "./Table";
-import * as WebSocket from "ws";
-import crypto from "crypto";
+import { EventBus } from '../events/EventBus';
+import { PLAYER_EVENTS } from '../events/EventTypes';
+import { Table } from './Table';
+import * as WebSocket from 'ws';
+import crypto from 'crypto';
 
 /**
  * Represents a connected client in the game.
- * 
+ *
  * ✅ Attribute Support
- * 
+ *
  * The Player class handles communication with the client and keeps track
  * of the player's current table and custom attributes.
- * 
+ *
  */
 export class Player {
   public readonly id: string;
@@ -29,14 +29,14 @@ export class Player {
   }
 
   private setupSocketListeners(): void {
-    this.socket.on("close", () => {
+    this.socket.on('close', () => {
       this.eventBus.emit(PLAYER_EVENTS.DISCONNECTED, { table: this });
-      
+
       // Call all disconnect callbacks
-      this.disconnectCallbacks.forEach(callback => callback());
+      this.disconnectCallbacks.forEach((callback) => callback());
     });
 
-    this.socket.on("error", (error) => {
+    this.socket.on('error', (error) => {
       console.error(`Socket error for player ${this.id}:`, error);
     });
   }
@@ -75,14 +75,22 @@ export class Player {
 
   /**
    * Set a single attribute on the player and emit an event for the change.
-   * 
+   *
    * @param key The attribute name
    * @param value The attribute value
    * @param notify Whether to emit an event (defaults to true)
    */
-  public setAttribute({ key, value, notify = true }: { key: string, value: unknown, notify?: boolean }): void {
+  public setAttribute({
+    key,
+    value,
+    notify = true,
+  }: {
+    key: string;
+    value: unknown;
+    notify?: boolean;
+  }): void {
     this.attributes.set(key, value);
-    
+
     if (notify) {
       this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, { table: this, key, value });
     }
@@ -91,25 +99,33 @@ export class Player {
   /**
    * Set multiple attributes at once and emit a single event.
    * This is more efficient than calling setAttribute multiple times.
-   * 
+   *
    * @param attributes Object containing attribute key-value pairs
    */
   public setAttributes({ attributes }: { attributes: Record<string, unknown> }): void {
     const changedKeys: string[] = [];
-    
+
     // Set all attributes first
     for (const [key, value] of Object.entries(attributes)) {
       this.attributes.set(key, value);
       changedKeys.push(key);
     }
-    
+
     // Then emit a single event for all changes
     if (changedKeys.length > 0) {
-      this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTES_CHANGED, { table: this, changedKeys, attributes });
-      
+      this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTES_CHANGED, {
+        table: this,
+        changedKeys,
+        attributes,
+      });
+
       // Also emit individual events for backward compatibility
       for (const key of changedKeys) {
-        this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, { table: this, key, value: attributes[key] });
+        this.eventBus.emit(PLAYER_EVENTS.ATTRIBUTE_CHANGED, {
+          table: this,
+          key,
+          value: attributes[key],
+        });
       }
     }
   }

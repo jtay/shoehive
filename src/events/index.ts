@@ -1,17 +1,17 @@
 /**
  * events/index.ts
- * 
+ *
  * This file exports all event-related types, constants, and classes
  * to make them easily accessible by consumers of the library.
  */
 
-export { 
+export {
   // Event constants
   PLAYER_EVENTS,
   TABLE_EVENTS,
   LOBBY_EVENTS,
   EVENTS,
-  
+
   // Event types
   PlayerEventType,
   TableEventType,
@@ -19,11 +19,11 @@ export {
   BuiltInEventType,
   CustomEventMap,
   EventType,
-  
+
   // Payload types
   EventPayloadMap,
-  DefaultEventPayloadMap
+  DefaultEventPayloadMap,
 } from './EventTypes';
 
 export { EventBus } from './EventBus';
-export { MessageRouter } from './MessageRouter'; 
+export { MessageRouter } from './MessageRouter';

@@ -1,11 +1,11 @@
-import { Player } from "./Player";
-import { Hand } from "./card";
+import { Player } from './Player';
+import { Hand } from './card';
 
 /**
  * Represents a seat at a table.
- * 
+ *
  * ✅ Attribute Support
- * 
+ *
  * This class manages a player's seat at a table, including their hands and attributes.
  * It provides methods for setting and getting player information, adding and removing hands,
  * clearing hands, and managing seat attributes.
@@ -20,12 +20,12 @@ export class Seat {
    */
   constructor() {
     // Initialize with a main hand by default
-    this.hands.set("main", new Hand("main"));
+    this.hands.set('main', new Hand('main'));
   }
 
   /**
    * Sets the player for the seat.
-   * 
+   *
    * @param player The player to set for the seat.
    */
   public setPlayer({ player }: { player: Player | null }): void {
@@ -34,7 +34,7 @@ export class Seat {
 
   /**
    * Gets the player for the seat.
-   * 
+   *
    * @returns The player for the seat or null if no player is set.
    */
   public getPlayer(): Player | null {
@@ -43,7 +43,7 @@ export class Seat {
 
   /**
    * Adds a hand to the seat.
-   * 
+   *
    * @param handId The ID of the hand to add.
    * @returns True if the hand was added, false if it already exists.
    */
@@ -51,38 +51,38 @@ export class Seat {
     if (this.hands.has(handId)) {
       return false;
     }
-    
+
     this.hands.set(handId, new Hand(handId));
     return true;
   }
 
   /**
    * Removes a hand from the seat.
-   * 
+   *
    * @param handId The ID of the hand to remove.
    * @returns True if the hand was removed, false if it does not exist.
    */
   public removeHand({ handId }: { handId: string }): boolean {
-    if (handId === "main") {
+    if (handId === 'main') {
       return false; // Cannot remove the main hand
     }
-    
+
     return this.hands.delete(handId);
   }
 
   /**
    * Gets a hand from the seat.
-   * 
+   *
    * @param handId The ID of the hand to get.
    * @returns The hand or null if it does not exist.
    */
-  public getHand({ handId = "main" }: { handId?: string } = {}): Hand | null {
+  public getHand({ handId = 'main' }: { handId?: string } = {}): Hand | null {
     return this.hands.get(handId) || null;
   }
 
   /**
    * Gets all hands from the seat.
-   * 
+   *
    * @returns A map of all hands.
    */
   public getAllHands(): Map<string, Hand> {
@@ -91,14 +91,14 @@ export class Seat {
 
   /**
    * Clears a hand from the seat.
-   * 
+   *
    * @param handId The ID of the hand to clear.
    * @returns True if the hand was cleared, false if it does not exist.
    */
-  public clearHand({ handId = "main" }: { handId?: string } = {}): boolean {
+  public clearHand({ handId = 'main' }: { handId?: string } = {}): boolean {
     const hand = this.hands.get(handId);
     if (!hand) return false;
-    
+
     hand.clear();
     return true;
   }
@@ -114,17 +114,17 @@ export class Seat {
 
   /**
    * Sets an attribute on the seat.
-   * 
+   *
    * @param key The key of the attribute to set.
    * @param value The value of the attribute to set.
    */
-  public setAttribute({ key, value }: { key: string, value: unknown }): void {
+  public setAttribute({ key, value }: { key: string; value: unknown }): void {
     this.attributes.set(key, value);
   }
 
   /**
    * Gets an attribute from the seat.
-   * 
+   *
    * @param key The key of the attribute to get.
    * @returns The value of the attribute or null if it does not exist.
    */
@@ -134,7 +134,7 @@ export class Seat {
 
   /**
    * Checks if the seat has an attribute.
-   * 
+   *
    * @param key The key of the attribute to check.
    * @returns True if the attribute exists, false otherwise.
    */
@@ -144,7 +144,7 @@ export class Seat {
 
   /**
    * Gets all attributes from the seat.
-   * 
+   *
    * @returns A record of all attributes.
    */
   public getAttributes(): Record<string, unknown> {
@@ -153,7 +153,7 @@ export class Seat {
 
   /**
    * Sets multiple attributes on the seat.
-   * 
+   *
    * @param attributes A record of attributes to set.
    */
   public setAttributes({ attributes }: { attributes: Record<string, unknown> }): void {
@@ -164,7 +164,7 @@ export class Seat {
 
   /**
    * Removes an attribute from the seat.
-   * 
+   *
    * @param key The key of the attribute to remove.
    */
   public removeAttribute({ key }: { key: string }): void {
@@ -174,7 +174,7 @@ export class Seat {
   /**
    * Checks if a player can modify a seat. This enforces
    * that only the player who owns the seat can modify it.
-   * 
+   *
    * @param playerId The ID of the player to check.
    * @returns True if the player can modify the seat, false otherwise.
    */
@@ -182,4 +182,4 @@ export class Seat {
     // Only the player who owns the seat can modify their hand
     return this.player !== null && this.player.id === playerId;
   }
-} 
+}

@@ -1,5 +1,5 @@
-import * as http from "http";
-import { Player } from "../core/Player";
+import * as http from 'http';
+import { Player } from '../core/Player';
 
 /**
  * Interface defining authentication functionality for the Shoehive framework.
@@ -12,4 +12,4 @@ export interface AuthModule {
    * @returns A promise that resolves to a player ID if authentication is successful, or null if it fails
    */
   authenticatePlayer(options: { request: http.IncomingMessage }): Promise<string | null>;
-} 
+}
