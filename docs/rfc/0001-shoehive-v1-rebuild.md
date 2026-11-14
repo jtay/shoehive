@@ -358,7 +358,7 @@ Built in: max message size, per-connection token-bucket rate limit, heartbeat ti
 
 ## 8. Repository, packaging and tooling
 
-**Packaging (recommended):** one npm package `shoehive@1.x` with subpath exports, plus `create-shoehive`.
+**Packaging (decided):** one npm package `shoehive@1.x` with subpath exports, plus `create-shoehive`.
 
 ```
 shoehive            → defineGame, reject, types (isomorphic)
