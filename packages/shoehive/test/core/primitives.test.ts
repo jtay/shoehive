@@ -147,6 +147,14 @@ describe('diff and applyPatch', () => {
     expect(diff({ 'a/b~c': 1 }, {})).toEqual([{ op: 'remove', path: '/a~1b~0c' }]);
   });
 
+  it('treats "__proto__" as an ordinary key (regression, found by the property test)', () => {
+    const to = JSON.parse('{"__proto__":false,"a":{"__proto__":{"x":1}}}') as Json;
+    const patched = applyPatch({ a: {} }, diff({ a: {} }, to));
+    expect(jsonEqual(patched, to)).toBe(true);
+    expect(Object.getPrototypeOf(patched)).toBe(Object.prototype);
+    expect(({} as Record<string, unknown>)['x']).toBeUndefined();
+  });
+
   it('does not mutate its input', () => {
     const doc = { a: [1, 2] } as Json;
     applyPatch(doc, [{ op: 'add', path: '/a/-', value: 3 }]);
