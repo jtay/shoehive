@@ -19,7 +19,7 @@ an ADR settles a detail the RFC left open, it says so.
 | [0004](./0004-standard-schema-validation.md)          | Standard Schema validation for inputs and options    | Accepted |
 | [0005](./0005-mutative-drafts.md)                     | Mutative drafts with atomic commit                   | Accepted |
 | [0006](./0006-seeded-rng-recorded-clock-replay.md)    | Seeded RNG, recorded clock and exact replay          | Accepted |
-| [0007](./0007-wallet-ledger-semantics.md)             | Wallet ledger semantics                              | Proposed |
+| [0007](./0007-wallet-ledger-semantics.md)             | Wallet ledger semantics                              | Accepted |
 | [0008](./0008-turns-and-rounds.md)                    | Turns and rounds                                     | Accepted |
 | [0009](./0009-store-snapshot-log-restart-recovery.md) | Store interface, snapshot plus log, restart recovery | Accepted |
 | [0010](./0010-guest-identity-resume-tokens.md)        | Guest identity and resume tokens                     | Accepted |
