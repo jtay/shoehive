@@ -1,8 +1,14 @@
 /**
- * shoehive/testing: createTestTable, fake clock, replay and the store conformance suite.
- *
- * Not implemented yet: this entry point lands in Phase 1 (RFC 0001, section 12).
+ * shoehive/testing: drive games without sockets. `createTestTable`, a fake clock and
+ * exact replay checks (ADR 0006). The store conformance suite lands in Phase 2.
  *
  * @packageDocumentation
  */
-export {};
+export {
+  createTestTable,
+  TestTable,
+  TEST_SEED,
+  type RecordedEvent,
+  type TestTableOptions,
+} from './test-table';
+export { FakeClock, FAKE_EPOCH } from './fake-clock';

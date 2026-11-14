@@ -21,4 +21,6 @@ export default defineConfig({
   sourcemap: true,
   target: 'es2023',
   treeshake: true,
+  // Shared chunks for CJS too, so classes like ShoehiveError have one identity across entries.
+  splitting: true,
 });

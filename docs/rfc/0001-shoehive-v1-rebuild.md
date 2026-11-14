@@ -283,7 +283,7 @@ The client handles reconnects on its own: it stores a resume token, backs off wi
 import { createTestTable } from 'shoehive/testing';
 
 test('X wins on the diagonal', async () => {
-  const t = createTestTable(ticTacToe, { seats: 2, seed: 'fixed' });
+  const t = await createTestTable(ticTacToe, { players: 2, seed: 'fixed' });
   await t.act(0, 'place', { cell: 0 });
   await t.act(1, 'place', { cell: 1 });
   await t.act(0, 'place', { cell: 4 });

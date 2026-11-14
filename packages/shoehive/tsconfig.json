@@ -2,7 +2,13 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023", "DOM"],
-    "types": ["node"]
+    "types": ["node"],
+    // Tests import the examples, which import "shoehive". Point that at the source so
+    // there is one copy of every type (self-reference would pick up dist/ instead).
+    "paths": {
+      "shoehive": ["./src/index.ts"],
+      "shoehive/*": ["./src/*/index.ts"]
+    }
   },
-  "include": ["src", "test", "tsup.config.ts"]
+  "include": ["src", "test", "bench", "tsup.config.ts"]
 }

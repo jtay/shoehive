@@ -15,11 +15,12 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm -r --filter ./packages/** run typecheck",
+    "typecheck": "pnpm -r run typecheck",
     "check:package": "pnpm -r --filter ./packages/** run check:package",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:package",
     "changeset": "changeset",
-    "release": "pnpm build && changeset publish"
+    "release": "pnpm build && changeset publish",
+    "bench": "esbuild packages/shoehive/bench/latency.ts --bundle --platform=node --format=esm --log-level=warning --outfile=packages/shoehive/bench/.out/latency.mjs && node packages/shoehive/bench/.out/latency.mjs"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
@@ -27,6 +28,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.5",
     "@vitest/coverage-v8": "^5.1.0",
+    "esbuild": "^0.28.2",
     "eslint": "^10.15.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.14.0",
@@ -36,5 +38,6 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.2",
     "vitest": "^5.1.0"
-  }
+  },
+  "type": "module"
 }

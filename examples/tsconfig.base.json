@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "shoehive": ["../packages/shoehive/src/index.ts"],
+      "shoehive/*": ["../packages/shoehive/src/*/index.ts"]
+    }
+  }
+}

@@ -41,25 +41,29 @@ so we can accept any of them without depending on any.
    1 second limit; exceeding it is `BAD_REQUEST` with `details.reason: 'timeout'`.
    Docs recommend synchronous schemas.
 6. **No `input`** means the action takes no input. A message whose `input` is anything
-   other than absent or `null` is `BAD_REQUEST`.
-7. **Error shape.** Validation failures map to the closed enum code `BAD_REQUEST` with
+   other than absent or `null` is `INVALID_INPUT`.
+7. **Error shape.** Validation failures map to the closed enum code `INVALID_INPUT` with
    issues normalised from the spec:
 
 ```ts
 interface ValidationErrorDetails {
   issues: Array<{ path: Array<string | number>; message: string }>;
 }
-// ack: { ok: false, error: { code: 'BAD_REQUEST', message: 'Invalid input for "place"', details } }
+// ack: { ok: false, error: { code: 'INVALID_INPUT', message: 'Invalid input for "place"', details } }
 ```
 
 Path segments that are objects in the spec (`{ key }`) are flattened to their key.
-At most 20 issues are sent. 8. **Types.** The client's `act(name, input)` uses `InferInput` of the schema. `run`
-uses `InferOutput`. Type tests (`expectTypeOf`) cover zod, valibot and arktype. 9. **No client-side validation in v1.** The client imports game definitions as types
-only (ADR 0002), so it has no schema objects at runtime. The server is the authority.
-An app that wants instant form feedback can import its schema separately. 10. **Internal actions** (`internal: true`, called by timers) are validated too when
-they declare `input`. A timer scheduled with invalid input throws at
-`ctx.timers.after` time, inside the scheduling entry, so the bug rolls back where it
-was introduced.
+At most 20 issues are sent.
+
+8. **Types.** The client's `act(name, input)` uses `InferInput` of the schema. `run`
+   uses `InferOutput`. Type tests (`expectTypeOf`) cover zod and valibot.
+9. **No client-side validation in v1.** The client imports game definitions as types
+   only (ADR 0002), so it has no schema objects at runtime. The server is the authority.
+   An app that wants instant form feedback can import its schema separately.
+10. **Internal actions** (`internal: true`, called by timers) are validated too when
+    they declare `input`, and their schemas must be synchronous. A timer scheduled with invalid input throws at
+    `ctx.timers.after` time, inside the scheduling entry, so the bug rolls back where it
+    was introduced.
 
 ## Consequences
 

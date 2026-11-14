@@ -1,0 +1,13 @@
+{
+  "name": "@shoehive-examples/blackjack",
+  "private": true,
+  "description": "Casino table game: betting round, dealt hands with a hidden hole card, turns with a timer, play chips.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "shoehive": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

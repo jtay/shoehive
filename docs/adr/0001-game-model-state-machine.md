@@ -27,7 +27,7 @@ interface GameDefinition<S, O, V> {
   id: string; // stable, used in protocol and store
   name?: string;
   version?: number; // integer, default 1 (see ADR 0009)
-  seats: { min: number; max: number };
+  seats: { min: number; max: number; perPlayer?: number }; // perPlayer defaults to 1
   autoStart?: boolean; // default true: start when `min` seats are occupied
   options?: StandardSchemaV1<unknown, O>; // ADR 0004
   setup(args: { options: O; random: Random }): S; // runs once at table creation
@@ -47,13 +47,14 @@ interface GameDefinition<S, O, V> {
 
 interface ActionDef<S, I> {
   input?: StandardSchemaV1<unknown, I>; // omitted means "no input"
-  internal?: boolean; // only timers and the engine may call it; clients get NOT_FOUND
+  internal?: boolean; // only timers and the engine may call it; clients get ACTION_NOT_ALLOWED
   once?: boolean; // rounds only, ADR 0008
   preStart?: boolean; // may run before the table has started (e.g. 'ready')
   run(args: {
     state: S;
-    seat: number | null;
-    input: I;
+    seat: number; // -1 for internal actions run by a timer
+    player: string | null; // null for internal actions
+    input: I; // the schema output; `unknown` (and undefined at runtime) without a schema
     ctx: ActionCtx;
   }): void | Json | Promise<void | Json>;
 }

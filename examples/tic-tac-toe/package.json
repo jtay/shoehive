@@ -1,0 +1,13 @@
+{
+  "name": "@shoehive-examples/tic-tac-toe",
+  "private": true,
+  "description": "The smallest complete Shoehive game: turns, validation, win detection.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "shoehive": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

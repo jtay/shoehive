@@ -10,3 +10,4 @@ coverage
 *.db
 *.db-journal
 *.sqlite
+packages/shoehive/bench/.out

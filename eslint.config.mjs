@@ -15,7 +15,7 @@ const isomorphicFiles = [
 ];
 
 export default defineConfig(
-  { ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**'] },
+  { ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/bench/.out/**'] },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
@@ -25,6 +25,22 @@ export default defineConfig(
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+  },
+  {
+    rules: {
+      // With noUncheckedIndexedAccess on, `!` after a bounds-checked index is idiomatic.
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      // Engine bookkeeping uses keyed records (timers by name); deleting keys is intended.
+      '@typescript-eslint/no-dynamic-delete': 'off',
+      '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
+      // `void | Json` return types are intended: game authors may return nothing.
+      '@typescript-eslint/no-invalid-void-type': 'off',
+      '@typescript-eslint/consistent-type-definitions': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' },
+      ],
     },
   },
   {
