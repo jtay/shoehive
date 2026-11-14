@@ -2,12 +2,14 @@
 
 | | |
 |---|---|
-| Status | Draft, awaiting stakeholder decisions (section 11) |
+| Status | Accepted direction; stakeholder decisions recorded in section 11 (interview, 2026-11-14) |
 | Replaces | shoehive 0.10.0 and shoehive-react-client 0.2.1 |
 | Target | shoehive 1.0.0 |
 | Date | 2026-11-14 |
 
-Nobody depends on 0.x, so v1 is a clean break. We keep no code and no wire compatibility. We keep the name, the niche (seated multiplayer table games), and the lessons below.
+Nobody depends on 0.x, so v1 is a clean break. We keep no code and no wire compatibility. We keep the name, the table-and-seat vocabulary, and the lessons below.
+
+**Who v1 is for:** open-source developers adopting Shoehive for their own games. Docs, DX and API stability outrank any single product's needs.
 
 ---
 
@@ -76,15 +78,24 @@ Severity: **C** = correctness or security bug, **D** = design flaw, **X** = DX o
 
 | | boardgame.io | Colyseus | **Shoehive v1** |
 |---|---|---|---|
-| Model | moves, phases | rooms with schema state | **tables with seats, actions, views** |
+| Model | moves, phases | rooms with schema state | **tables with seats, actions, views, turns and rounds** |
 | Hidden info | `playerView` | filters | **per-seat and spectator `view()` plus a `secret` helper** |
 | Money | none | none | **optional Wallet module with ledger semantics** |
 | Cards | none | none | **`shoehive/cards`: seeded decks, shoes, hands, visibility** |
 | Types end-to-end | partial | codegen | **inferred from `defineGame`, no codegen** |
 
-**One-line pitch:** *Build a real-time card or table game in an afternoon: write the rules, Shoehive handles seats, sync, secrets and reconnects.*
+**One-line pitch:** *Build a multiplayer card, casino, board or party game in an afternoon: write the rules, Shoehive handles seats, sync, secrets, reconnects and persistence.*
 
-We are not targeting physics or real-time action games, MMO scale, or matchmaking by skill in v1.
+**v1 must handle all four families well:**
+
+| Family | Example (ships in `examples/`) | Engine features it exercises |
+|---|---|---|
+| Casino table games | Blackjack | dealer seat, phases, turn timers, wallet, hidden hole card |
+| Player-vs-player cards | Texas Hold'em | private hands, betting rounds, side pots, showdown reveal |
+| Board / turn-based | Tic-tac-toe | turns, validation, win detection (first tutorial) |
+| Round-based party games | Quiz / trivia | simultaneous submissions, round timer, hidden answers until reveal |
+
+**Real-time scope:** turn-based *and* round-based. Everyone can act at once inside a round, with server timers. There is **no fixed tick loop** in v1, so physics or continuous-movement games, MMO scale and skill matchmaking are non-goals.
 
 ---
 
@@ -156,10 +167,45 @@ export const ticTacToe = defineGame({
 - **Drafts:** `run` mutates a draft (via Mutative, the faster successor pattern to Immer). The engine commits it atomically or discards it if the action throws.
 - **`reject(code, details?)`:** a typed rejection that becomes a structured error on the client.
 - **Lifecycle hooks:** `onSit`, `onStand`, `onDisconnect`, `onReconnect`, `onStart`, `onEnd`. Each is optional and runs with the same draft and context.
+- **`rounds`:** the round-based model for simultaneous play (see 5.1a).
 - **`phases`:** optional named phases with their own `actions` whitelist and `onEnter` / `onExit` hooks (for betting, dealing, play, settle).
 - **`ctx.random`:** seeded per table. It uses a CSPRNG in production and a fixed seed in tests. The seed and every draw are recorded, so replays are exact.
 - **`ctx.timers`:** `ctx.timers.after('turn', 30_000, 'autoFold')` schedules an internal action. It is driven by an injectable Clock, so tests jump time.
 - **`ctx.emit(event, payload, { to })`:** an ephemeral event for animations and sounds (for example "card dealt"). It is not part of state.
+
+### 5.1a Round-based play (simultaneous actions)
+
+`turns` and `rounds` are two optional models a game picks per phase. The engine never forces a turn order.
+
+```ts
+export const quiz = defineGame({
+  id: 'quiz',
+  seats: { min: 2, max: 12 },
+  setup: ({ options }) => ({ q: 0, answers: {} as Record<number, number>, scores: [] as number[] }),
+  phases: {
+    question: {
+      rounds: {
+        durationMs: 15_000,                 // the round closes on timeout...
+        closeWhen: 'all-submitted',         // ...or as soon as every seat has answered
+        onClose: ({ state, ctx }) => { score(state); ctx.phase.go('reveal'); },
+      },
+      actions: {
+        answer: {
+          input: z.object({ choice: z.number().int().min(0).max(3) }),
+          once: true,                        // one submission per seat per round
+          run: ({ state, seat, input }) => { state.answers[seat] = input.choice; },
+        },
+      },
+    },
+    reveal: { onEnter: ({ ctx }) => ctx.timers.after('next', 5_000, 'nextQuestion') },
+  },
+  // Answers stay hidden until the reveal phase.
+  view: ({ state, viewer, ctx }) =>
+    ctx.phase.name === 'reveal' ? state : { ...state, answers: { [viewer.seat!]: state.answers[viewer.seat!] } },
+});
+```
+
+Actions from different seats still run through the table's serial queue, so "simultaneous" never means "racy".
 
 ### 5.2 Hidden information
 
@@ -183,13 +229,17 @@ import { ticTacToe } from './games/tic-tac-toe';
 
 const shoehive = createServer({
   games: [ticTacToe],
-  auth: async (req) => ({ id: userIdFrom(req), name: 'Ada' }), // optional, a guest identity by default
+  auth: async (req) => ({ id: userIdFrom(req), name: 'Ada' }), // optional, see below
+  store: sqliteStore({ file: './shoehive.db' }), // optional, in-memory by default
+  devtools: process.env.NODE_ENV !== 'production', // inspector at /__shoehive
   reconnectGraceMs: 60_000,
   logger: pino(), // optional, anything with info/warn/error
 });
 
 await shoehive.listen({ port: 3000 }); // or shoehive.attach(httpServer)
 ```
+
+**Auth out of the box: guest plus a custom hook.** With no `auth`, each new connection gets a guest identity and a signed, expiring resume token (HMAC with a server secret), so reconnects work from minute one. Supplying `auth(req)` replaces guest mode with the integrator's own login. Returning `null` rejects the connection.
 
 Server-side admin API (typed): `shoehive.tables.create(gameId, options)`, `.get(id)`, `.list()`, `.close(id)`, plus `shoehive.on('table:ended', ...)`. That is a small, typed event surface for *operators*, not for game logic.
 
@@ -292,7 +342,15 @@ Built in: max message size, per-connection token-bucket rate limit, heartbeat ti
 ```
 
 - **Engine** (pure): one `TableRuntime` per table. It runs a serial action queue: validate input, check the phase, run on a draft, commit, compute each viewer's view, diff against the last sent view, then emit patches. No globals, so many runtimes can share one process.
-- **Server**: `Session` (identity, connections, resume token, grace timer), `Lobby` (index of tables, subscriptions), `Transport` interface (`ws` for Node in v1, plus an in-memory transport for tests; Bun and Durable Objects later), `Store` interface (in-memory in v1, snapshot plus action log so Redis or SQL adapters are possible later).
+- **Server**: `Session` (identity, connections, resume token, grace timer), `Lobby` (index of tables, subscriptions), `Transport` interface (`ws` for Node in v1, plus an in-memory transport for tests; Bun and Durable Objects later). v1 targets a **single Node process**.
+- **Persistence (v1 scope):** a `Store` interface holding per-table *snapshot plus action log* and session records. Adapters ship as subpaths with optional peer dependencies:
+  - `shoehive/store/memory` (default)
+  - `shoehive/store/sqlite`
+  - `shoehive/store/postgres`
+  - `shoehive/store/redis`
+
+  On restart the server loads each open table's latest snapshot, replays the log tail (exact, because RNG and clock are recorded), and re-arms pending timers from their recorded deadlines. Players reconnect with their resume tokens and land back in their seats. A shared **store conformance suite** in `shoehive/testing` gives integrators a way to check their own adapters.
+- **Devtools (full, v1 scope):** `shoehive/devtools` serves an inspector at `/__shoehive`. It is off by default in production and protected by a token when enabled. It shows live tables, raw state, the view per seat and spectator side by side, the action log with timings and rejections, and session and connection status. **Replay and time travel**: scrub through any table's action log, step forward and back, fork a dev table from any point, and export a log as a test fixture for `createTestTable`. Time travel works on a copy; it never touches a live table.
 - **Wallet** (optional, server): `reserve(playerId, amount, key)`, `commit(key)`, `release(key)`, `balance(playerId)`. It is idempotent by key and called from game hooks through `ctx.wallet` with the engine's commit or rollback semantics. It replaces `ServerTransportModule`. An in-memory ledger ships for development.
 - **Dependencies:** core needs `mutative` only. The server adds `ws`. Validation accepts any Standard Schema implementation, so no validator is forced on users.
 
@@ -308,10 +366,12 @@ shoehive/server     → createServer, auth/wallet/store interfaces
 shoehive/client     → createClient (browser + Node)
 shoehive/react      → hooks (react is an optional peer dependency)
 shoehive/cards      → card toolkit
-shoehive/testing    → test harness
+shoehive/testing    → test harness, store conformance suite
+shoehive/devtools   → inspector with replay and time travel
+shoehive/store/*    → memory, sqlite, postgres, redis adapters (optional peers)
 ```
 
-One install, one version, no version skew between client and server, and no npm org needed. `shoehive-client-react` is archived with a pointer to `shoehive/react`.
+One install, one version, no version skew between client and server, and no npm org needed. `shoehive-client-react` is archived with a pointer to `shoehive/react`. Officially supported clients in v1: **plain TypeScript and React.** Vue and Svelte adapters come after 1.0.
 
 **Monorepo layout (pnpm workspaces):**
 
@@ -321,6 +381,8 @@ shoehive/
   packages/create-shoehive/   `npm create shoehive@latest`
   examples/tic-tac-toe/       smallest complete game (server + React UI + tests)
   examples/blackjack/         hidden cards, phases, timers, wallet
+  examples/holdem/            private hands, betting rounds, side pots
+  examples/quiz/              round-based simultaneous play
   examples/lobby-react/       lobby, spectating, reconnect demo
   docs/                       Starlight site; snippets imported from examples/
   docs/adr/                   architecture decision records
@@ -336,20 +398,21 @@ shoehive/
 - API Extractor keeps a committed public API report, so any API change shows up in review.
 - Changesets drive versioning, changelog and npm publish with `--provenance`. No more `HEAD~1` diffing.
 - CI (GitHub Actions): Node 20, 22 and 24 matrix running lint, typecheck, test, build, package checks, a docs build with snippet type-check, and Playwright end-to-end on the examples. No PR-comment bots.
-- License: Unlicense with a valid SPDX id (`Unlicense`). This is a decision point (section 11).
+- CI services: SQLite runs in-process; Postgres and Redis run as GitHub Actions service containers for the store conformance suite.
+- License: **MIT** (SPDX `MIT`), replacing the Unlicense.
 
 ---
 
 ## 9. Documentation plan (Diátaxis)
 
-The site is Astro Starlight: pure Node, fast, with search and versioning. Every code block is imported from `examples/` or type-checked through twoslash, **so the docs cannot drift from the code again.** That is the root cause of finding 17.
+The site is Astro Starlight: pure Node, fast, with search and versioning. It deploys to GitHub Pages on the existing domain, **shoehive.jtay.co.uk** (CNAME kept). Every code block is imported from `examples/` or type-checked through twoslash, **so the docs cannot drift from the code again.** That is the root cause of finding 17.
 
 | Section | Pages (v1.0) |
 |---|---|
 | **Start** | Why Shoehive · 5-minute quick start (`npm create shoehive`) · The six concepts |
-| **Tutorials** | 1. Tic-tac-toe in 20 minutes (game, tests, UI) · 2. Blackjack: hidden cards, phases, turn timers, chips |
-| **How-to** | Authentication · Reconnects and sessions · Hidden information · Timers and turn clocks · Phases · Wallets and real-money safety · Spectators · Testing games · Deploying (single node, Docker, behind a proxy) · Logging and metrics |
-| **Concepts** | Tables and seats · Actions, drafts and atomicity · Views and sync (revisions, patches) · Determinism and replay · Security model |
+| **Tutorials** | 1. Tic-tac-toe in 20 minutes (game, tests, UI) · 2. Quiz: round-based play · 3. Blackjack: hidden cards, phases, turn timers, chips · 4. Texas Hold'em: private hands and side pots |
+| **How-to** | Authentication (guest and custom) · Reconnects and sessions · Hidden information · Timers and turn clocks · Turns vs rounds · Phases · Persistence and restart recovery · Writing a store adapter · Wallets and real-money safety · Spectators · Testing games · Debugging with devtools and time travel · Deploying (single node, Docker, behind a proxy) · Logging and metrics |
+| **Concepts** | Tables and seats · Actions, drafts and atomicity · Turns and rounds · Views and sync (revisions, patches) · Determinism, replay and persistence · Security model |
 | **Reference** | Generated API (TypeDoc) · Wire protocol spec · Error codes · Config options · Changelog |
 | **Contributing** | Architecture tour · ADR index · Release process |
 
@@ -359,7 +422,7 @@ House style: short pages (target under 200 lines), a "what you'll build" box at 
 
 ## 10. Methodology
 
-1. **Spec first.** The protocol spec and ADRs are written and reviewed before the code that implements them. Initial ADRs: (1) state-machine game model, (2) single package with subpath exports, (3) per-viewer views and JSON Patch sync, (4) Standard Schema validation, (5) Mutative drafts, (6) seeded RNG and replay, (7) Wallet ledger semantics.
+1. **Spec first.** The protocol spec and ADRs are written and reviewed before the code that implements them. Initial ADRs: (1) state-machine game model, (2) single package with subpath exports, (3) per-viewer views and JSON Patch sync, (4) Standard Schema validation, (5) Mutative drafts, (6) seeded RNG and replay, (7) Wallet ledger semantics, (8) turns and rounds, (9) Store interface, snapshot plus log, and restart recovery, (10) guest identity and resume tokens, (11) devtools security model.
 2. **Engine before network.** Phase 1 ships a complete, tested engine with zero I/O. Tic-tac-toe must be fully playable in `shoehive/testing` before any socket code exists.
 3. **Test pyramid with teeth:**
    - Unit tests for engine pieces.
@@ -374,37 +437,48 @@ House style: short pages (target under 200 lines), a "what you'll build" box at 
 
 ---
 
-## 11. Decisions for the stakeholder
+## 11. Stakeholder decisions (interview, 2026-11-14)
 
-Recommended defaults are marked. The plan above assumes them.
-
-1. **Positioning:** keep the table, seat and card niche with cards and wallet as first-class optional modules *(recommended)*, or go fully generic.
-2. **Packaging:** a single `shoehive` package with subpath exports *(recommended)*, or scoped `@shoehive/*` packages.
-3. **React client repo:** fold it into the monorepo and archive `shoehive-client-react` *(recommended)*, or keep it separate.
-4. **Docs stack:** Starlight *(recommended)*, VitePress, or keep Jekyll.
-5. **License:** keep the Unlicense, or switch to MIT (more familiar to companies; the old React client already used MIT).
-6. **Version label:** `1.0.0` (first stable, recommended), with `1.0.0-next.x` prereleases during the build.
+| Topic | Decision |
+|---|---|
+| Audience | Open source for other developers. DX, docs and API stability come first. |
+| Game families | All four: casino table, player-vs-player cards, board / turn-based, round-based party. |
+| Real-time | Turn-based and round-based (simultaneous actions within timed rounds). No tick loop. |
+| Money | Optional wallet hook with ledger semantics; an in-memory ledger for development. |
+| Runtime | Single Node process, **with persistence**: tables survive a restart. |
+| Storage | `Store` interface plus memory, SQLite, Postgres and Redis adapters, and a conformance suite. |
+| Packaging | One `shoehive` package with subpath exports. Archive `shoehive-client-react`. |
+| Clients | Plain TypeScript client and React. Vue and Svelte after 1.0. |
+| Auth | Guest identity with signed resume tokens by default, plus a custom `auth(req)` hook. |
+| Devtools | Full inspector in v1, including replay and time travel. |
+| Examples | Tic-tac-toe, quiz, blackjack and Texas Hold'em. |
+| Docs | Astro Starlight, deployed to GitHub Pages on shoehive.jtay.co.uk. |
+| License | MIT. |
+| Version | `1.0.0`, with `1.0.0-next.x` prereleases during the build. |
+| Working mode | One PR per phase; the stakeholder reviews before the next phase starts. |
 
 ---
 
 ## 12. Roadmap
 
-Each phase ends with a demo and a green CI. The phases are scoped by deliverable, not by date.
+Each phase ends with one PR, a demo and a green CI. The stakeholder reviews and merges before the next phase starts. Phases are scoped by deliverable, not by date.
 
 | Phase | Deliverable | Exit criteria |
 |---|---|---|
-| **0. Foundations** | Tag `v0.10.0-legacy`, delete the old `src/`, set up the monorepo, tooling, CI, ADRs 1-7 and the protocol spec draft | CI green on an empty package. ADRs merged. |
-| **1. Engine** | `defineGame`, TableRuntime, drafts, `reject`, turns, phases, views, diffing, RNG, timers, `shoehive/testing` | Tic-tac-toe and a blackjack rules-only game pass tests in the harness. Property tests pass. |
-| **2. Server** | Sessions and resume, ws and in-memory transports, lobby, seats, spectators, protocol, limits, logger, Store and Wallet interfaces with in-memory implementations | Conformance suite passes over both transports. Reconnect test passes. |
-| **3. Client + React** | `shoehive/client` (typed `act`, patch apply, resume), `shoehive/react` hooks | Type tests pass. The tic-tac-toe example is playable in two browsers. Playwright end-to-end passes. |
-| **4. Cards + Wallet + Blackjack** | `shoehive/cards`, the wallet flow in hooks, the full blackjack example | Blackjack is playable with hidden hole card, turn timer and chips. A leak property test passes. |
-| **5. Docs + scaffolder** | Starlight site, both tutorials, how-tos, reference, `create-shoehive` | A new developer can go from `npm create shoehive` to a playable game following only the docs. Snippets type-check in CI. |
-| **6. Hardening + release** | Load test (target: 1,000 tables and 5,000 sockets on one node, p95 action-to-patch under 20 ms locally), security review, `1.0.0-rc.1` then `1.0.0` | No open C-severity issues. API report frozen. |
+| **0. Foundations** | Tag `v0.10.0-legacy`, delete the old `src/`, set up the monorepo, tooling, CI (with Postgres and Redis services), MIT license, ADRs 1-11 and the protocol spec draft | CI green on an empty package. ADRs merged. |
+| **1. Engine** | `defineGame`, TableRuntime, drafts, `reject`, turns, rounds, phases, views, diffing, RNG, timers, recorded clock, `shoehive/testing` | Tic-tac-toe, a quiz and a blackjack rules-only game pass tests in the harness. Property tests pass. |
+| **2. Server** | Sessions, guest identity and resume tokens, ws and in-memory transports, lobby, seats, spectators, protocol, limits, logger, Wallet interface, `Store` interface with the memory adapter and restart recovery | Conformance suite passes over both transports. Reconnect test passes. A kill-and-restart test restores tables from the memory-backed snapshot. |
+| **3. Client + React** | `shoehive/client` (typed `act`, patch apply, resume), `shoehive/react` hooks | Type tests pass. Tic-tac-toe and quiz are playable in two browsers. Playwright end-to-end passes. |
+| **4. Cards, Wallet and card games** | `shoehive/cards`, the wallet flow in hooks, full blackjack and Texas Hold'em examples | Both are playable with hidden cards, turn timers and chips. Side-pot rules are tested against reference hands. A leak property test passes. |
+| **5. Store adapters** | SQLite, Postgres and Redis adapters, store conformance suite | All adapters pass the conformance suite in CI. The restart-recovery end-to-end test passes on each adapter. |
+| **6. Devtools** | `shoehive/devtools`: live tables, per-viewer views, action log, replay, time travel, fork and export-as-fixture | Inspector works against every example. An exported log replays as a passing test. It is off and unreachable in production mode. |
+| **7. Docs + scaffolder** | Starlight site on shoehive.jtay.co.uk, four tutorials, how-tos, reference, `create-shoehive` | A new developer goes from `npm create shoehive` to a playable game using only the docs. Snippets type-check in CI. |
+| **8. Hardening + release** | Load test (target: 1,000 tables and 5,000 sockets on one node, p95 action-to-patch under 20 ms locally), security review, `1.0.0-rc.1` then `1.0.0` | No open C-severity issues. API report frozen. |
 
 **Execution model.** I orchestrate and you review each phase's PR.
-- Phases 0 and 1 are sequential and run by me with at most one helper, because they fix the public API.
-- After Phase 1 freezes the engine API, Phases 2, 3 (against the protocol spec), 4 and 5 run in parallel. Each workstream gets its own subagent in its own git worktree and branch, within your subagent limits: up to 3 Opus or up to 10 Sonnet.
-- Each workstream returns a PR that I review against this RFC before it reaches you.
+- Phases 0 and 1 are run by me with at most one helper, because they fix the public API.
+- Later phases use subagents inside the phase, each in its own git worktree, within your subagent limits: up to 3 Opus or up to 10 Sonnet. For example, in Phase 4 one agent builds blackjack while another builds Hold'em, and in Phase 5 one agent per store adapter.
+- I review every workstream against this RFC and merge them into the phase branch before the phase PR reaches you.
 
 ---
 
@@ -414,7 +488,10 @@ Each phase ends with a demo and a green CI. The phases are scoped by deliverable
 |---|---|
 | End-to-end type inference gets complex | Type tests from day 1. Keep generics shallow (one `Game` type parameter). |
 | Per-viewer diffing costs CPU on large tables | Table-game state is small. Benchmark in Phase 1. Cache views for identical viewers (all spectators share one). |
-| Scope creep (matchmaking, scaling, persistence adapters) | Define the interfaces in v1, implement in-memory only, and list the rest under "after 1.0". |
+| Scope is now large (four games, three stores, full devtools) | Strict phase gates, and every feature built on the same snapshot-plus-log core. Replay, persistence and time travel are one mechanism used three ways. |
+| Restart recovery diverges from the live run | Recovery is the same code path as replay, so the property test "replay equals state" also covers restarts. |
+| Three store adapters to maintain | One conformance suite; adapters stay thin (store blobs and append logs, no game-aware queries). |
+| Devtools exposed in production | Off by default when `NODE_ENV=production`, token required when on, never mounted on the game socket path. ADR 11. |
 | Wallet misuse in real-money settings | Idempotency keys, commit tied to engine commit, a "not a licensed gaming system" note, and a how-to on audit logs. |
 
-**After 1.0:** a Redis store and multi-node table routing, a Bun and Cloudflare Durable Objects transport, a devtools inspector (live state, action log, time travel), MessagePack codec, matchmaking queues, and a poker example.
+**After 1.0:** multi-node table routing, Bun and Cloudflare Durable Objects transports, a MessagePack codec, matchmaking queues, Vue and Svelte adapters, a fixed-tick loop for continuous real-time games, and a built-in JWT verifier.
