@@ -68,3 +68,19 @@ export type { StandardSchemaV1 } from './core/standard-schema';
 /** Re-exported from Mutative: a plain snapshot of a draft, handy for logging (ADR 0005). */
 // eslint-disable-next-line @typescript-eslint/no-deprecated -- only one overload is deprecated
 export { current } from 'mutative';
+export {
+  CLOSE,
+  parseClientMessage,
+  type Ack,
+  type ClientMessage,
+  type ClientPing,
+  type ParseResult,
+  type RequestType,
+  type ClientRequest,
+  type LobbyDocument,
+  type LobbyTable,
+  type ServerMessage,
+  type TableDocument,
+  type Welcome,
+  type WireError,
+} from './protocol/messages';

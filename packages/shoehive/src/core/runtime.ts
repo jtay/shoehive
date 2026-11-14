@@ -159,6 +159,12 @@ export interface RuntimeOptions {
   /** Defaults to `globalThis.process?.env.NODE_ENV !== 'production'`. */
   dev?: boolean;
   clock?: Clock;
+  /**
+   * Called with every committed entry before it takes effect (ADR 0009: an ack means
+   * durable). If it rejects, the entry is discarded and the table becomes faulted:
+   * every later entry rejects with `TABLE_UNAVAILABLE`.
+   */
+  persist?: (entry: LogEntry) => Promise<void> | void;
 }
 
 /** Thrown (and returned) when an entry turns out to have nothing to do. */
@@ -267,7 +273,26 @@ export class TableRuntime {
     this.clock = options.clock ?? systemClock;
     this.dev = options.dev ?? defaultDev();
     this.live = live;
+    this.persist = options.persist;
     this.stream = new WordStream(root.engine.seed);
+  }
+
+  private persist: RuntimeOptions['persist'];
+  private isFaulted = false;
+
+  /** True after a `persist` failure. The table must be reloaded from its store. */
+  get faulted(): boolean {
+    return this.isFaulted;
+  }
+
+  /** Sets the persistence hook, for example after recovering a table by replay. */
+  setPersist(persist: RuntimeOptions['persist']): void {
+    this.persist = persist;
+  }
+
+  /** The seats `playerId` holds at this table, ascending. */
+  seatsHeldBy(playerId: string): number[] {
+    return this.seatsOf(this.root.engine, playerId);
   }
 
   // -------------------------------------------------------------------------------
@@ -284,7 +309,8 @@ export class TableRuntime {
         : await runSchema(game.options, args.options, 'INVALID_OPTIONS', 'table options');
     const seed = normalizeSeed(args.seed ?? randomSeed());
     const clock = args.clock ?? systemClock;
-    const table = args.id ?? `t_${seed.slice(0, 12)}`;
+    // Never derive the id from the seed: ids are public, the seed is secret (ADR 0006).
+    const table = args.id ?? randomTableId();
     const entry: LogEntry = {
       seq: 0,
       at: clock.now(),
@@ -597,6 +623,14 @@ export class TableRuntime {
     return this.enqueue(async () => {
       let seat = args.seat;
       if (seat === undefined) {
+        if (
+          this.seatsOf(this.root.engine, args.player.id).length >= (this.game.seats.perPlayer ?? 1)
+        ) {
+          throw shoehiveError(
+            'ALREADY_SEATED',
+            'You already hold as many seats as this game allows',
+          );
+        }
         seat = this.root.engine.seats.findIndex((s) => s.status === 'empty');
         if (seat < 0) throw shoehiveError('TABLE_FULL', 'No free seat');
       }
@@ -656,8 +690,17 @@ export class TableRuntime {
   private enqueue<T>(task: () => Promise<T>): Promise<T> {
     if (this.disposed)
       return Promise.reject(shoehiveError('TABLE_UNAVAILABLE', 'Table is disposed'));
+    if (this.isFaulted) {
+      return Promise.reject(
+        shoehiveError('TABLE_UNAVAILABLE', 'Table is unavailable until it is reloaded'),
+      );
+    }
     this.pending += 1;
-    const result = this.tail.then(task, task);
+    const guarded = (): Promise<T> =>
+      this.disposed
+        ? Promise.reject(shoehiveError('TABLE_UNAVAILABLE', 'Table is disposed'))
+        : task();
+    const result = this.tail.then(guarded, guarded);
     this.tail = result.then(
       () => {
         this.pending -= 1;
@@ -716,6 +759,18 @@ export class TableRuntime {
       }
       this.entries.push(opts.replay);
     } else {
+      if (this.live && this.persist) {
+        try {
+          await this.persist(entry);
+        } catch (error) {
+          this.isFaulted = true;
+          throw new ShoehiveError({
+            code: 'INTERNAL',
+            message: 'Could not save this action; the table is unavailable until it is reloaded',
+            cause: error,
+          });
+        }
+      }
       this.entries.push(entry);
     }
     this.root = next;
@@ -1364,6 +1419,15 @@ function plain<T extends Json>(value: T): T {
   return value === null || typeof value !== 'object'
     ? value
     : (JSON.parse(JSON.stringify(value)) as T);
+}
+
+/** A random, URL-safe table id from the platform CSPRNG. */
+export function randomTableId(): string {
+  const bytes = new Uint8Array(9);
+  globalThis.crypto.getRandomValues(bytes);
+  let id = 't_';
+  for (const b of bytes) id += 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]!;
+  return id;
 }
 
 function copySeat(s: EngineSeat): SeatInfo {

@@ -1,5 +1,5 @@
-/** An opaque handle returned by `Clock.setTimer`. */
-export type TimerHandle = unknown;
+/** An opaque handle returned by `Clock.setTimer` (a Node `Timeout`, a browser id, a fake id). */
+export type TimerHandle = object | number;
 
 /**
  * Time source for a table (ADR 0006). The runtime reads `now()` once per entry and
