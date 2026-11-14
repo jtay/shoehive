@@ -1,8 +1,32 @@
 /**
  * shoehive/server: sessions, lobby, seats, transports and the server runtime.
  *
- * Not implemented yet: this entry point lands in Phase 2 (RFC 0001, section 12).
+ * ```ts
+ * import { createServer } from 'shoehive/server';
+ * const shoehive = createServer({ games: [ticTacToe] });
+ * await shoehive.listen({ port: 3000 });
+ * ```
  *
  * @packageDocumentation
  */
-export {};
+export {
+  createServer,
+  type AuthHook,
+  type PlayerIdentity,
+  type ServerEvents,
+  type ServerLimits,
+  type ServerOptions,
+  type ShoehiveServer,
+  type TableInfo,
+} from './server';
+export type { Connection, MemorySocket, UpgradeRequest } from './transport';
+export { consoleLogger, silentLogger, type Logger } from './logger';
+export { MemoryWallet, type Amount, type ReserveResult, type Wallet } from './wallet';
+export {
+  StoreConflictError,
+  type SessionRecord,
+  type Store,
+  type StoredEntry,
+  type StoredSnapshot,
+} from '../store/types';
+export { memoryStore } from '../store/memory';
