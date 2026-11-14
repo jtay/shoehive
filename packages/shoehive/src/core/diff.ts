@@ -95,18 +95,33 @@ function setIn(node: Json, tokens: string[], depth: number, op: JsonPatchOp): Js
   if (isObject(node)) {
     const copy: Record<string, Json> = { ...node };
     if (!last) {
-      const child = copy[token];
+      const child = Object.prototype.hasOwnProperty.call(copy, token) ? copy[token] : undefined;
       if (child === undefined) throw new Error(`applyPatch: missing path ${op.path}`);
-      copy[token] = setIn(child, tokens, depth + 1, op);
+      setOwn(copy, token, setIn(child, tokens, depth + 1, op));
       return copy;
     }
     if (op.op === 'remove') {
-      if (!(token in copy)) throw new Error(`applyPatch: missing path ${op.path}`);
+      if (!Object.prototype.hasOwnProperty.call(copy, token)) {
+        throw new Error(`applyPatch: missing path ${op.path}`);
+      }
       delete copy[token];
     } else {
-      copy[token] = op.value;
+      setOwn(copy, token, op.value);
     }
     return copy;
   }
   throw new Error(`applyPatch: cannot descend into a primitive at ${op.path}`);
+}
+
+/**
+ * Sets an own data property. Plain assignment would treat `__proto__` as the prototype
+ * setter (wrong result, and prototype pollution from untrusted patches).
+ */
+function setOwn(target: Record<string, Json>, key: string, value: Json): void {
+  Object.defineProperty(target, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
 }
