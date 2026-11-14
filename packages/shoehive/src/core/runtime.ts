@@ -165,6 +165,7 @@ export interface RuntimeOptions {
 class NoopSignal extends Error {}
 const NOOP = new NoopSignal('noop');
 const MAX_CHAINED = 1000;
+const MAX_FOLLOW_UPS = 1000;
 const VALIDATE_TIMEOUT_MS = 1000;
 const DIAGNOSTICS = 500;
 
@@ -552,7 +553,7 @@ export class TableRuntime {
       this.recordRejection(args, error);
       throw error;
     }
-    return this.enqueue(async () => {
+    return this.enqueueExternal(async () => {
       const engine = this.root.engine;
       let seat = args.seat;
       if (seat === undefined) {
@@ -594,7 +595,7 @@ export class TableRuntime {
     player: { id: string; name: string };
     seat?: number;
   }): Promise<{ seat: number; rev: number }> {
-    return this.enqueue(async () => {
+    return this.enqueueExternal(async () => {
       let seat = args.seat;
       if (seat === undefined) {
         seat = this.root.engine.seats.findIndex((s) => s.status === 'empty');
@@ -615,7 +616,7 @@ export class TableRuntime {
     seat: number;
     reason?: 'stand' | 'grace-expired';
   }): Promise<{ rev: number }> {
-    return this.enqueue(async () => {
+    return this.enqueueExternal(async () => {
       const player = this.root.engine.seats[args.seat]?.player?.id ?? null;
       await this.run({ kind: 'system', event: args.reason ?? 'stand', seat: args.seat, player });
       return { rev: this.root.engine.rev };
@@ -634,13 +635,13 @@ export class TableRuntime {
 
   /** Starts a table that is waiting (operator API, or `autoStart: false`). */
   async start(): Promise<void> {
-    await this.enqueue(() =>
+    await this.enqueueExternal(() =>
       this.run({ kind: 'system', event: 'start', seat: null, player: null }),
     );
   }
 
   private async seatEvent(event: 'disconnect' | 'reconnect', player: string): Promise<void> {
-    await this.enqueue(async () => {
+    await this.enqueueExternal(async () => {
       for (const seat of this.seatsOf(this.root.engine, player)) {
         const s = this.root.engine.seats[seat]!;
         if (event === 'disconnect' ? s.connected : !s.connected) {
@@ -652,6 +653,14 @@ export class TableRuntime {
 
   // -------------------------------------------------------------------------------
   // Queue
+
+  /** Queues an entry caused by input from outside (clients, operators, timers). */
+  private enqueueExternal<T>(task: () => Promise<T>): Promise<T> {
+    return this.enqueue(() => {
+      this.chain = 0;
+      return task();
+    });
+  }
 
   private enqueue<T>(task: () => Promise<T>): Promise<T> {
     if (this.disposed)
@@ -1009,21 +1018,44 @@ export class TableRuntime {
       this.game.autoStart !== false &&
       occupied >= this.game.seats.min
     ) {
-      void this.enqueue(() =>
-        this.run({ kind: 'system', event: 'start', seat: null, player: null }),
-      ).catch(() => undefined);
+      this.enqueueFollowUp({ kind: 'system', event: 'start', seat: null, player: null });
     }
     const rounds = this.roundsConfig(e.phase);
     if (
       e.status === 'active' &&
       e.round?.open &&
       rounds?.closeWhen === 'all-submitted' &&
+      // An empty round has nobody to wait for, but closing it at once would let a game
+      // that reopens rounds in onClose loop forever. It waits for its timeout instead.
+      e.round.participants.length > 0 &&
       e.round.participants.every((p) => e.round!.submitted.includes(p))
     ) {
-      void this.enqueue(() =>
-        this.run({ kind: 'system', event: 'round-close', seat: null, player: null }),
-      ).catch(() => undefined);
+      this.enqueueFollowUp({ kind: 'system', event: 'round-close', seat: null, player: null });
     }
+  }
+
+  /**
+   * Follow-up entries (auto-start, round closes) scheduled since the last external
+   * entry. A game that keeps triggering them without any input is a bug; past the
+   * limit the runtime stops scheduling them instead of spinning forever.
+   */
+  private chain = 0;
+
+  private enqueueFollowUp(entry: EntryInput): void {
+    if (++this.chain > MAX_FOLLOW_UPS) {
+      if (this.chain === MAX_FOLLOW_UPS + 1) {
+        this.diag.push({
+          at: this.clock.now(),
+          name: `system:${entry.kind === 'system' ? entry.event : entry.kind}`,
+          seat: null,
+          player: null,
+          code: 'INTERNAL',
+          message: `More than ${String(MAX_FOLLOW_UPS)} follow-up entries without input: stopped scheduling them`,
+        });
+      }
+      return;
+    }
+    void this.enqueue(() => this.run(entry)).catch(() => undefined);
   }
 
   private syncTimers(): void {
@@ -1039,9 +1071,9 @@ export class TableRuntime {
       const handle = this.clock.setTimer(timer.deadline, () => {
         if (this.armed.get(name)?.handle !== handle) return;
         this.armed.delete(name);
-        void this.enqueue(() => this.run({ kind: 'timer', name, action: '', input: null })).catch(
-          () => undefined,
-        );
+        void this.enqueueExternal(() =>
+          this.run({ kind: 'timer', name, action: '', input: null }),
+        ).catch(() => undefined);
       });
       this.armed.set(name, { deadline: timer.deadline, handle });
     }

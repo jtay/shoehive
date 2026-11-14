@@ -527,3 +527,46 @@ describe('TableRuntime: values that came from the draft', () => {
     await t.verifyReplay();
   });
 });
+
+describe('TableRuntime: rounds without participants (regression)', () => {
+  // Found by the property tests in CI: every player stood up during a round, the empty
+  // round counted as "all submitted", closed at once, and onClose reopened it, forever.
+  const reopening = defineGame({
+    id: 'reopening',
+    seats: { min: 1, max: 2 },
+    setup: () => ({ closes: 0 }),
+    rounds: {
+      durationMs: 10_000,
+      closeWhen: 'all-submitted',
+      onClose: ({ state, ctx }) => {
+        state.closes += 1;
+        ctx.round.next();
+      },
+    },
+    actions: {
+      answer: {
+        once: true,
+        run() {
+          // submission only
+        },
+      },
+    },
+  });
+
+  it('an empty round waits for its timeout instead of closing in a loop', async () => {
+    const t = await createTestTable(reopening, { players: 1 });
+    await t.stand(0);
+    expect(t.state.closes).toBe(0);
+    expect(t.meta.round?.number).toBe(1);
+    await t.advance(10_000);
+    expect(t.state.closes).toBe(1);
+    expect(t.meta.round?.number).toBe(2);
+  });
+
+  it('a round where everyone submitted still closes straight away', async () => {
+    const t = await createTestTable(reopening, { players: 1 });
+    await t.act(0, 'answer');
+    expect(t.state.closes).toBe(1); // a submitted round closes normally
+    expect(t.runtime.diagnostics()).toEqual([]);
+  });
+});
