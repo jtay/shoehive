@@ -1,6 +1,6 @@
 /**
  * shoehive/testing: drive games without sockets. `createTestTable`, a fake clock and
- * exact replay checks (ADR 0006). The store conformance suite lands in Phase 2.
+ * exact replay checks (ADR 0006), and the store conformance suite (ADR 0009).
  *
  * @packageDocumentation
  */
@@ -12,3 +12,4 @@ export {
   type TestTableOptions,
 } from './test-table';
 export { FakeClock, FAKE_EPOCH } from './fake-clock';
+export { runStoreConformance, type ConformanceRunner } from './store-conformance';

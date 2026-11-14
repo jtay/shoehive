@@ -2,7 +2,7 @@
 
 |            |                                                                                                            |
 | ---------- | ---------------------------------------------------------------------------------------------------------- |
-| Status     | **Draft.** It freezes when Phase 2 (server) ships. Until then, breaking changes are allowed.               |
+| Status     | **Implemented** by `shoehive/server` (Phase 2). Frozen for v1 once Phase 2 merges: additive changes only.  |
 | Applies to | `shoehive/server` and `shoehive/client` 1.x                                                                |
 | Related    | RFC 0001 section 6, ADR 0003 (views and sync), ADR 0008 (turns and rounds), ADR 0010 (identity and resume) |
 
@@ -165,13 +165,14 @@ the game's `onStand` hook runs and the seats become `empty`. A player may hold s
 | `table.sync`   | `table`                                                       | none (a `table.snapshot` follows) | `NOT_JOINED`                                                                                                                                                                                                                  |
 | `seat.take`    | `table`, `seat?: number` (omit for the first free seat)       | `{ seat: number }`                | `NOT_JOINED`, `SEAT_TAKEN`, `TABLE_FULL`, `ALREADY_SEATED`, game codes from `canSit`                                                                                                                                          |
 | `seat.leave`   | `table`, `seat?: number` (omit for all of the player's seats) | none                              | `NOT_SEATED`                                                                                                                                                                                                                  |
-| `act`          | `table`, `name`, `input?`, `seat?`, `rev?`                    | `{ rev: number }`                 | `NOT_SEATED`, `NOT_STARTED`, `ACTION_NOT_ALLOWED`, `INVALID_INPUT`, `ALREADY_SUBMITTED`, `NOT_PARTICIPANT`, `ROUND_CLOSED`, `STALE_REVISION`, `TABLE_ENDED`, `TABLE_UNAVAILABLE`, `WALLET_UNAVAILABLE`, `TIMEOUT`, game codes |
+| `act`          | `table`, `name`, `input?`, `seat?`, `rev?`                    | `{ rev: number, value?: Json }`   | `NOT_SEATED`, `NOT_STARTED`, `ACTION_NOT_ALLOWED`, `INVALID_INPUT`, `ALREADY_SUBMITTED`, `NOT_PARTICIPANT`, `ROUND_CLOSED`, `STALE_REVISION`, `TABLE_ENDED`, `TABLE_UNAVAILABLE`, `WALLET_UNAVAILABLE`, `TIMEOUT`, game codes |
 | `ping`         | `id?`                                                         | answered by `pong`, not `ack`     |                                                                                                                                                                                                                               |
 
 Notes:
 
 - `table.create` does not join. `shoehive/client` offers `createAndJoin()` that sends both.
 - `act.seat` is required only when the player holds more than one seat at that table.
+- The `act` result's `value` is the JSON the action's `run` returned, when it returned one.
 - `act.rev`, when present, must equal the table's current revision or the action is rejected with
   `STALE_REVISION`. Use it for "only apply this if the board is what I am looking at".
 - The `act` ack is sent **after** the action's log entry is durably stored (ADR 0009) and
@@ -234,6 +235,8 @@ patch would be larger than a snapshot. It replaces the client's document entirel
 
 - `ops` is an RFC 6902 JSON Patch against `TableDocument`, using only `add`, `remove` and
   `replace`.
+- A patch may also carry `rev === from` when only connection-level fields changed (`spectators`,
+  `you`): the document changed but the table did not.
 - `rev` is the table revision after the commit. Revisions increase by one per committed change to
   table state, so a viewer whose document did not change receives nothing and later sees a gap
   between its own revisions. That is why every patch carries `from`: **the revision of the last
