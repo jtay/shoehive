@@ -1,0 +1,158 @@
+{
+  "name": "shoehive",
+  "version": "0.10.0",
+  "description": "Build multiplayer card, casino, board and party games: write the rules, Shoehive handles seats, sync, secrets, reconnects and persistence.",
+  "keywords": [
+    "multiplayer",
+    "game-server",
+    "game-framework",
+    "websocket",
+    "card-games",
+    "board-games",
+    "turn-based",
+    "realtime",
+    "typescript"
+  ],
+  "homepage": "https://shoehive.jtay.co.uk",
+  "bugs": "https://github.com/jtay/shoehive/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jtay/shoehive.git",
+    "directory": "packages/shoehive"
+  },
+  "license": "MIT",
+  "author": "Jaydon Taylor",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./server": {
+      "import": {
+        "types": "./dist/server/index.d.ts",
+        "default": "./dist/server/index.js"
+      },
+      "require": {
+        "types": "./dist/server/index.d.cts",
+        "default": "./dist/server/index.cjs"
+      }
+    },
+    "./client": {
+      "import": {
+        "types": "./dist/client/index.d.ts",
+        "default": "./dist/client/index.js"
+      },
+      "require": {
+        "types": "./dist/client/index.d.cts",
+        "default": "./dist/client/index.cjs"
+      }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/react/index.d.ts",
+        "default": "./dist/react/index.js"
+      },
+      "require": {
+        "types": "./dist/react/index.d.cts",
+        "default": "./dist/react/index.cjs"
+      }
+    },
+    "./cards": {
+      "import": {
+        "types": "./dist/cards/index.d.ts",
+        "default": "./dist/cards/index.js"
+      },
+      "require": {
+        "types": "./dist/cards/index.d.cts",
+        "default": "./dist/cards/index.cjs"
+      }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/testing/index.d.ts",
+        "default": "./dist/testing/index.js"
+      },
+      "require": {
+        "types": "./dist/testing/index.d.cts",
+        "default": "./dist/testing/index.cjs"
+      }
+    },
+    "./devtools": {
+      "import": {
+        "types": "./dist/devtools/index.d.ts",
+        "default": "./dist/devtools/index.js"
+      },
+      "require": {
+        "types": "./dist/devtools/index.d.cts",
+        "default": "./dist/devtools/index.cjs"
+      }
+    },
+    "./store/memory": {
+      "import": {
+        "types": "./dist/store/memory.d.ts",
+        "default": "./dist/store/memory.js"
+      },
+      "require": {
+        "types": "./dist/store/memory.d.cts",
+        "default": "./dist/store/memory.cjs"
+      }
+    },
+    "./store/sqlite": {
+      "import": {
+        "types": "./dist/store/sqlite.d.ts",
+        "default": "./dist/store/sqlite.js"
+      },
+      "require": {
+        "types": "./dist/store/sqlite.d.cts",
+        "default": "./dist/store/sqlite.cjs"
+      }
+    },
+    "./store/postgres": {
+      "import": {
+        "types": "./dist/store/postgres.d.ts",
+        "default": "./dist/store/postgres.js"
+      },
+      "require": {
+        "types": "./dist/store/postgres.d.cts",
+        "default": "./dist/store/postgres.cjs"
+      }
+    },
+    "./store/redis": {
+      "import": {
+        "types": "./dist/store/redis.d.ts",
+        "default": "./dist/store/redis.js"
+      },
+      "require": {
+        "types": "./dist/store/redis.d.cts",
+        "default": "./dist/store/redis.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.cts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json",
+    "check:package": "publint --strict && attw --pack . --profile node16 && node scripts/check-exports.mjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

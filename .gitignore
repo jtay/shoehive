@@ -1,16 +1,12 @@
-# Ignore all files in the dist directory
-dist
-
-# Ignore all files in the node_modules directory
 node_modules
-
-# Ignore all files in the test-results directory
-test-results
-
-# Ignore all files in the coverage directory
+dist
 coverage
-
-# TypeDoc generated files
-docs/pages/api/generated/
-docs/_site/
-docs/.jekyll-cache/
+*.tsbuildinfo
+.DS_Store
+*.log
+.env
+.env.*
+# Local databases created by store adapters and examples
+*.db
+*.db-journal
+*.sqlite
