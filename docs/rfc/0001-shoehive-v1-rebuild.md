@@ -248,7 +248,7 @@ await shoehive.listen({ port: 3000 }); // or shoehive.attach(httpServer)
 
 **Auth out of the box: guest plus a custom hook.** With no `auth`, each new connection gets a guest identity and a signed, expiring resume token (HMAC with a server secret), so reconnects work from minute one. Supplying `auth(req)` replaces guest mode with the integrator's own login. Returning `null` rejects the connection.
 
-Server-side admin API (typed): `shoehive.tables.create(gameId, options)`, `.get(id)`, `.list()`, `.close(id)`, plus `shoehive.on('table:ended', ...)`. That is a small, typed event surface for _operators_, not for game logic.
+Server-side admin API (typed): `shoehive.tables.create(gameId, { options })`, `.get(id)`, `.list()`, `.close(id)`, `.start(id)`, `.reload(id)`, plus `shoehive.on('table:ended', ...)`. That is a small, typed event surface for _operators_, not for game logic.
 
 ### 5.4 Client and React
 

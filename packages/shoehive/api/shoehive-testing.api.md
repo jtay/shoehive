@@ -4,6 +4,18 @@
 
 ```ts
 
+// @public (undocumented)
+export interface ConformanceRunner {
+    // (undocumented)
+    describe: (name: string, fn: () => void) => void;
+    // Warning: (ae-forgotten-export) The symbol "Expectation" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    expect: (value: unknown) => Expectation;
+    // (undocumented)
+    it: (name: string, fn: () => Promise<void>) => void;
+}
+
 // Warning: (ae-forgotten-export) The symbol "AnyGame" needs to be exported by the entry point index.d.ts
 //
 // @public
@@ -36,6 +48,11 @@ export interface RecordedEvent extends EmittedEvent {
     // (undocumented)
     rev: number;
 }
+
+// Warning: (ae-forgotten-export) The symbol "Store" needs to be exported by the entry point index.d.ts
+//
+// @public
+export function runStoreConformance(createStore: () => Store | Promise<Store>, input: ConformanceRunner): void;
 
 // @public
 export const TEST_SEED = "shoehive-test";
