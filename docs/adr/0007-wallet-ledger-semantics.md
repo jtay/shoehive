@@ -2,7 +2,7 @@
 
 |         |                                                                                               |
 | ------- | --------------------------------------------------------------------------------------------- |
-| Status  | Proposed, 2026-11-14 (needs stakeholder sign-off on payouts, see Open questions)              |
+| Status  | Accepted, 2026-11-14 (stakeholder accepted `credit` for payouts)                              |
 | Related | RFC 0001 sections 3, 7 (Wallet), 11 (Money), 13; audit finding 7; ADRs 0001, 0005, 0006, 0009 |
 
 ## Context
@@ -38,7 +38,7 @@ interface Wallet {
   commit(key: string): Promise<void>; // reservation becomes a final debit
   release(key: string): Promise<void>; // reservation is cancelled, funds returned
   balance(playerId: string): Promise<Amount>; // available funds, excluding reservations
-  credit(playerId: string, amount: Amount, key: string): Promise<void>; // payouts (proposed, see Open questions)
+  credit(playerId: string, amount: Amount, key: string): Promise<void>; // payouts
 }
 
 interface CtxWallet {
@@ -132,9 +132,6 @@ keys plus retries give at-least-once delivery with exactly-once effect.
 
 ## Open questions
 
-- **Payouts.** RFC 0001 lists four methods. With only those, a game cannot pay out
-  winnings (blackjack, Hold'em pots). This ADR adds a fifth required method, `credit`.
-  The alternative is to keep four methods and model payouts as integrator-side
-  callbacks on `table:ended`, which pushes core casino logic out of the game. Needs a
-  stakeholder decision; this is why the ADR is Proposed.
+- ~~**Payouts.**~~ Resolved 2026-11-14: the stakeholder accepted `credit` as a fifth
+  required method, so games can pay out winnings (blackjack, Hold'em pots) themselves.
 - Should `Amount` be `bigint` for very large ledgers? v1 proposes safe integers.
