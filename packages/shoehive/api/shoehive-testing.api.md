@@ -4,16 +4,12 @@
 
 ```ts
 
-// Warning: (ae-forgotten-export) The symbol "AnyGame" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function createTestTable<G extends AnyGame>(game: G, options?: TestTableOptions): Promise<TestTable<G>>;
 
 // @public
 export const FAKE_EPOCH: number;
 
-// Warning: (ae-forgotten-export) The symbol "Clock" needs to be exported by the entry point index.d.ts
-//
 // @public
 export class FakeClock implements Clock {
     constructor(start?: number);
@@ -23,14 +19,10 @@ export class FakeClock implements Clock {
     // (undocumented)
     now(): number;
     get pendingTimers(): number;
-    // Warning: (ae-forgotten-export) The symbol "TimerHandle" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     setTimer(atMs: number, fn: () => void): TimerHandle;
 }
 
-// Warning: (ae-forgotten-export) The symbol "EmittedEvent" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
 export interface RecordedEvent extends EmittedEvent {
     // (undocumented)
@@ -42,9 +34,6 @@ export const TEST_SEED = "shoehive-test";
 
 // @public
 export class TestTable<G extends AnyGame> {
-    // Warning: (ae-forgotten-export) The symbol "Inputs" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "InputArgs" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "Json" needs to be exported by the entry point index.d.ts
     act<K extends keyof Inputs<G> & string>(seat: number, name: K, ...input: InputArgs<G, K>): Promise<Json | undefined>;
     advance(ms: number): Promise<void>;
     // (undocumented)
@@ -54,12 +43,8 @@ export class TestTable<G extends AnyGame> {
     // (undocumented)
     disconnect(seat: number): Promise<void>;
     readonly events: RecordedEvent[];
-    // Warning: (ae-forgotten-export) The symbol "LogEntry" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     get log(): readonly LogEntry[];
-    // Warning: (ae-forgotten-export) The symbol "TableMeta" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     get meta(): TableMeta;
     playerAt(seat: number): string;
@@ -67,12 +52,8 @@ export class TestTable<G extends AnyGame> {
     reconnect(seat: number): Promise<void>;
     // (undocumented)
     get rev(): number;
-    // Warning: (ae-forgotten-export) The symbol "TableRuntime" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     readonly runtime: TableRuntime;
-    // Warning: (ae-forgotten-export) The symbol "SeatInfo" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     get seats(): SeatInfo[];
     // (undocumented)
@@ -80,10 +61,8 @@ export class TestTable<G extends AnyGame> {
     // (undocumented)
     stand(seat: number): Promise<void>;
     start(): Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "GameState" needs to be exported by the entry point index.d.ts
     get state(): GameState<G>;
     verifyReplay(): Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "GameView" needs to be exported by the entry point index.d.ts
     viewOf(seat: number | 'spectator'): GameView<G>;
 }
 
