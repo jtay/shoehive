@@ -32,3 +32,24 @@ if (failures > 0) {
 } else {
   console.log(`OK: ${subpaths.length} subpaths load via import and require.`);
 }
+
+// Classes must have one identity across entry points (shared chunks, see tsup.config.ts):
+// an error thrown by shoehive/testing must be an instance of ShoehiveError from shoehive.
+for (const [condition, load] of [
+  ['import', (s) => import(s)],
+  ['require', (s) => require(s)],
+]) {
+  const core = await load(pkg.name);
+  const testing = await load(`${pkg.name}/testing`);
+  const game = core.defineGame({ id: 'smoke', seats: { min: 1, max: 1 }, setup: () => ({}) });
+  const table = await testing.createTestTable(game, { players: 1 });
+  const error = await table.act(0, 'missing').catch((e) => e);
+  if (!(error instanceof core.ShoehiveError)) {
+    console.error(
+      `FAIL ${condition}: ShoehiveError from shoehive/testing is a different class than from shoehive`,
+    );
+    process.exitCode = 1;
+  }
+}
+if (!process.exitCode)
+  console.log('OK: ShoehiveError has one identity across entry points (import and require).');
