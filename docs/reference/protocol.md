@@ -94,7 +94,7 @@ client                                   server
 ### 4.1 `hello`
 
 ```ts
-{ t: 'hello', id, v: 1, resume?: string, client?: { name: string; version: string } }
+{ t: 'hello', id, v: 1, resume?: string, name?: string, client?: { name: string; version: string } }
 ```
 
 - `v` is the protocol version. If the server does not support it, it acks with
@@ -105,6 +105,9 @@ client                                   server
   - **Custom auth**: identity always comes from `auth(req)`. A valid token for _the same player_
     restores their session (joined tables, held seats, lobby subscription). A token for a different
     player is ignored.
+- `name` is the display name for a new guest (1 to 32 characters after trimming, no control
+  characters). It is ignored under custom auth and when a guest session is resumed. Without it the
+  server picks `Guest ` plus 4 random characters (ADR 0010).
 - Any other request sent before `hello` is acked with `BAD_REQUEST`.
 
 Result:
@@ -151,19 +154,19 @@ the game's `onStand` hook runs and the seats become `empty`. A player may hold s
 
 ## 5. Requests
 
-| `t`            | Fields                                                        | `result` on success               | Typical errors                                                                                                                   |
-| -------------- | ------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `hello`        | `v`, `resume?`, `client?`                                     | `Welcome`                         | `UNSUPPORTED_PROTOCOL`                                                                                                           |
-| `lobby.sub`    |                                                               | none (a `lobby.snapshot` follows) |                                                                                                                                  |
-| `lobby.unsub`  |                                                               | none                              |                                                                                                                                  |
-| `table.create` | `game`, `options?`                                            | `{ table: string }`               | `NOT_FOUND`, `INVALID_OPTIONS`, `FORBIDDEN`                                                                                      |
-| `table.join`   | `table`, `as?: 'player' \| 'spectator'` (default `'player'`)  | none (a `table.snapshot` follows) | `NOT_FOUND`, `TABLE_ENDED`, `FORBIDDEN`                                                                                          |
-| `table.leave`  | `table`                                                       | none                              | `NOT_JOINED`                                                                                                                     |
-| `table.sync`   | `table`                                                       | none (a `table.snapshot` follows) | `NOT_JOINED`                                                                                                                     |
-| `seat.take`    | `table`, `seat?: number` (omit for the first free seat)       | `{ seat: number }`                | `NOT_JOINED`, `SEAT_TAKEN`, `TABLE_FULL`, `ALREADY_SEATED`, game codes from `canSit`                                             |
-| `seat.leave`   | `table`, `seat?: number` (omit for all of the player's seats) | none                              | `NOT_SEATED`                                                                                                                     |
-| `act`          | `table`, `name`, `input?`, `seat?`, `rev?`                    | `{ rev: number }`                 | `NOT_SEATED`, `ACTION_NOT_ALLOWED`, `INVALID_INPUT`, `ALREADY_SUBMITTED`, `STALE_REVISION`, `TABLE_ENDED`, `TIMEOUT`, game codes |
-| `ping`         | `id?`                                                         | answered by `pong`, not `ack`     |                                                                                                                                  |
+| `t`            | Fields                                                        | `result` on success               | Typical errors                                                                                                                                                                                                                |
+| -------------- | ------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hello`        | `v`, `resume?`, `client?`                                     | `Welcome`                         | `UNSUPPORTED_PROTOCOL`                                                                                                                                                                                                        |
+| `lobby.sub`    |                                                               | none (a `lobby.snapshot` follows) |                                                                                                                                                                                                                               |
+| `lobby.unsub`  |                                                               | none                              |                                                                                                                                                                                                                               |
+| `table.create` | `game`, `options?`                                            | `{ table: string }`               | `NOT_FOUND`, `INVALID_OPTIONS`, `FORBIDDEN`                                                                                                                                                                                   |
+| `table.join`   | `table`, `as?: 'player' \| 'spectator'` (default `'player'`)  | none (a `table.snapshot` follows) | `NOT_FOUND`, `TABLE_ENDED`, `FORBIDDEN`                                                                                                                                                                                       |
+| `table.leave`  | `table`                                                       | none                              | `NOT_JOINED`                                                                                                                                                                                                                  |
+| `table.sync`   | `table`                                                       | none (a `table.snapshot` follows) | `NOT_JOINED`                                                                                                                                                                                                                  |
+| `seat.take`    | `table`, `seat?: number` (omit for the first free seat)       | `{ seat: number }`                | `NOT_JOINED`, `SEAT_TAKEN`, `TABLE_FULL`, `ALREADY_SEATED`, game codes from `canSit`                                                                                                                                          |
+| `seat.leave`   | `table`, `seat?: number` (omit for all of the player's seats) | none                              | `NOT_SEATED`                                                                                                                                                                                                                  |
+| `act`          | `table`, `name`, `input?`, `seat?`, `rev?`                    | `{ rev: number }`                 | `NOT_SEATED`, `NOT_STARTED`, `ACTION_NOT_ALLOWED`, `INVALID_INPUT`, `ALREADY_SUBMITTED`, `NOT_PARTICIPANT`, `ROUND_CLOSED`, `STALE_REVISION`, `TABLE_ENDED`, `TABLE_UNAVAILABLE`, `WALLET_UNAVAILABLE`, `TIMEOUT`, game codes |
+| `ping`         | `id?`                                                         | answered by `pong`, not `ack`     |                                                                                                                                                                                                                               |
 
 Notes:
 
@@ -171,7 +174,8 @@ Notes:
 - `act.seat` is required only when the player holds more than one seat at that table.
 - `act.rev`, when present, must equal the table's current revision or the action is rejected with
   `STALE_REVISION`. Use it for "only apply this if the board is what I am looking at".
-- The `act` ack is sent **after** the patch for that commit, so when a client sees
+- The `act` ack is sent **after** the action's log entry is durably stored (ADR 0009) and
+  **after** the patch for that commit, so when a client sees
   `ack { ok: true, result: { rev } }` its document is already at `rev` or later.
 - Actions for one table are processed one at a time, in arrival order (the per-table serial queue).
 
@@ -238,6 +242,8 @@ patch would be larger than a snapshot. It replaces the client's document entirel
   the patch and send `table.sync`.
 - Applying all received patches in order must yield exactly the document the server holds for that
   viewer (an engine invariant, property-tested).
+- **Backpressure.** If a connection's send buffer passes 1 MiB, the server stops sending it patches.
+  When the buffer drains it receives one `table.snapshot` (ADR 0003).
 
 ### 6.4 `table.event`
 
@@ -299,27 +305,32 @@ interface ShoehiveError {
 Game code passes its own codes to `reject(code, details?)`. They must match `^[A-Z][A-Z0-9_]*$`
 and must not reuse a built-in code (a type error at `defineGame`). Built-in codes:
 
-| Code                   | When                                                                                                              | `details`                           |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `BAD_REQUEST`          | Malformed message, unknown request type, request before `hello`                                                   |                                     |
-| `UNSUPPORTED_PROTOCOL` | `hello.v` not supported                                                                                           | `{ supported: number[] }`           |
-| `UNAUTHORIZED`         | Session no longer valid (for example token revoked)                                                               |                                     |
-| `FORBIDDEN`            | A hook such as `canCreate` or `canJoin` refused                                                                   |                                     |
-| `NOT_FOUND`            | Unknown game or table                                                                                             | `{ kind: 'game' \| 'table' }`       |
-| `INVALID_OPTIONS`      | Table options failed the game's options schema                                                                    | `{ issues: StandardSchemaIssue[] }` |
-| `INVALID_INPUT`        | Action input failed its schema                                                                                    | `{ issues: StandardSchemaIssue[] }` |
-| `NOT_JOINED`           | Request needs the table to be joined first                                                                        |                                     |
-| `TABLE_FULL`           | No free seat                                                                                                      |                                     |
-| `SEAT_TAKEN`           | Requested seat is occupied or reserved                                                                            |                                     |
-| `ALREADY_SEATED`       | Player is at the game's per-player seat limit                                                                     |                                     |
-| `NOT_SEATED`           | Action or `seat.leave` from a player without a seat                                                               |                                     |
-| `ACTION_NOT_ALLOWED`   | Unknown action, or not allowed in the current phase                                                               | `{ phase: string \| null }`         |
-| `ALREADY_SUBMITTED`    | A `once` action was already submitted this round                                                                  |                                     |
-| `STALE_REVISION`       | `act.rev` did not match                                                                                           | `{ rev: number }` (current)         |
-| `TABLE_ENDED`          | Action on an ended table                                                                                          |                                     |
-| `RATE_LIMITED`         | Connection exceeded its rate limit                                                                                | `{ retryAfterMs: number }`          |
-| `TIMEOUT`              | An async action (for example a wallet call) exceeded its time budget and was rolled back                          |                                     |
-| `INTERNAL`             | Game code threw something other than `reject()`. The action was rolled back. In production the message is generic |                                     |
+| Code                   | When                                                                                                                          | `details`                           |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `BAD_REQUEST`          | Malformed message, unknown request type, request before `hello`                                                               |                                     |
+| `UNSUPPORTED_PROTOCOL` | `hello.v` not supported                                                                                                       | `{ supported: number[] }`           |
+| `UNAUTHORIZED`         | Session no longer valid (for example token revoked)                                                                           |                                     |
+| `FORBIDDEN`            | A hook such as `canCreate` or `canJoin` refused                                                                               |                                     |
+| `NOT_FOUND`            | Unknown game or table                                                                                                         | `{ kind: 'game' \| 'table' }`       |
+| `INVALID_OPTIONS`      | Table options failed the game's options schema                                                                                | `{ issues: StandardSchemaIssue[] }` |
+| `INVALID_INPUT`        | Action input failed its schema                                                                                                | `{ issues: StandardSchemaIssue[] }` |
+| `NOT_JOINED`           | Request needs the table to be joined first                                                                                    |                                     |
+| `TABLE_FULL`           | No free seat                                                                                                                  |                                     |
+| `SEAT_TAKEN`           | Requested seat is occupied or reserved                                                                                        |                                     |
+| `ALREADY_SEATED`       | Player is at the game's per-player seat limit                                                                                 |                                     |
+| `NOT_SEATED`           | Action or `seat.leave` from a player without a seat                                                                           |                                     |
+| `NOT_STARTED`          | Action before the table started (only `preStart` actions allowed)                                                             |                                     |
+| `ACTION_NOT_ALLOWED`   | Unknown action, or not allowed in the current phase                                                                           | `{ phase: string \| null }`         |
+| `ALREADY_SUBMITTED`    | A `once` action was already submitted this round                                                                              |                                     |
+| `NOT_PARTICIPANT`      | Round action from a seat that is not part of the current round (for example it sat down mid-round)                            |                                     |
+| `ROUND_CLOSED`         | Round action after the round closed                                                                                           |                                     |
+| `STALE_REVISION`       | `act.rev` did not match                                                                                                       | `{ rev: number }` (current)         |
+| `TABLE_ENDED`          | Action on an ended table                                                                                                      |                                     |
+| `RATE_LIMITED`         | Connection exceeded its rate limit                                                                                            | `{ retryAfterMs: number }`          |
+| `TIMEOUT`              | An async action (for example a wallet call) exceeded its time budget and was rolled back                                      |                                     |
+| `WALLET_UNAVAILABLE`   | The wallet backend failed and game code did not handle it; the action was rolled back                                         |                                     |
+| `TABLE_UNAVAILABLE`    | The table is faulted (for example a store write failed, or recovery hit a game version mismatch) until an operator reloads it |                                     |
+| `INTERNAL`             | Game code threw something other than `reject()`. The action was rolled back. In production the message is generic             |                                     |
 
 ---
 
