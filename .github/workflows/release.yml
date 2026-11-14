@@ -1,0 +1,44 @@
+name: Release
+
+# Changesets opens (and keeps updated) a "Version Packages" PR while unreleased
+# changesets exist on main. Merging that PR publishes to npm with provenance.
+# While .changeset/pre.json is in "pre" mode, releases are 1.0.0-next.x on the
+# "next" dist-tag.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write # npm provenance and trusted publishing
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - name: Full check before any publish
+        run: pnpm check
+      - uses: changesets/action@v2
+        with:
+          version: pnpm exec changeset version
+          publish: pnpm release
+          title: 'chore: version packages'
+          commit: 'chore: version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Not needed once npm trusted publishing is configured for this repo.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
