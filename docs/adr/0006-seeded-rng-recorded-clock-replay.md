@@ -20,8 +20,8 @@ is either in the log or derived from something in it.
 
 ```ts
 type LogEntry = { seq: number; at: number; draws: number[]; effects?: WalletResult[] } & (
-  | { kind: 'create'; game: string; version: number; seed: string; options: Json }
-  | { kind: 'action'; name: string; seat: number | null; player: string | null; input: Json }
+  | { kind: 'create'; table: string; game: string; version: number; seed: string; options: Json }
+  | { kind: 'action'; name: string; seat: number; player: string; input: Json }
   | { kind: 'timer'; name: string; action: string; input: Json }
   | {
       kind: 'system';
@@ -87,9 +87,11 @@ function replay(
 - Recovery (ADR 0009): snapshot plus log tail.
 - Devtools (ADR 0011): replay to any `seq` on a copy.
 
-During replay, validators, the wallet, transports and real timers are not called. 8. **Banning ambient nondeterminism.** `Math.random`, `Date.now`, `new Date()`,
-`performance.now` and `crypto.getRandomValues` are banned inside game code, enforced
-in three layers:
+During replay, validators, the wallet, transports and real timers are not called.
+
+8. **Banning ambient nondeterminism.** `Math.random`, `Date.now`, `new Date()`,
+   `performance.now` and `crypto.getRandomValues` are banned inside game code, enforced
+   in three layers:
 
 - **Lint**: `create-shoehive` scaffolds an ESLint flat config block for `games/**`
   using built-in `no-restricted-properties` and `no-restricted-syntax`. No ESLint

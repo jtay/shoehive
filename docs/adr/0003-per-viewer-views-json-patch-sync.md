@@ -22,7 +22,9 @@ for each distinct viewer at the table and sends that viewer a diff against the v
 last sent. Raw state never leaves the server, not even to the seat that "owns" it.
 
 ```ts
-type Viewer = { kind: 'seat'; seat: number; playerId: string } | { kind: 'spectator'; seat: null }; // no player id, by design
+type Viewer =
+  | { kind: 'seat'; seat: number; seats: readonly number[]; playerId: string } // seat = first held seat
+  | { kind: 'spectator'; seat: null; seats: readonly []; playerId: null }; // no player id, by design
 
 interface TablePatch {
   t: 'table.patch';
@@ -35,13 +37,12 @@ interface TableSnapshot {
   t: 'table.snapshot';
   table: string;
   rev: number;
-  view: Json;
-  seats: SeatInfo[];
-  meta: TableMeta;
+  doc: TableDocument; // { view, meta, seats, spectators, you }: see the protocol spec
 }
 ```
 
-1. **Viewer keys.** Each seat is its own viewer (`seat:N`). All spectators share one
+1. **Viewer keys.** Each seated player is one viewer (keyed by player id, so a player
+   holding several seats gets one view that knows all of them). All spectators share one
    viewer (`spectator`), so `view()` runs once for all of them, and they all receive the
    same serialized patch bytes. Spectators deliberately get no `playerId`, which
    guarantees the sharing. A player who is seated sees the seat view, never the
