@@ -1,73 +1,64 @@
-# 🐝 Shoehive - Open Source Multiplayer Game Framework
+# Shoehive
 
-Shoehive is an **extensible, WebSocket-based multiplayer game framework** designed with the goal of providing a simple and easy to understand framework for building multiplayer card games. It boasts a modular design that allows you to extend the game server with a number of different game types.
+**Build multiplayer card, casino, board and party games. You write the rules; Shoehive handles seats, sync, secrets, reconnects and persistence.**
 
-Shoehive is built with TypeScript and is designed to be used with Node.js. **It is currently in active development and is not yet ready for production use.**
+> **Status: v1 is being rebuilt from the ground up.** Nothing on `main` is usable yet. The last 0.x
+> release is tagged `v0.10.0-legacy`. Follow the plan in
+> [RFC 0001](docs/rfc/0001-shoehive-v1-rebuild.md) and the [roadmap](docs/rfc/0001-shoehive-v1-rebuild.md#12-roadmap).
 
-[![CI Tests](https://github.com/jtay/shoehive/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/jtay/shoehive/actions/workflows/test.yml) [![Version Distribution](https://github.com/jtay/shoehive/actions/workflows/versioning.yml/badge.svg)](https://github.com/jtay/shoehive/actions/workflows/versioning.yml) [![Docs](https://github.com/jtay/shoehive/actions/workflows/docs-deploy.yml/badge.svg?branch=main)](https://github.com/jtay/shoehive/actions/workflows/docs-deploy.yml)
-#### [**🐙 GitHub**](https://github.com/jtay/shoehive) &nbsp; | &nbsp; [**📦 Releases**](https://github.com/jtay/shoehive/releases) &nbsp; | &nbsp; [**⚡️ Quick Start Guide**](https://shoehive.jtay.co.uk/quick-start) &nbsp; | &nbsp; [**📖 Docs**](https://shoehive.jtay.co.uk) &nbsp; | &nbsp; [**🔍 API Reference**](https://shoehive.jtay.co.uk/api/generated) &nbsp; | &nbsp; [**🤝 Contributing**](https://github.com/jtay/shoehive/tree/main/CONTRIBUTING.md)
+## What v1 will look like
 
-## 🚀 Features
+```ts
+import { defineGame, reject } from 'shoehive';
+import { z } from 'zod';
 
-✅ **Powered by WebSockets** – Real-time, low-latency communication.  
-✅ **Modular Backend Connectivity** – Implement your own authentication system and register any kind of backend transport protocol.    
-✅ **Extensible Game Modules** – Build games like blackjack, baccarat and poker while focusing on just the game logic.  
-✅ **Multi-Game Server** – When creating a new game, the player can choose from the registered game modules.    
-✅ **Designed for Card Games** – Natively supports card games with a flexible card deck system.  
-✅ **Built-In Command System** – Register namespaced commands to send data between the client and server.   
-✅ **Event-Driven Architecture** – React to events in the game server with ease using the event bus.    
-✅ **Free Forever** – Licensed under the Unlicense, you are free to use it as you please. Commercial or otherwise.  
-
-## 🌟 Kickstart Your Game in Minutes
-
-```typescript
-
-import * as http from 'http';
-import { createGameServer } from 'shoehive';
-import { BlackjackGameModule } from "./modules/blackjack";
-
-// Create an HTTP server
-const server = http.createServer();
-
-// Create the game server
-const gameServer = createGameServer(server);
-
-// Register the game module
-gameServer.registerGameModule(BlackjackGameModule);
-
-// Start the server
-server.listen(3000, () => {
-  console.log(`Shoehive server running on port 3000`);
+export const ticTacToe = defineGame({
+  id: 'tic-tac-toe',
+  name: 'Tic Tac Toe',
+  seats: { min: 2, max: 2 },
+  setup: () => ({ board: Array<'X' | 'O' | null>(9).fill(null) }),
+  turns: { order: 'round-robin' },
+  actions: {
+    place: {
+      input: z.object({ cell: z.number().int().min(0).max(8) }),
+      run({ state, seat, input, ctx }) {
+        if (ctx.turn.seat !== seat) reject('NOT_YOUR_TURN');
+        if (state.board[input.cell]) reject('CELL_TAKEN');
+        state.board[input.cell] = seat === 0 ? 'X' : 'O';
+        ctx.turn.next();
+      },
+    },
+  },
 });
 ```
 
+```ts
+import { createServer } from 'shoehive/server';
 
-## 🧪 Testing
-
-The framework includes comprehensive test suites to ensure reliability and correctness.
-
-### Running Tests
-
-```bash
-# Run all tests
-npm test
-
-# Run specific test file
-npx jest tests/events/EventBus.test.ts
-
-# Generate test coverage report
-npm test -- --coverage
+await createServer({ games: [ticTacToe] }).listen({ port: 3000 });
 ```
 
-### Test Structure
+- **Typed end to end.** Action inputs and views are inferred from your game, all the way to `useTable()` in React.
+- **Hidden information built in.** Clients only ever receive what your `view()` lets each seat see.
+- **Turns and rounds.** Turn-based games and round-based simultaneous play (quizzes, buzzers).
+- **Reconnects and restarts.** Guest sessions with resume tokens; tables survive a server restart (memory, SQLite, Postgres, Redis).
+- **Deterministic.** Seeded randomness and a recorded action log power tests, replays and devtools time travel.
+- **Test without sockets.** `createTestTable(game)` runs your rules with a fake clock.
 
-- `tests/core/` - Tests for core components (Player, Table, etc.)
-- `tests/events/` - Tests for event handling and message routing
-- `tests/transport/` - Tests for transport modules
-- `tests/integration/` - Integration tests for component interactions
+## Repository layout
 
-To add new tests, follow the existing patterns in the test directories.
+| Path                | What                                                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `packages/shoehive` | The `shoehive` npm package: `shoehive`, `shoehive/server`, `/client`, `/react`, `/cards`, `/testing`, `/devtools`, `/store/*` |
+| `examples/`         | Tic-tac-toe, quiz, blackjack and Texas Hold'em (from Phase 1 onwards)                                                         |
+| `docs/rfc`          | Plans and proposals                                                                                                           |
+| `docs/adr`          | Architecture decision records                                                                                                 |
+| `docs/reference`    | Specifications, starting with the [wire protocol](docs/reference/protocol.md)                                                 |
 
-## 📄 License
+## Contributing
 
-This project is licensed under the [The Unlicense](https://unlicense.org/). See the [LICENSE](LICENSE) file for details.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues: see [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE)

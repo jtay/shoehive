@@ -1,104 +1,46 @@
 # Contributing to Shoehive
 
-Thank you for considering contributing to Shoehive! This document provides guidelines and instructions for contributing to the project.
+Thanks for helping. Shoehive v1 is mid-rebuild, so please read
+[RFC 0001](docs/rfc/0001-shoehive-v1-rebuild.md) before proposing larger changes.
 
-## Table of Contents
+## Setup
 
-1. [Development Setup](#-development-setup)
-2. [Code Style](#-code-style)
-3. [Testing](#-testing)
-4. [Pull Requests](#-pull-requests)
-5. [Release Process](#-release-process)
+You need Node 22 or newer and pnpm (the exact version is pinned in `package.json`; `corepack enable`
+picks it up).
 
-## Development Setup
-
-1. Fork the repository
-2. Clone your fork: `git clone https://github.com/jtay/shoehive.git`
-3. Install dependencies: `npm install`
-4. Build the project: `npm run build`
-5. Run tests: `npm test`
-
-### Node.js Version Requirements
-
-Shoehive requires Node.js 18.0.0 or later. This is specified in the `engines` field in package.json.
-
-If you're using nvm (Node Version Manager), you can switch to the appropriate version with:
-
-```bash
-nvm use 18
+```sh
+git clone https://github.com/jtay/shoehive.git
+cd shoehive
+corepack enable
+pnpm install
+pnpm check   # format, lint, typecheck, test, build, package checks: the same as CI
 ```
 
-## Code Style
+Useful scripts:
 
-We use ESLint to enforce consistent code style. Our linting rules are defined in `.eslintrc.js`.
+| Command                         | What it does                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------- |
+| `pnpm test` / `pnpm test:watch` | Run Vitest                                                                      |
+| `pnpm lint` / `pnpm lint:fix`   | ESLint (type-aware)                                                             |
+| `pnpm format`                   | Prettier                                                                        |
+| `pnpm typecheck`                | `tsc` with strict settings                                                      |
+| `pnpm build`                    | Build the package with tsup                                                     |
+| `pnpm check:package`            | publint, Are The Types Wrong, and an import/require smoke test of every subpath |
 
-### Running the Linter
+## How we work
 
-```bash
-npm run lint
-```
+- **Spec first.** Changes to the public API, the wire protocol or the engine's guarantees start as
+  an ADR in `docs/adr` (copy `template.md`) or an RFC in `docs/rfc`, reviewed before the code.
+- **Small PRs** with [Conventional Commits](https://www.conventionalcommits.org/) titles, for example
+  `feat(server): add resume tokens`.
+- **Tests with teeth.** Unit tests for pure logic, property tests for engine invariants, and real
+  sockets (never a mocked `ws`) in integration tests.
+- **Done means** code, tests, docs and use in at least one example.
+- **Changesets.** If your PR changes the published package, run `pnpm changeset` and commit the file.
+  Releases are cut by the Release workflow; never bump versions by hand.
+- **Isomorphic code stays isomorphic.** `shoehive`, `shoehive/client`, `shoehive/react` and
+  `shoehive/cards` must not import Node built-ins. Lint enforces this.
 
-### Linting Rules
+## Writing style for docs and comments
 
-We've configured ESLint with the following rules:
-- Extends the recommended ESLint and TypeScript ESLint rulesets
-- Warns on `any` types (but doesn't error, as framework code sometimes requires them)
-- Allows unused variables prefixed with underscore (e.g., `_unusedVar`)
-
-If you need to ignore a specific ESLint rule in a particular line, you can use:
-
-```typescript
-// eslint-disable-next-line rule-name
-const someCode = 'that would trigger the rule';
-```
-
-## Testing
-
-We use Jest for testing. All new features should include tests, and all tests must pass before a pull request can be merged.
-
-### Running Tests
-
-```bash
-# Run all tests
-npm test
-
-# Run tests with coverage
-npm test -- --coverage
-```
-
-### Writing Tests
-
-- Test files should be placed in the `tests` directory
-- Test files should be named `*.test.ts`
-- Use descriptive test names that explain what the test is verifying
-
-## Pull Requests
-
-1. Create a new branch for your feature or bug fix
-2. Make your changes
-3. Run tests to ensure they pass
-4. Run the linter to ensure code quality
-5. Submit a pull request to the `dev` branch
-6. Wait for code review and address any feedback
-
-### Commit Messages
-
-Please use clear and descriptive commit messages. For significant changes, include a detailed description in the commit body.
-
-## Release Process
-
-Releases are managed by the maintainers. We use GitHub Actions for automated testing and publishing to npm.
-
-### Version Bumping
-
-When preparing a release:
-1. Update the version in `package.json` according to [Semantic Versioning](https://semver.org/)
-2. The GitHub Actions workflow will automatically publish to npm when a version change is detected on the main branch
-
-### Release Notes
-
-Release notes are maintained in the GitHub Releases section. Each release should include:
-- Summary of changes
-- New features
-- Bug fixes
-- Breaking changes (if any) 
+Plain, direct English. Short pages, one idea each. Every code sample must compile.
