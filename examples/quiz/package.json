@@ -1,0 +1,13 @@
+{
+  "name": "@shoehive-examples/quiz",
+  "private": true,
+  "description": "Round-based simultaneous play: everyone answers within a timer, answers stay hidden until the reveal.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "shoehive": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}
