@@ -90,8 +90,6 @@ export class MemoryWallet implements Wallet {
 export interface PlayerIdentity {
     // (undocumented)
     id: string;
-    // Warning: (ae-forgotten-export) The symbol "Json" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     metadata?: Json;
     // (undocumented)
@@ -155,13 +153,9 @@ export interface ServerLimits {
 // @public (undocumented)
 export interface ServerOptions {
     auth?: AuthHook;
-    // Warning: (ae-forgotten-export) The symbol "Clock" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     clock?: Clock;
     dev?: boolean;
-    // Warning: (ae-forgotten-export) The symbol "AnyGame" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     games: readonly AnyGame[];
     idleTableMs?: number;
@@ -314,10 +308,6 @@ export interface Wallet {
     // (undocumented)
     reserve(playerId: string, amount: Amount, key: string): Promise<ReserveResult>;
 }
-
-// Warnings were encountered during analysis:
-//
-// dist/server/index.d.ts:204:9 - (ae-forgotten-export) The symbol "TableRuntime" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

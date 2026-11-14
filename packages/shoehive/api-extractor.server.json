@@ -21,14 +21,33 @@
     "reportFolder": "<projectFolder>/api/",
     "reportTempFolder": "<projectFolder>/node_modules/.api-extractor/"
   },
-  "docModel": { "enabled": false },
-  "dtsRollup": { "enabled": false },
-  "tsdocMetadata": { "enabled": false },
+  "docModel": {
+    "enabled": false
+  },
+  "dtsRollup": {
+    "enabled": false
+  },
+  "tsdocMetadata": {
+    "enabled": false
+  },
   "messages": {
     "extractorMessageReporting": {
-      "default": { "logLevel": "warning", "addToApiReportFile": true },
-      "ae-missing-release-tag": { "logLevel": "none" }
+      "default": {
+        "logLevel": "warning",
+        "addToApiReportFile": true
+      },
+      "ae-missing-release-tag": {
+        "logLevel": "none"
+      },
+      "ae-forgotten-export": {
+        "logLevel": "none",
+        "addToApiReportFile": false
+      }
     },
-    "tsdocMessageReporting": { "default": { "logLevel": "none" } }
+    "tsdocMessageReporting": {
+      "default": {
+        "logLevel": "none"
+      }
+    }
   }
 }

@@ -290,8 +290,6 @@ export type Game<S = unknown, O = unknown, PN extends string = string, AN extend
     }, V>;
 };
 
-// Warning: (ae-forgotten-export) The symbol "TypesOf" needs to be exported by the entry point index.d.ts
-//
 // @public
 export type GameActions<G> = TypesOf<G> extends {
     actions: infer A;
@@ -299,8 +297,6 @@ export type GameActions<G> = TypesOf<G> extends {
 
 // @public
 export interface GameConfig<S, O, PN extends string, AN extends string, A, PAN extends string, P, V> {
-    // Warning: (ae-forgotten-export) The symbol "ActionDefs" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "InputSchemas" needs to be exported by the entry point index.d.ts
     actions?: ActionDefs<S, O, PN, AN, A> & InputSchemas<A>;
     autoStart?: boolean;
     // (undocumented)
@@ -945,11 +941,6 @@ export interface WireError {
     // (undocumented)
     source: 'shoehive' | 'game';
 }
-
-// Warnings were encountered during analysis:
-//
-// dist/runtime-C15-F7YU.d.ts:334:5 - (ae-forgotten-export) The symbol "InputOf" needs to be exported by the entry point index.d.ts
-// dist/runtime-C15-F7YU.d.ts:334:5 - (ae-forgotten-export) The symbol "PhaseInputs" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

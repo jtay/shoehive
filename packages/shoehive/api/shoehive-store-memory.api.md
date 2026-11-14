@@ -9,8 +9,6 @@ export function memoryStore(): Store;
 
 // @public (undocumented)
 export interface SessionRecord {
-    // Warning: (ae-forgotten-export) The symbol "Json" needs to be exported by the entry point memory.d.ts
-    //
     // (undocumented)
     metadata: Json;
     // (undocumented)
