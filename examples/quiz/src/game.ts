@@ -16,7 +16,9 @@ export const quiz = defineGame({
   id: 'quiz',
   name: 'Quiz',
   seats: { min: 2, max: 12 },
+  // #region options
   options: z.object({ questions: z.number().int().min(1).max(QUESTIONS.length).default(3) }),
+  // #endregion options
 
   setup: ({ options, random, seats }) => {
     const answers: Record<string, Answer> = {};
@@ -30,6 +32,7 @@ export const quiz = defineGame({
   },
 
   phases: {
+    // #region question
     question: {
       rounds: {
         durationMs: QUESTION_MS,
@@ -62,6 +65,8 @@ export const quiz = defineGame({
         },
       },
     },
+    // #endregion question
+    // #region reveal
     reveal: {
       onEnter: ({ ctx }) => {
         ctx.timers.after('next', REVEAL_MS, 'nextQuestion');
@@ -84,8 +89,10 @@ export const quiz = defineGame({
         },
       },
     },
+    // #endregion reveal
   },
 
+  // #region view
   // Until the reveal, a player sees only their own answer, and nobody sees the correct one.
   view: ({ state, viewer, ctx }) => {
     const question = QUESTIONS[state.order[state.current]!]!;
@@ -104,4 +111,5 @@ export const quiz = defineGame({
       scores: state.scores,
     };
   },
+  // #endregion view
 });

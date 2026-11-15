@@ -1,11 +1,11 @@
 ---
 title: 'Quiz: round-based play'
 description: 'Build a quiz where everyone answers at once against a timer, and nobody sees the answers until the reveal.'
-todo: "Phases (question, reveal), rounds with durationMs and closeWhen, once actions, timers, and a view that hides other players' answers until the reveal. Code from examples/quiz."
 sidebar:
   order: 2
 ---
 
+import Snippet from '../../../components/Snippet.astro';
 import WhatYoullBuild from '../../../components/WhatYoullBuild.astro';
 
 <WhatYoullBuild time="30 minutes" example="quiz">
@@ -16,6 +16,124 @@ import WhatYoullBuild from '../../../components/WhatYoullBuild.astro';
 
 </WhatYoullBuild>
 
-{/* TODO: write this tutorial. Delete `todo:` in the frontmatter when it is done. */}
+In [tic-tac-toe](/tutorials/tic-tac-toe/) players took turns. Here everyone acts at the same
+time, inside a window that closes on a timer. Project setup, serving and the React basics are
+the same as there, so this page only covers what is new. The finished code is in
+`examples/quiz/`.
 
-Build a quiz where everyone answers at once against a timer, and nobody sees the answers until the reveal.
+## Options
+
+A game can take options when a table is created. They are a schema, so a bad value is
+rejected before `setup` runs, and `setup` receives the parsed result.
+
+<Snippet file="examples/quiz/src/game.ts" region="options" />
+
+The lobby passes `{ questions: 5 }` to `client.createTable`. `setup` uses `random.shuffle`
+to pick that many questions, so the order is seeded and replayable.
+
+## Phases and rounds
+
+The quiz alternates between two phases: `question` and `reveal`. The `question` phase uses
+**rounds**, the model for simultaneous play. A round opens on entering the phase, collects
+one submission from each seated player, and closes.
+
+<Snippet file="examples/quiz/src/game.ts" region="question" />
+
+- `durationMs` gives the round a deadline. `closeWhen: 'all-submitted'` closes it early as
+  soon as every participant has submitted, or at the deadline, whichever comes first.
+- `participants` are the seats occupied when the round opened. Someone who sits down
+  mid-question waits for the next one.
+- An action with `once: true` is a submission. A second call from the same seat is rejected
+  with `ALREADY_SUBMITTED` before `run` executes. A call from a non-participant gets
+  `NOT_PARTICIPANT`, and one after the close gets `ROUND_CLOSED`.
+- `onOpen` resets the answers and records the open time. `onClose` runs exactly once per
+  round: it scores the answers and moves to `reveal`.
+
+`ctx.now()` is the recorded clock, constant for the whole action, so the scoring is
+deterministic and replays exactly. Answers arrive in any order, but never at the same
+instant: the table runs them one at a time.
+
+Rounds do not reopen by themselves. Here `onClose` changes phase, which opens a fresh round
+when the next question starts. See [Turns and rounds](/concepts/turns-and-rounds/) for the
+full model.
+
+## Timers
+
+The `reveal` phase shows the answer for five seconds, then asks the next question.
+
+<Snippet file="examples/quiz/src/game.ts" region="reveal" />
+
+`ctx.timers.after(name, ms, action)` schedules an action to run later. The action here is
+`internal: true`, so the timer and the engine can run it but a client calling it gets
+`ACTION_NOT_ALLOWED`. Timers live in the table's state, so they survive a server restart.
+Pass `{ visible: true }` as the last argument and the deadline appears in `meta.timers`, so
+a client can show a countdown. The quiz does not need it, because the question round already
+publishes its deadline in `meta.round.deadline`. More in
+[Timers and turn clocks](/how-to/timers-and-turn-clocks/).
+
+The last `nextQuestion` calls `ctx.end` with the scores and the winning seats, which ends
+the table.
+
+## Hiding answers until the reveal
+
+Every client gets its own view of the state, built by `view`. State stays on the server, so
+hiding something is a matter of not putting it in the view.
+
+<Snippet file="examples/quiz/src/game.ts" region="view" />
+
+During a question each player sees only their own choice, and `correct` is `null` for
+everyone, spectators included. In the `reveal` phase, and once the game has ended, the view
+includes every answer and the correct choice. The question's `answer` field never leaves the
+server before then. See [Views and sync](/concepts/views-and-sync/) and
+[Hidden information](/how-to/hidden-information/).
+
+## Test with a fake clock
+
+`createTestTable` runs the game without a server, with a clock you control. `t.advance(ms)`
+moves it forward and fires any timer that falls due, in order.
+
+<Snippet file="examples/quiz/test/game.test.ts" region="clock" />
+
+Seat 0 answers at time zero, seat 1 half way through, and seat 2 never answers, so the round
+closes at the deadline. The scores 1000 and 750 follow from the recorded times. Two more
+tests cover the rest.
+
+<Snippet file="examples/quiz/test/game.test.ts" region="hidden" />
+
+<Snippet file="examples/quiz/test/game.test.ts" region="once" />
+
+`t.viewOf(seat)` returns what that player would see, and `t.meta.round` is the same round
+data a client receives. The last test in the file ends with `t.verifyReplay()`, which
+replays the whole recorded game and checks it ends in the same state. More in
+[Testing games](/how-to/testing-games/).
+
+## The countdown
+
+The server sends a deadline, not a number of seconds left, so every client counts down
+against the same moment. `useServerTime` returns the current time as the server sees it, and
+re-renders on an interval.
+
+<Snippet file="examples/quiz/web/App.tsx" region="server-time" />
+
+<Snippet file="examples/quiz/web/App.tsx" region="countdown" />
+
+`meta.round.submitted` lists the seats that have answered, which is how the UI shows
+"answered" or "thinking" next to each player without revealing what they chose. The answer
+buttons call `act('answer', { choice })`, and `ALREADY_SUBMITTED` and `ROUND_CLOSED` errors
+arrive in `actionError`, where the example maps them to friendly messages.
+
+## Run it
+
+```sh
+pnpm --filter @shoehive-examples/quiz build:web
+pnpm --filter @shoehive-examples/quiz start
+```
+
+Open http://localhost:3102 in two browser windows, one of them private, as in the
+[quick start](/start/quick-start/).
+
+## Next
+
+- [Turns vs rounds](/how-to/turns-vs-rounds/): choosing the model for each phase.
+- [Phases](/how-to/phases/): more on `onEnter`, `onExit` and moving between phases.
+- [Blackjack](/tutorials/blackjack/): a game that mixes both models and handles money.

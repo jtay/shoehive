@@ -20,6 +20,7 @@ describe('quiz', () => {
     });
   });
 
+  // #region hidden
   it('hides answers until the reveal, then shows everything', async () => {
     const { t, correct } = await table();
     await t.act(0, 'answer', { choice: correct() });
@@ -34,7 +35,9 @@ describe('quiz', () => {
     expect(t.viewOf(1).correct).toBe(correct());
     expect(Object.keys(t.viewOf(1).answers)).toHaveLength(3);
   });
+  // #endregion hidden
 
+  // #region clock
   it('scores faster correct answers higher, using the recorded clock', async () => {
     const { t, correct } = await table();
     await t.act(0, 'answer', { choice: correct() });
@@ -43,7 +46,9 @@ describe('quiz', () => {
     await t.advance(QUESTION_MS / 2); // seat 2 never answers; the round times out
     expect(t.state.scores.slice(0, 3)).toEqual([1000, 750, 0]);
   });
+  // #endregion clock
 
+  // #region once
   it('one answer per player per question', async () => {
     const { t } = await table();
     await t.act(0, 'answer', { choice: 0 });
@@ -51,6 +56,7 @@ describe('quiz', () => {
       code: 'ALREADY_SUBMITTED',
     });
   });
+  // #endregion once
 
   it('plays through every question and ends with the winners', async () => {
     const { t, correct } = await table();

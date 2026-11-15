@@ -137,7 +137,9 @@ function Lobby(): ReactNode {
 function TableScreen({ tableId }: { tableId: string }): ReactNode {
   const { status, error, view, meta, seats, mySeat, pending, actionError, act, sit } =
     useTable<Quiz>(tableId);
+  // #region server-time
   const now = useServerTime(250);
+  // #endregion server-time
 
   if (status === 'error') {
     return (
@@ -163,10 +165,12 @@ function TableScreen({ tableId }: { tableId: string }): ReactNode {
   const answers: Partial<Record<string, number>> = view.answers;
   const submitted = new Set(meta.round?.submitted ?? []);
   const myAnswer = mySeat === null ? undefined : answers[String(mySeat)];
+  // #region countdown
   const secondsLeft =
     asking && meta.round?.deadline
       ? Math.max(0, Math.ceil((meta.round.deadline - now) / 1000))
       : null;
+  // #endregion countdown
   const occupied = seats.flatMap((seat, i) =>
     seat.player ? [{ seat: i, player: seat.player, connected: seat.connected }] : [],
   );
