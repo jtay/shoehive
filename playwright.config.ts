@@ -7,6 +7,7 @@ const examples = [
   { name: 'tic-tac-toe', port: 3101 },
   { name: 'quiz', port: 3102 },
   { name: 'blackjack', port: 3103 },
+  { name: 'holdem', port: 3104 },
 ] as const;
 
 export default defineConfig({
