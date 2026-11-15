@@ -51,14 +51,29 @@ export type ShoehiveProviderProps = { children?: ReactNode } & (
  */
 export function ShoehiveProvider(props: ShoehiveProviderProps): ReactNode {
   const { children } = props;
-  const [owned] = useState(() => (props.client ? null : createClient(props as ClientOptions)));
-  const client = props.client ?? owned!;
-  useEffect(
-    () => () => {
-      owned?.close();
-    },
-    [owned],
+  // StrictMode runs this initializer twice and discards one result, so the client must
+  // not connect here (autoConnect: false); the effect below connects it.
+  const [owned] = useState(() =>
+    props.client ? null : createClient({ ...(props as ClientOptions), autoConnect: false }),
   );
+  const client = props.client ?? owned!;
+  const autoConnect = props.client ? false : (props as ClientOptions).autoConnect !== false;
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!owned) return;
+    // StrictMode unmounts and remounts effects once in development: cancel the close
+    // scheduled by that first cleanup instead of tearing the connection down.
+    if (closeTimer.current !== null) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+    if (autoConnect) void owned.connect().catch(() => undefined);
+    return () => {
+      closeTimer.current = setTimeout(() => {
+        owned.close();
+      }, 0);
+    };
+  }, [owned, autoConnect]);
   return createElement(ClientContext.Provider, { value: client }, children);
 }
 
@@ -89,11 +104,16 @@ export function useLobby(): LobbyDocument | null {
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     let cancelled = false;
-    void client.lobby().then((lobby) => {
-      if (cancelled) return;
-      setDoc(lobby.doc);
-      unsubscribe = lobby.subscribe(setDoc);
-    });
+    client.lobby().then(
+      (lobby) => {
+        if (cancelled) return;
+        setDoc(lobby.doc);
+        unsubscribe = lobby.subscribe(setDoc);
+      },
+      () => {
+        // The connection failed or closed; the next mount retries.
+      },
+    );
     return () => {
       cancelled = true;
       unsubscribe?.();
@@ -115,15 +135,21 @@ export interface UseTable<G extends AnyGame> {
   mySeat: number | null;
   /** Number of actions awaiting their ack. */
   pending: number;
-  /** The last action error (cleared by the next successful action). */
+  /** The last error from act, sit, stand or leave (cleared by the next success). */
   actionError: Error | null;
+  /**
+   * Runs an action. Never rejects: on failure it resolves `null` and sets
+   * `actionError`. Use `table.act()` directly if you want a rejecting promise.
+   */
   act: <K extends keyof GameActions<G> & string>(
     name: K,
     ...input: ActArgs<G, K>
-  ) => Promise<ActResult>;
-  sit: (seat?: number) => Promise<number>;
-  stand: (seat?: number) => Promise<void>;
-  leave: () => Promise<void>;
+  ) => Promise<ActResult | null>;
+  /** Takes a seat: resolves the seat number, or `null` on failure (see `actionError`). */
+  sit: (seat?: number) => Promise<number | null>;
+  /** Resolves `true` on success, `false` on failure (see `actionError`). */
+  stand: (seat?: number) => Promise<boolean>;
+  leave: () => Promise<boolean>;
 }
 
 const noopSubscribe = (): (() => void) => () => undefined;
@@ -183,28 +209,45 @@ export function useTable<G extends AnyGame = AnyGame>(
     return tableRef.current;
   };
 
+  /** Runs `task` with pending tracking; errors go to `actionError` instead of rejecting. */
+  const track = useCallback(async <T>(task: () => Promise<T>): Promise<T | null> => {
+    setPending((n) => n + 1);
+    try {
+      const result = await task();
+      setActionError(null);
+      return result;
+    } catch (err) {
+      setActionError(err instanceof Error ? err : new Error(String(err)));
+      return null;
+    } finally {
+      setPending((n) => n - 1);
+    }
+  }, []);
+
   const act = useCallback(
-    async <K extends keyof GameActions<G> & string>(
+    <K extends keyof GameActions<G> & string>(
       name: K,
       ...input: ActArgs<G, K>
-    ): Promise<ActResult> => {
-      setPending((n) => n + 1);
-      try {
-        const result = await requireTable().act(name, ...input);
-        setActionError(null);
-        return result;
-      } catch (err) {
-        setActionError(err instanceof Error ? err : new Error(String(err)));
-        throw err;
-      } finally {
-        setPending((n) => n - 1);
-      }
-    },
-    [],
+    ): Promise<ActResult | null> => track(() => requireTable().act(name, ...input)),
+    [track],
   );
-  const sit = useCallback((seat?: number) => requireTable().sit(seat), []);
-  const stand = useCallback((seat?: number) => requireTable().stand(seat), []);
-  const leave = useCallback(() => requireTable().leave(), []);
+  const sit = useCallback((seat?: number) => track(() => requireTable().sit(seat)), [track]);
+  const stand = useCallback(
+    async (seat?: number): Promise<boolean> =>
+      (await track(async () => {
+        await requireTable().stand(seat);
+        return true;
+      })) ?? false,
+    [track],
+  );
+  const leave = useCallback(
+    async (): Promise<boolean> =>
+      (await track(async () => {
+        await requireTable().leave();
+        return true;
+      })) ?? false,
+    [track],
+  );
 
   return {
     status: table?.closedReason ? 'closed' : status,

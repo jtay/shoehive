@@ -127,6 +127,38 @@ describe('shoehive/react', () => {
     });
   });
 
+  it('a provider with options is StrictMode-safe: one socket, and tables join', async () => {
+    server = createServer({ games: [ticTacToe], secret: SECRET, logger: silentLogger });
+    const s = server;
+    let sockets = 0;
+    const connect = () => {
+      sockets += 1;
+      return s.connect() as unknown as WebSocketLike;
+    };
+    const seed = makeClient();
+    const tableId = await seed.createTable('tic-tac-toe');
+    const view = render(
+      h(
+        StrictMode,
+        null,
+        h(
+          ShoehiveProvider,
+          { url: 'memory://', storage: false, connect },
+          h(Status),
+          h(Board, { tableId }),
+        ),
+      ),
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('status').textContent).toMatch(/^open/);
+    });
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /cell/ })).toHaveLength(9);
+    });
+    expect(sockets).toBe(1);
+    view.unmount();
+  });
+
   it('a provider with options creates and closes its own client', async () => {
     server = createServer({ games: [ticTacToe], secret: SECRET, logger: silentLogger });
     const s = server;

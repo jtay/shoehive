@@ -152,6 +152,8 @@ export class TableHandle<G extends AnyGame = AnyGame> {
     doc: TableDocument | null;
     // (undocumented)
     readonly id: string;
+    // @internal
+    joining: number;
     leave(): Promise<void>;
     // (undocumented)
     get meta(): TableMeta;

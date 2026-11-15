@@ -134,6 +134,8 @@ export class TableHandle<G extends AnyGame = AnyGame> {
   closedReason: string | null = null;
   /** The role this handle joined with, restored on reconnect. */
   role: 'player' | 'spectator';
+  /** @internal `join()` calls in flight for this handle. */
+  joining = 0;
 
   /** @internal */
   constructor(
@@ -377,11 +379,23 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
   /** Subscribes to the lobby. */
   async lobby(): Promise<LobbyHandle> {
     if (!this.lobbyHandle) {
-      this.lobbyHandle = new LobbyHandle(this);
-      await this.request('lobby.sub');
+      const handle = new LobbyHandle(this);
+      this.lobbyHandle = handle;
+      this.lobbySubscribed = this.request('lobby.sub').then(
+        () => undefined,
+        (error: unknown) => {
+          // Do not cache a handle that never subscribed: the next call retries.
+          if (this.lobbyHandle === handle) this.lobbyHandle = null;
+          throw error;
+        },
+      );
     }
-    return this.lobbyHandle;
+    const handle = this.lobbyHandle;
+    await this.lobbySubscribed;
+    return handle;
   }
+
+  private lobbySubscribed: Promise<void> = Promise.resolve();
 
   /** Creates a table and returns its id. Does not join it. */
   async createTable(game: Games[number]['id'], options?: Json): Promise<string> {
@@ -404,11 +418,18 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
       handle = new TableHandle<G>(tableId, this, options.as ?? 'player');
       this.tables.set(tableId, handle);
     }
+    handle.joining += 1;
     try {
       await this.request('table.join', { table: tableId, as: options.as ?? 'player' });
     } catch (error) {
-      this.tables.delete(tableId);
+      // Drop the handle only if nothing else is using it: another join() of the same
+      // table may already be waiting on it (for example after a reconnect).
+      if (handle.joining === 1 && handle.doc === null && this.tables.get(tableId) === handle) {
+        this.tables.delete(tableId);
+      }
       throw error;
+    } finally {
+      handle.joining -= 1;
     }
     await handle.ready();
     return handle;

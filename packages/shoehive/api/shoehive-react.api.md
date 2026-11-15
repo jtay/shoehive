@@ -36,15 +36,14 @@ export function useServerTime(intervalMs?: number): number;
 
 // @public (undocumented)
 export interface UseTable<G extends AnyGame> {
-    // (undocumented)
-    act: <K extends keyof GameActions<G> & string>(name: K, ...input: ActArgs<G, K>) => Promise<ActResult>;
+    act: <K extends keyof GameActions<G> & string>(name: K, ...input: ActArgs<G, K>) => Promise<ActResult | null>;
     actionError: Error | null;
     // (undocumented)
     doc: TableDocument | null;
     // (undocumented)
     error: Error | null;
     // (undocumented)
-    leave: () => Promise<void>;
+    leave: () => Promise<boolean>;
     // (undocumented)
     meta: TableMeta | null;
     // (undocumented)
@@ -52,10 +51,8 @@ export interface UseTable<G extends AnyGame> {
     pending: number;
     // (undocumented)
     seats: SeatInfo[];
-    // (undocumented)
-    sit: (seat?: number) => Promise<number>;
-    // (undocumented)
-    stand: (seat?: number) => Promise<void>;
+    sit: (seat?: number) => Promise<number | null>;
+    stand: (seat?: number) => Promise<boolean>;
     status: 'idle' | 'joining' | 'ready' | 'error' | 'closed';
     // (undocumented)
     table: TableHandle<G> | null;

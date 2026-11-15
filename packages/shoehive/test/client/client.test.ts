@@ -175,3 +175,27 @@ describe('client types', () => {
     expectTypeOf(typeOnly).toBeFunction();
   });
 });
+
+describe('client regressions (found while building the example UIs)', () => {
+  it('a failed join() does not break a second join() of the same table', async () => {
+    const { client } = await setup('memory');
+    const ada = client();
+    const tableId = await ada.createTable('tic-tac-toe');
+    const first = ada.join(tableId);
+    ada.close(); // the first join fails with CLIENT_CLOSED...
+    const second = ada.join(tableId); // ...while a second join reuses its handle
+    await expect(first).rejects.toMatchObject({ code: 'CLIENT_CLOSED' });
+    const table = await second;
+    expect(table.doc).not.toBeNull();
+  });
+
+  it('a failed lobby() can be retried', async () => {
+    const { client } = await setup('memory');
+    const ada = client();
+    const failed = ada.lobby();
+    ada.close();
+    await expect(failed).rejects.toMatchObject({ code: 'CLIENT_CLOSED' });
+    const lobby = await ada.lobby();
+    await until(() => lobby.doc !== null, 'lobby snapshot after retry');
+  });
+});
