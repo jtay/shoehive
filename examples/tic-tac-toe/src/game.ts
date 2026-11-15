@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 export type Mark = 'X' | 'O';
 
+// #region winner
 const LINES = [
   [0, 1, 2],
   [3, 4, 5],
@@ -21,6 +22,7 @@ export function winnerOf(board: readonly (Mark | null)[]): Mark | 'draw' | null 
   }
   return board.every((cell) => cell !== null) ? 'draw' : null;
 }
+// #endregion winner
 
 // #region game
 export const ticTacToe = defineGame({
@@ -36,6 +38,7 @@ export const ticTacToe = defineGame({
   turns: { order: 'round-robin' },
 
   actions: {
+    // #region place
     place: {
       input: z.object({ cell: z.number().int().min(0).max(8) }),
       run({ state, seat, input, ctx }) {
@@ -47,6 +50,7 @@ export const ticTacToe = defineGame({
         else ctx.turn.next();
       },
     },
+    // #endregion place
   },
 });
 // #endregion game

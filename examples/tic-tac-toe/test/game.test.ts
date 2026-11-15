@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ticTacToe } from '../src/game';
 
 describe('tic-tac-toe', () => {
+  // #region out-of-turn
   it('rejects a move out of turn', async () => {
     const t = await createTestTable(ticTacToe, { players: 2 });
     await expect(t.act(1, 'place', { cell: 0 })).rejects.toMatchObject({
@@ -11,7 +12,9 @@ describe('tic-tac-toe', () => {
     });
     expect(t.state.board[0]).toBeNull();
   });
+  // #endregion out-of-turn
 
+  // #region win
   it('X wins on the diagonal and the table ends', async () => {
     const t = await createTestTable(ticTacToe, { players: 2 });
     for (const [seat, cell] of [
@@ -29,6 +32,7 @@ describe('tic-tac-toe', () => {
     await expect(t.act(1, 'place', { cell: 3 })).rejects.toMatchObject({ code: 'TABLE_ENDED' });
     await t.verifyReplay();
   });
+  // #endregion win
 
   it('validates input with the schema', async () => {
     const t = await createTestTable(ticTacToe, { players: 2 });

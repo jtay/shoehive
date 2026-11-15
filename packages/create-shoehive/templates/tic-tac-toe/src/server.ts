@@ -20,6 +20,7 @@ const PORT = Number(process.env.PORT ?? 3000);
 const WEB_ROOT = fileURLToPath(new URL('../dist-web', import.meta.url));
 const dev = process.env.NODE_ENV !== 'production';
 
+// #region create-server
 const shoehive = createServer({
   games: [ticTacToe],
   // Signs guest resume tokens, so players keep their seats across reloads and restarts.
@@ -31,6 +32,7 @@ const shoehive = createServer({
   // Under `npm run dev` the token stays the same when this server restarts.
   devtools: dev && { enabled: true, token: process.env.SHOEHIVE_DEVTOOLS_TOKEN },
 });
+// #endregion create-server
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -101,7 +103,9 @@ const http = createHttpServer((req, res) => {
   });
 });
 
+// #region attach
 await shoehive.attach(http);
+// #endregion attach
 http.listen(PORT, () => {
   // Under `npm run dev`, vite.config.ts sets WEB_URL to the Vite dev server's address.
   const url = process.env.WEB_URL ?? `http://localhost:${String(PORT)}`;

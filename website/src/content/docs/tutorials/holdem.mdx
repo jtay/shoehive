@@ -1,12 +1,12 @@
 ---
 title: "Texas Hold'em: private hands and side pots"
 description: "Build Texas Hold'em with private hands, betting rounds, side pots and a showdown reveal."
-todo: 'Private hole cards per seat, betting rounds and turn order, side pots and payouts from shoehive/cards, the poker hand evaluator, and revealing hands at showdown. Code from examples/holdem.'
 sidebar:
   order: 4
 ---
 
 import WhatYoullBuild from '../../../components/WhatYoullBuild.astro';
+import Snippet from '../../../components/Snippet.astro';
 
 <WhatYoullBuild time="60 minutes" example="holdem">
 
@@ -16,6 +16,165 @@ import WhatYoullBuild from '../../../components/WhatYoullBuild.astro';
 
 </WhatYoullBuild>
 
-{/* TODO: write this tutorial. Delete `todo:` in the frontmatter when it is done. */}
+This tutorial assumes you finished [blackjack](/tutorials/blackjack/), so hidden cards, phases,
+turn timers and the wallet are not explained again. Hold'em adds three things: many hands that
+stay private until a showdown, betting rules that must be exact, and pots that split when
+players are all-in. The full code is in `examples/holdem/src/game.ts`.
 
-Build Texas Hold'em with private hands, betting rounds, side pots and a showdown reveal.
+## Options and state
+
+The game is a no-limit cash game. The options are validated by a zod schema, so a table with
+`bigBlind: 5` and `smallBlind: 10` fails with `INVALID_OPTIONS` before it exists.
+
+<Snippet file="examples/holdem/src/game.ts" region="options" />
+
+Each seat keeps its own cards and chips. The state holds the pieces of the hand that are never
+sent anywhere, such as `deck`.
+
+<Snippet file="examples/holdem/src/game.ts" region="seat" />
+
+`bet` is what a seat has put in on this street and `total` is what it has put in this hand.
+Everything the pot needs is derived from `total`, so there is no separate pot counter to keep
+in step.
+
+## Deal the hand
+
+`startHand` moves the button, posts the blinds, shuffles with `ctx.random` and deals two cards
+to each seat, starting at the small blind. Heads-up, the button is the small blind. Then it
+calls `ctx.phase.go('preflop')`.
+
+<Snippet file="examples/holdem/src/game.ts" region="deal" title="" />
+
+Using `ctx.random` is what makes a hand replayable: the same seed and the same actions give
+the same cards. The deck is plain state, and the next section is why that is safe.
+
+## Private hands in the view
+
+A viewer sees their own hole cards and nothing else, until a hand reaches showdown. Two helpers
+from `shoehive/cards` do the work. `seatView` shows the real value for the seats the viewer
+holds and calls your function for every other seat. `revealTo(cards, visible)` returns the
+cards, or one `null` per card when `visible` is false, so everyone can still count them.
+
+<Snippet file="examples/holdem/src/game.ts" region="view" />
+
+Three details matter:
+
+- Spectators hold no seat, so they only ever get the `revealTo` branch.
+- `shown` is set at showdown for every hand that was still live. A folded hand stays hidden from
+  everyone but its owner, even after the hand ends.
+- `deck` is not in the view at all, and neither is anything else you did not list. The view is
+  an allow-list. See [hidden information](/how-to/hidden-information/) and the
+  [security model](/concepts/security-model/).
+
+## Betting rounds and turn order
+
+The four betting streets share one set of actions and one turn config. The turn order is
+computed from state, not stored: `turns.first` returns the first seat that still has to act,
+and `skip` passes over folded and all-in seats.
+
+<Snippet file="examples/holdem/src/game.ts" region="turns" />
+
+`timeoutMs` reads the `turnMs` option, so each table can pick its own clock. When it fires, the
+engine runs the internal `timeout` action: check if that is legal, otherwise fold. The
+deadline is in `meta.turn.deadline`, which clients use to draw a countdown. See
+[timers and turn clocks](/how-to/timers-and-turn-clocks/).
+
+Each street names who starts. Preflop it is the seat after the big blind, later streets the
+seat after the button. `onEnter` deals the street's cards and ends the street at once if
+nobody can bet, which runs the board out when everyone is all-in.
+
+<Snippet file="examples/holdem/src/game.ts" region="phases" />
+
+### Raise to, and the minimum raise
+
+`bet` and `raise` are the same action, and `amount` is the total the seat's bet becomes for the
+street ("raise to"), not the increment. That is how players say it and how a UI slider
+works. It also makes the checks short.
+
+<Snippet file="examples/holdem/src/game.ts" region="raise" />
+
+A raise must add at least the last full raise (`lastRaise`), or be exactly all-in. A full
+raise reopens the betting by clearing `acted` on every seat. A short all-in does not, so a
+seat that already acted may only call or fold and gets `RAISE_NOT_ALLOWED`. `reject` carries
+details such as `min` and `max`, so the UI can say why. The view's `minRaiseTo` is the same
+number, ready for a slider.
+
+## Side pots and the showdown
+
+When one player is all-in for less, the others keep betting into a side pot the short stack
+cannot win. `splitPots(contributions, folded)` turns what each seat put in into pots, main pot
+first, each with its `eligible` seats.
+
+```ts
+import { splitPots } from 'shoehive/cards';
+
+// Seat 0 is all-in for 50, seats 1 and 2 put in 200, seat 3 folded after 20.
+const pots = splitPots([50, 200, 200, 20], [false, false, false, true]);
+// [{ amount: 170, eligible: [0, 1, 2] }, { amount: 300, eligible: [1, 2] }]
+```
+
+`awardPots(pots, scores, { firstSeat })` pays them. `scores[seat]` is the seat's hand strength,
+higher wins, `null` for a seat with no hand. Ties split evenly, and odd chips go one at a time
+to the tied winners starting at `firstSeat`. Passing the seat left of the button gives the
+standard rule. Hands are scored with `evaluateHand(cards).rank` on the two hole cards plus the
+board. It finds the best five of 5 to 7 cards, and `.description` gives text such as "Two pair,
+Aces and Sevens".
+
+<Snippet file="examples/holdem/src/game.ts" region="settle" />
+
+Notes on `settle`:
+
+- Chips never leave the table here: each pot is awarded separately so the result can list the
+  pots, winners and descriptions for the UI.
+- When everyone else folded, the last seat gets any score and nobody is marked `shown`, so no
+  cards are revealed.
+- Uncalled chips (the part of the top bet nobody matched) are returned in `endStreet`, before
+  this runs.
+- The `nextHand` timer is visible, so clients can show a countdown to the next deal.
+
+## Buy-in and cash-out
+
+At the table chips are numbers in state. The wallet sees only two moments: a player buys in,
+and a player cashes out. When a player sits, the game reserves `buyIn` and commits it in the
+same entry. If the reserve is refused, the seat stays at 0 chips and sits out until a `rebuy`
+action succeeds.
+
+<Snippet file="examples/holdem/src/game.ts" region="buyin" />
+
+Leaving is the other half. `onStand` credits the whole remaining stack, then folds the seat if
+it was in the hand. Chips already in the pot stay there.
+
+<Snippet file="examples/holdem/src/game.ts" region="stand" />
+
+Every wallet key includes `state.ledger`, a counter that only goes up, so a seat that stands and
+sits again never reuses a key. Credit keys must be unique for good, because a repeated key is
+treated as a duplicate and the second payout is lost. Read
+[wallets and real-money safety](/how-to/wallets-and-real-money-safety/) before you use a real
+wallet.
+
+## Test it with random play
+
+Hand-written tests cover the rules (blinds, minimum raises, side pots with the odd chip, a
+player who stands mid-hand). The test that finds the bugs you did not think of plays random
+legal moves and checks two invariants after every step:
+
+- **Chip conservation.** Wallet balances plus chips at the table always equal what the players
+  started with.
+- **No leaks.** No view, spectators included, contains a card that is in the deck or in a hand
+  the viewer may not see. The check searches the whole serialized view for the card text, so a
+  card hidden in the wrong field is caught too.
+
+<Snippet file="examples/holdem/test/game.test.ts" region="invariants" />
+
+The session also times out turns, makes players stand and sit mid-hand, rebuys busted seats and
+calls `verifyReplay` at the end. Over 200 hands it exercises side pots and showdowns that no
+one would script by hand. See [testing games](/how-to/testing-games/) for the tools.
+
+## Where to go next
+
+- Run the example with `pnpm --filter @shoehive-examples/holdem dev` and open two browsers to see the private
+  hands in the UI.
+- Read [turns and rounds](/concepts/turns-and-rounds/) for how `turns.first`, `skip` and
+  `order` fit together.
+- Try adding a feature: a straddle, a rake taken in `settle`, or a table that deals the board
+  twice when everyone is all-in.

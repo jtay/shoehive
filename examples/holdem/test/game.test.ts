@@ -458,6 +458,7 @@ function mulberry32(seed: number): () => number {
   };
 }
 
+// #region invariants
 /** Asserts chips are conserved and no view leaks a hidden card. */
 async function checkInvariants(t: Table, players: Set<string>): Promise<void> {
   const state = t.state;
@@ -486,6 +487,7 @@ async function checkInvariants(t: Table, players: Set<string>): Promise<void> {
     });
   }
 }
+// #endregion invariants
 
 async function randomSession(
   seed: string,
