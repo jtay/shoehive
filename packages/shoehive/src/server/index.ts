@@ -21,7 +21,14 @@ export {
 } from './server';
 export type { Connection, MemorySocket, UpgradeRequest } from './transport';
 export { consoleLogger, silentLogger, type Logger } from './logger';
-export { MemoryWallet, type Amount, type ReserveResult, type Wallet } from './wallet';
+export {
+  MemoryWallet,
+  type Amount,
+  type ReserveResult,
+  type Wallet,
+  type WalletOp,
+  type WalletReservation,
+} from '../core/wallet';
 export {
   StoreConflictError,
   type SessionRecord,

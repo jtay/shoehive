@@ -150,8 +150,8 @@
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json",
     "check:package": "publint --strict && attw --pack . --profile node16 && node scripts/check-exports.mjs && pnpm api:check",
-    "api:update": "api-extractor run --local -c api-extractor.json && api-extractor run --local -c api-extractor.testing.json && api-extractor run --local -c api-extractor.server.json && api-extractor run --local -c api-extractor.store-memory.json && api-extractor run --local -c api-extractor.client.json && api-extractor run --local -c api-extractor.react.json",
-    "api:check": "api-extractor run -c api-extractor.json && api-extractor run -c api-extractor.testing.json && api-extractor run -c api-extractor.server.json && api-extractor run -c api-extractor.store-memory.json && api-extractor run -c api-extractor.client.json && api-extractor run -c api-extractor.react.json"
+    "api:update": "api-extractor run --local -c api-extractor.json && api-extractor run --local -c api-extractor.testing.json && api-extractor run --local -c api-extractor.server.json && api-extractor run --local -c api-extractor.store-memory.json && api-extractor run --local -c api-extractor.client.json && api-extractor run --local -c api-extractor.react.json && api-extractor run --local -c api-extractor.cards.json",
+    "api:check": "api-extractor run -c api-extractor.json && api-extractor run -c api-extractor.testing.json && api-extractor run -c api-extractor.server.json && api-extractor run -c api-extractor.store-memory.json && api-extractor run -c api-extractor.client.json && api-extractor run -c api-extractor.react.json && api-extractor run -c api-extractor.cards.json"
   },
   "publishConfig": {
     "access": "public",

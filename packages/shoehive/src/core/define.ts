@@ -5,6 +5,7 @@
 import type { Json } from './json';
 import type { Random } from './random';
 import type { StandardSchemaV1 } from './standard-schema';
+import type { CtxWallet } from './wallet';
 
 /** Public information about one seat (protocol section 6.1). */
 export interface SeatInfo {
@@ -83,9 +84,17 @@ export interface CtxRound extends RoundInfo {
 export interface CtxTimers {
   /**
    * Schedules the action `action` (normally `internal: true`) to run `ms` after the
-   * current entry's time. Reusing `name` replaces the timer.
+   * current entry's time. Reusing `name` replaces the timer. With `{ visible: true }`
+   * its deadline appears in `meta.timers[name]`, so clients can show a countdown (the
+   * action and input stay private).
    */
-  after(name: string, ms: number, action: string, input?: Json): void;
+  after(
+    name: string,
+    ms: number,
+    action: string,
+    input?: Json,
+    options?: { visible?: boolean },
+  ): void;
   cancel(name: string): void;
   has(name: string): boolean;
   /** The deadline (epoch ms) of timer `name`, or `null`. */
@@ -95,7 +104,7 @@ export interface CtxTimers {
 export type EventAudience = 'all' | 'spectators' | readonly number[];
 
 /** The engine handle available to actions and hooks (ADR 0001). */
-export interface ActionCtx<O, PN extends string> extends Omit<
+export interface ActionCtx<O, PN extends string, R = Json> extends Omit<
   ReadCtx<O>,
   'turn' | 'round' | 'phase'
 > {
@@ -108,26 +117,33 @@ export interface ActionCtx<O, PN extends string> extends Omit<
   /** Round controls. Only available in a phase (or game) with `rounds`. */
   readonly round: CtxRound;
   readonly timers: CtxTimers;
+  /** Money: reserve and balance run now; commit, release and credit after commit (ADR 0007). */
+  readonly wallet: CtxWallet;
   /** Sends an ephemeral event (not state) after this entry commits. */
   emit(name: string, payload?: Json, options?: { to?: EventAudience }): void;
   /** Starts a table created with `autoStart: false`. */
   start(): void;
-  /** Ends the table. `onEnd` runs at the end of this entry. */
-  end(result?: Json): void;
+  /**
+   * Ends the table with a result (typed and checked by the game's `result` schema, if
+   * any). `onEnd` runs at the end of this entry.
+   */
+  end(...result: Json extends R ? [result?: R] : [result: R]): void;
 }
 
-export interface HookArgs<S, O, PN extends string> {
+export interface HookArgs<S, O, PN extends string, R = Json> {
   state: S;
-  ctx: ActionCtx<O, PN>;
+  ctx: ActionCtx<O, PN, R>;
   /** The seat concerned, for seat hooks (`onSit`, `onStand`...). Otherwise `null`. */
   seat: number | null;
   /** The player concerned, for seat hooks. Otherwise `null`. */
   player: string | null;
 }
 
-export type Hook<S, O, PN extends string> = (args: HookArgs<S, O, PN>) => void | Promise<void>;
+export type Hook<S, O, PN extends string, R = Json> = (
+  args: HookArgs<S, O, PN, R>,
+) => void | Promise<void>;
 
-export interface ActionArgs<S, I, O, PN extends string> {
+export interface ActionArgs<S, I, O, PN extends string, R = Json> {
   /** A draft of the state: mutate it freely (ADR 0005). */
   state: S;
   /**
@@ -139,10 +155,10 @@ export interface ActionArgs<S, I, O, PN extends string> {
   player: string | null;
   /** The validated input (the schema's output). `undefined` without a schema. */
   input: I;
-  ctx: ActionCtx<O, PN>;
+  ctx: ActionCtx<O, PN, R>;
 }
 
-export interface ActionDef<S, I, O, PN extends string> {
+export interface ActionDef<S, I, O, PN extends string, R = Json> {
   /** Validates the action's input (any Standard Schema library). Omit for no input. */
   input?: StandardSchemaV1<unknown, I>;
   /** Only timers and the engine may run it; clients get `ACTION_NOT_ALLOWED`. */
@@ -152,7 +168,7 @@ export interface ActionDef<S, I, O, PN extends string> {
   /** May run before the table has started (for example `ready`). */
   preStart?: boolean;
   /** Returns nothing, or a JSON value sent back as the action's result. */
-  run(args: ActionArgs<S, I, O, PN>): void | Json | Promise<void | Json>;
+  run(args: ActionArgs<S, I, O, PN, R>): void | Json | Promise<void | Json>;
 }
 
 export interface TurnsConfig {
@@ -168,13 +184,13 @@ export interface TurnsConfig {
   onTimeout?: string;
 }
 
-export interface RoundsConfig<S, O, PN extends string> {
+export interface RoundsConfig<S, O, PN extends string, R = Json> {
   /** Required when `closeWhen` is `'timeout'`. */
   durationMs?: number;
   /** `'all-submitted'` closes early once every participant submitted. */
   closeWhen: 'all-submitted' | 'timeout';
-  onOpen?: Hook<S, O, PN>;
-  onClose: Hook<S, O, PN>;
+  onOpen?: Hook<S, O, PN, R>;
+  onClose: Hook<S, O, PN, R>;
 }
 
 // Inference design. TypeScript leaves an object literal out of its first inference pass
@@ -188,20 +204,20 @@ export interface RoundsConfig<S, O, PN extends string> {
 type InputOf<A, K> = K extends keyof A ? (unknown extends A[K] ? undefined : A[K]) : undefined;
 
 /** Action definitions keyed by name, with each `run` typed from its own schema. */
-export type ActionDefs<S, O, PN extends string, N extends string, A> = {
-  [K in N]: ActionDef<S, InputOf<A, K>, O, PN>;
+export type ActionDefs<S, O, PN extends string, N extends string, A, R = Json> = {
+  [K in N]: ActionDef<S, InputOf<A, K>, O, PN, R>;
 };
 
 /** The inference site for action input types: just the `input` schemas. */
 type InputSchemas<A> = { [K in keyof A]: { input?: StandardSchemaV1<unknown, A[K]> } };
 
-export interface PhaseDef<S, O, PN extends string, N extends string, A> {
+export interface PhaseDef<S, O, PN extends string, N extends string, A, R = Json> {
   /** Actions available only in this phase (in addition to top-level actions). */
-  actions?: Partial<ActionDefs<S, O, PN, N, A>>;
+  actions?: Partial<ActionDefs<S, O, PN, N, A, R>>;
   turns?: TurnsConfig;
-  rounds?: RoundsConfig<S, O, PN>;
-  onEnter?: Hook<S, O, PN>;
-  onExit?: Hook<S, O, PN>;
+  rounds?: RoundsConfig<S, O, PN, R>;
+  onEnter?: Hook<S, O, PN, R>;
+  onExit?: Hook<S, O, PN, R>;
 }
 
 export interface ViewArgs<S, O> {
@@ -226,6 +242,7 @@ export interface GameConfig<
   PAN extends string,
   P,
   V,
+  R = Json,
 > {
   /** Stable id used in the protocol, lobby and store. Lowercase, digits, `-`, `_`, `.`. */
   id: string;
@@ -243,26 +260,31 @@ export interface GameConfig<
   autoStart?: boolean;
   /** Validates table options (any Standard Schema library). */
   options?: StandardSchemaV1<unknown, O>;
+  /**
+   * Validates the result passed to `ctx.end` and types it for clients (`meta.result`).
+   * Without it, any JSON value is accepted.
+   */
+  result?: StandardSchemaV1<unknown, R>;
   /** Builds the initial state. Runs once per table. */
   setup(args: { options: O; random: Random; seats: number }): S;
   /** Actions available in every phase. */
-  actions?: ActionDefs<S, O, PN, AN, A> & InputSchemas<A>;
+  actions?: ActionDefs<S, O, PN, AN, A, R> & InputSchemas<A>;
   /** Named phases. The first one declared is the initial phase. */
-  phases?: { [K in PN]: PhaseDef<S, O, PN, PAN, K extends keyof P ? P[K] : undefined> } & {
+  phases?: { [K in PN]: PhaseDef<S, O, PN, PAN, K extends keyof P ? P[K] : undefined, R> } & {
     [K in keyof P]: { actions?: InputSchemas<P[K]> };
   };
   /** Turns for games without phases. */
   turns?: TurnsConfig;
   /** Rounds for games without phases. */
-  rounds?: RoundsConfig<S, O, PN>;
+  rounds?: RoundsConfig<S, O, PN, R>;
   /** What each viewer may see. Defaults to the full state for everyone. */
   view?(args: ViewArgs<S, O>): V;
-  onSit?: Hook<S, O, PN>;
-  onStand?: Hook<S, O, PN>;
-  onDisconnect?: Hook<S, O, PN>;
-  onReconnect?: Hook<S, O, PN>;
-  onStart?: Hook<S, O, PN>;
-  onEnd?: Hook<S, O, PN>;
+  onSit?: Hook<S, O, PN, R>;
+  onStand?: Hook<S, O, PN, R>;
+  onDisconnect?: Hook<S, O, PN, R>;
+  onReconnect?: Hook<S, O, PN, R>;
+  onStart?: Hook<S, O, PN, R>;
+  onEnd?: Hook<S, O, PN, R>;
 }
 
 declare const gameBrand: unique symbol;
@@ -280,13 +302,24 @@ type PhaseInputs<P> = UnionToIntersection<
 >;
 
 /** The type information a game carries for clients and tests. */
-export interface GameTypes<S, O, PN extends string, Actions, V> {
+export interface GameTypes<
+  S,
+  O,
+  PN extends string,
+  Actions,
+  V,
+  R = Json,
+  ID extends string = string,
+> {
+  id: ID;
   state: S;
   options: O;
   phases: PN;
   /** Every action name (top-level and in any phase) mapped to its input type. */
   actions: Actions;
   view: V;
+  /** The type of `meta.result` once the table ends. */
+  result: R;
 }
 
 /** A game returned by `defineGame`. Its brand carries the inferred types. */
@@ -299,27 +332,31 @@ export type Game<
   PAN extends string = string,
   P = unknown,
   V = unknown,
-> = GameConfig<S, O, PN, AN, A, PAN, P, V> & {
+  R = Json,
+  ID extends string = string,
+> = GameConfig<S, O, PN, AN, A, PAN, P, V, R> & {
+  readonly id: ID;
   readonly [gameBrand]: GameTypes<
     S,
     O,
     PN,
     { [K in AN | PAN]: K extends AN ? InputOf<A, K> : InputOf<PhaseInputs<P>, K> },
-    V
+    V,
+    R,
+    ID
   >;
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- `any` is required to match games of every type */
 /** Any game, for APIs that accept games of any type. */
-export type AnyGame = GameConfig<any, any, any, any, any, any, any, any> & {
-  readonly [gameBrand]: GameTypes<any, any, any, any, any>;
+export type AnyGame = GameConfig<any, any, any, any, any, any, any, any, any> & {
+  readonly [gameBrand]: GameTypes<any, any, any, any, any, any, any>;
 };
 type TypesOf<G> = G extends { readonly [gameBrand]: infer T } ? T : never;
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 /** The state type of a game. */
-export type GameState<G> =
-  TypesOf<G> extends GameTypes<infer S, unknown, string, unknown, unknown> ? S : never;
+export type GameState<G> = TypesOf<G> extends { state: infer S } ? S : never;
 /** The options type of a game. */
 export type GameOptions<G> = TypesOf<G> extends { options: infer O } ? O : never;
 /** The view type a client receives. */
@@ -328,6 +365,10 @@ export type GameView<G> = TypesOf<G> extends { view: infer V } ? V : never;
 export type GameActions<G> = TypesOf<G> extends { actions: infer A } ? A : never;
 /** The phase names of a game. */
 export type GamePhases<G> = TypesOf<G> extends { phases: infer PN } ? PN : never;
+/** The result type of a game (`meta.result` once ended): its `result` schema's output. */
+export type GameResult<G> = TypesOf<G> extends { result: infer R } ? R : never;
+/** The literal id of a game (`'tic-tac-toe'`), or `string` if it was widened. */
+export type GameId<G> = TypesOf<G> extends { id: infer ID } ? ID : never;
 
 const GAME_ID = /^[a-z0-9][a-z0-9._-]*$/;
 const RESERVED_TIMERS = new Set(['__round']);
@@ -357,9 +398,13 @@ export function defineGame<
   PAN extends string = never,
   P = unknown,
   V = S,
->(config: GameConfig<S, O, PN, AN, A, PAN, P, V>): Game<S, O, PN, AN, A, PAN, P, V> {
+  R = Json,
+  const ID extends string = string,
+>(
+  config: GameConfig<S, O, PN, AN, A, PAN, P, V, R> & { id: ID },
+): Game<S, O, PN, AN, A, PAN, P, V, R, ID> {
   validateConfig(config as unknown as LooseConfig);
-  return Object.freeze(config) as Game<S, O, PN, AN, A, PAN, P, V>;
+  return Object.freeze(config) as unknown as Game<S, O, PN, AN, A, PAN, P, V, R, ID>;
 }
 
 type LooseConfig = GameConfig<unknown, unknown, string, string, unknown, string, unknown, unknown>;

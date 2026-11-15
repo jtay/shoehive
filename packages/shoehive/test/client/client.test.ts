@@ -75,7 +75,7 @@ describe.each(['memory', 'ws'] as const)('shoehive/client over %s', (transport) 
     expect((await ada.connect()).player.name).toBe('Ada');
     expect(ada.status).toBe('open');
 
-    const table = await ada.createAndJoin<typeof ticTacToe>('tic-tac-toe');
+    const table = await ada.createAndJoin('tic-tac-toe');
     expect(table.mySeat).toBe(0);
     const bobTable = await bob.join<typeof ticTacToe>(table.id);
     expect(await bobTable.sit()).toBe(1);
@@ -99,7 +99,7 @@ describe.each(['memory', 'ws'] as const)('shoehive/client over %s', (transport) 
   it('notifies subscribers and event listeners', async () => {
     const { client } = await setup(transport);
     const ada = client();
-    const table = await ada.createAndJoin<typeof ticTacToe>('tic-tac-toe');
+    const table = await ada.createAndJoin('tic-tac-toe');
     const revs: number[] = [];
     const unsubscribe = table.subscribe(() => revs.push(table.rev));
     const bob = client();
@@ -124,7 +124,7 @@ describe.each(['memory', 'ws'] as const)('shoehive/client over %s', (transport) 
     const storage = memoryStorage();
     const ada = client({ storage });
     const bob = client();
-    const table = await ada.createAndJoin<typeof ticTacToe>('tic-tac-toe');
+    const table = await ada.createAndJoin('tic-tac-toe');
     const playerId = ada.player!.id;
     await (await bob.join(table.id)).sit();
     await until(() => table.meta.status === 'active', 'start');

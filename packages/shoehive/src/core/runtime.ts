@@ -31,6 +31,7 @@ import { guarded } from './guard';
 import { findNonJson, jsonEqual, type Json } from './json';
 import { createRandom, normalizeSeed, randomSeed, WordStream, type Random } from './random';
 import type { StandardSchemaV1 } from './standard-schema';
+import type { CtxWallet, Wallet, WalletOp } from './wallet';
 
 // ---------------------------------------------------------------------------------
 // Log and engine state
@@ -42,14 +43,27 @@ export interface LogEntryBase {
   at: number;
   /** Every 32-bit random word the entry consumed. */
   draws: number[];
+  /** Results of `ctx.wallet.reserve` and `balance`, in call order (ADR 0007). */
+  effects?: WalletEffect[];
+  /** Wallet operations deferred to after this entry committed (ADR 0007). */
+  wallet?: WalletOp[];
 }
+
+/** A recorded wallet result, replayed instead of calling the backend (ADR 0007). */
+export type WalletEffect =
+  { op: 'reserve'; key: string; ok: boolean } | { op: 'balance'; seat: number; amount: number };
 
 export type LogEntry = LogEntryBase &
   (
     | { kind: 'create'; table: string; game: string; version: number; seed: string; options: Json }
     | { kind: 'action'; name: string; seat: number; player: string; input: Json }
     | { kind: 'timer'; name: string; action: string; input: Json }
-    | { kind: 'system'; event: 'sit'; seat: number; player: { id: string; name: string } }
+    | {
+        kind: 'system';
+        event: 'sit' | 'rename';
+        seat: number;
+        player: { id: string; name: string };
+      }
     | {
         kind: 'system';
         event: 'stand' | 'disconnect' | 'reconnect' | 'grace-expired';
@@ -66,6 +80,8 @@ export interface TimerState {
   deadline: number;
   action: string;
   input: Json;
+  /** Listed in `meta.timers` for clients (countdowns). Name and deadline only. */
+  visible?: true;
 }
 
 export interface EngineSeat {
@@ -110,6 +126,8 @@ export interface Snapshot {
   format: 1;
   seq: number;
   root: { state: Json; engine: EngineState };
+  /** Wallet bookkeeping at snapshot time: ops not yet confirmed and open reservations. */
+  wallet?: { pending: WalletOp[]; open: string[] };
 }
 
 export interface EmittedEvent {
@@ -133,6 +151,8 @@ export interface TableMeta {
   round: { number: number; deadline: number | null; submitted: number[] } | null;
   options: Json;
   result: Json;
+  /** Deadlines (epoch ms) of timers scheduled with `{ visible: true }`, by name. */
+  timers: Record<string, number>;
 }
 
 export interface Diagnostic {
@@ -165,6 +185,14 @@ export interface RuntimeOptions {
    * every later entry rejects with `TABLE_UNAVAILABLE`.
    */
   persist?: (entry: LogEntry) => Promise<void> | void;
+  /** Money backend for `ctx.wallet` (ADR 0007). Without it, `ctx.wallet` calls throw. */
+  wallet?: Wallet;
+  /** Time limit for each live `ctx.wallet` call. Default 5 000 ms. */
+  walletTimeoutMs?: number;
+  /** Time limit for a whole entry (async actions). Default 10 000 ms. */
+  entryTimeoutMs?: number;
+  /** Called when a deferred wallet operation still fails after its retries. */
+  onWalletError?: (info: { op: WalletOp; error: unknown }) => void;
 }
 
 /** Thrown (and returned) when an entry turns out to have nothing to do. */
@@ -199,7 +227,7 @@ function normalizeIssues(issues: readonly StandardSchemaV1.Issue[]): Issue[] {
 async function runSchema(
   schema: StandardSchemaV1,
   value: unknown,
-  code: 'INVALID_INPUT' | 'INVALID_OPTIONS',
+  code: 'INVALID_INPUT' | 'INVALID_OPTIONS' | 'INTERNAL',
   what: string,
 ): Promise<Json> {
   let result = schema['~standard'].validate(value);
@@ -243,6 +271,15 @@ interface Tx {
   draws: number[];
   events: EmittedEvent[];
   after: (() => Promise<void>)[];
+  /** Recorded wallet results (live) or the results to replay. */
+  effects: WalletEffect[];
+  replayEffects: WalletEffect[] | null;
+  /** Deferred wallet operations, applied only if the entry commits. */
+  deferred: WalletOp[];
+  /** Full keys this entry tried to reserve (released if it rolls back). */
+  reserved: string[];
+  /** Set once the entry finished or was abandoned: later ctx.wallet calls throw. */
+  closed: boolean;
 }
 
 // ---------------------------------------------------------------------------------
@@ -275,10 +312,18 @@ export class TableRuntime {
     this.dev = options.dev ?? defaultDev();
     this.live = live;
     this.persist = options.persist;
+    this.walletBackend = options.wallet;
+    this.walletTimeoutMs = options.walletTimeoutMs ?? 5000;
+    this.entryTimeoutMs = options.entryTimeoutMs ?? 10_000;
+    this.onWalletError = options.onWalletError;
     this.stream = new WordStream(root.engine.seed);
   }
 
   private persist: RuntimeOptions['persist'];
+  private readonly walletBackend: Wallet | undefined;
+  private readonly walletTimeoutMs: number;
+  private readonly entryTimeoutMs: number;
+  private readonly onWalletError: RuntimeOptions['onWalletError'];
   private isFaulted = false;
 
   /** True after a `persist` failure. The table must be reloaded from its store. */
@@ -394,6 +439,7 @@ export class TableRuntime {
       const root = structuredClone(args.from.root) as Root;
       runtime = new TableRuntime(game, root, args, false);
       runtime.root = runtime.freeze(root);
+      for (const key of args.from.wallet?.open ?? []) runtime.openReservations.add(key);
       rest = log.filter((e) => e.seq > args.from!.seq);
     } else {
       const first = log[0];
@@ -414,7 +460,14 @@ export class TableRuntime {
           `expected seq ${String(runtime.root.engine.seq + 1)}`,
         );
       }
-      const { seq: _seq, at: _at, draws: _draws, ...input } = entry;
+      const {
+        seq: _seq,
+        at: _at,
+        draws: _draws,
+        effects: _effects,
+        wallet: _wallet,
+        ...input
+      } = entry;
       let outcome: unknown;
       try {
         outcome = await runtime.run(input, { replay: entry });
@@ -430,6 +483,14 @@ export class TableRuntime {
     }
     if (args.live) {
       runtime.live = true;
+      // ADR 0007 rule 8: re-send wallet ops that may not have been confirmed: those the
+      // snapshot recorded as pending, and those of every replayed entry. Keys make
+      // duplicates harmless.
+      for (const op of args.from?.wallet?.pending ?? []) runtime.sendWallet(op);
+      for (const entry of rest) {
+        if (args.until !== undefined && entry.seq > args.until) break;
+        for (const op of entry.wallet ?? []) runtime.sendWallet(op);
+      }
       runtime.syncTimers();
       runtime.scheduleFollowUps();
     }
@@ -442,6 +503,171 @@ export class TableRuntime {
       format: 1,
       seq: this.root.engine.seq,
       root: structuredClone(this.root) as { state: Json; engine: EngineState },
+      wallet: { pending: [...this.pendingWallet], open: [...this.openReservations] },
+    };
+  }
+
+  /** Releases every reservation still open (call when a table closes, ADR 0007 rule 4). */
+  releaseOpenReservations(): void {
+    for (const key of [...this.openReservations]) this.sendWallet({ op: 'release', key });
+  }
+
+  // -------------------------------------------------------------------------------
+  // Wallet (ADR 0007)
+
+  private readonly pendingWallet: WalletOp[] = [];
+  private readonly openReservations = new Set<string>();
+  private walletChain: Promise<void> = Promise.resolve();
+
+  private trackReservations(effects: readonly WalletEffect[], ops: readonly WalletOp[]): void {
+    for (const effect of effects)
+      if (effect.op === 'reserve' && effect.ok) this.openReservations.add(effect.key);
+    for (const op of ops) if (op.op !== 'credit') this.openReservations.delete(op.key);
+  }
+
+  /** Sends a deferred op in order, retrying with backoff (ADR 0007 rule 6). */
+  private sendWallet(op: WalletOp): void {
+    const wallet = this.walletBackend;
+    if (!wallet) return;
+    this.pendingWallet.push(op);
+    this.walletChain = this.walletChain.then(async () => {
+      let delay = 200;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          if (op.op === 'commit') await wallet.commit(op.key);
+          else if (op.op === 'release') await wallet.release(op.key);
+          else await wallet.credit(op.player, op.amount, op.key);
+          break;
+        } catch (error) {
+          if (attempt >= 5) {
+            try {
+              this.onWalletError?.({ op, error });
+            } catch {
+              // A throwing handler must not stall later wallet ops.
+            }
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay = Math.min(delay * 2, 8000);
+        }
+      }
+      const index = this.pendingWallet.indexOf(op);
+      if (index >= 0) this.pendingWallet.splice(index, 1);
+    });
+  }
+
+  private withEntryTimeout<T>(work: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, rejectTimeout) => {
+      timer = setTimeout(() => {
+        rejectTimeout(shoehiveError('TIMEOUT', 'The action took too long and was rolled back'));
+      }, this.entryTimeoutMs);
+    });
+    return Promise.race([work, timeout]).finally(() => {
+      clearTimeout(timer);
+    });
+  }
+
+  private walletCall<T>(call: () => Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, rejectTimeout) => {
+      timer = setTimeout(() => {
+        rejectTimeout(shoehiveError('WALLET_UNAVAILABLE', 'The wallet did not answer in time'));
+      }, this.walletTimeoutMs);
+    });
+    return Promise.race([call(), timeout])
+      .catch((error: unknown) => {
+        if (isShoehiveError(error)) throw error;
+        throw new ShoehiveError({
+          code: 'WALLET_UNAVAILABLE',
+          message: 'The wallet failed',
+          cause: error,
+        });
+      })
+      .finally(() => {
+        clearTimeout(timer);
+      });
+  }
+
+  private makeWallet(tx: Tx): CtxWallet {
+    const key = (k: string): string => `${this.root.engine.table}:${k}`;
+    const open = (): void => {
+      if (tx.closed) throw new TypeError('ctx.wallet was used after its entry finished');
+    };
+    const playerAt = (seat: number): string => {
+      const player = tx.draft.engine.seats[seat]?.player?.id;
+      if (!player) throw new TypeError(`ctx.wallet: seat ${String(seat)} is empty`);
+      return player;
+    };
+    const replayed = <E extends WalletEffect['op']>(
+      op: E,
+    ): Extract<WalletEffect, { op: E }> | null => {
+      if (!tx.replayEffects) return null;
+      const next = tx.replayEffects.shift();
+      if (next?.op !== op)
+        throw new ReplayDivergenceError(
+          tx.draft.engine.seq + 1,
+          `expected a recorded wallet ${op}`,
+        );
+      return next as Extract<WalletEffect, { op: E }>;
+    };
+    const backend = (): Wallet => {
+      if (!this.walletBackend) {
+        throw new ShoehiveError({
+          code: 'INTERNAL',
+          message: 'WALLET_NOT_CONFIGURED: this table has no wallet',
+        });
+      }
+      return this.walletBackend;
+    };
+    return {
+      reserve: async (seat, amount, k) => {
+        open();
+        const full = key(k);
+        const recorded = replayed('reserve');
+        if (recorded) {
+          tx.effects.push(recorded);
+          return recorded.ok;
+        }
+        const player = playerAt(seat);
+        const wallet = backend();
+        tx.reserved.push(full);
+        const result = await this.walletCall(() => wallet.reserve(player, amount, full));
+        open();
+        tx.effects.push({ op: 'reserve', key: full, ok: result.ok });
+        return result.ok;
+      },
+      balance: async (seat) => {
+        open();
+        const recorded = replayed('balance');
+        if (recorded) {
+          tx.effects.push(recorded);
+          return recorded.amount;
+        }
+        const player = playerAt(seat);
+        const wallet = backend();
+        const amount = await this.walletCall(() => wallet.balance(player));
+        open();
+        tx.effects.push({ op: 'balance', seat, amount });
+        return amount;
+      },
+      commit: (k) => {
+        open();
+        tx.deferred.push({ op: 'commit', key: key(k) });
+      },
+      release: (k) => {
+        open();
+        tx.deferred.push({ op: 'release', key: key(k) });
+      },
+      credit: (seat, amount, k) => {
+        open();
+        if (!Number.isSafeInteger(amount) || amount < 0) {
+          throw new RangeError(
+            `ctx.wallet.credit(): amount must be a non-negative safe integer, got ${String(amount)}`,
+          );
+        }
+        tx.deferred.push({ op: 'credit', key: key(k), player: playerAt(seat), amount });
+      },
     };
   }
 
@@ -498,6 +724,11 @@ export class TableRuntime {
         : null,
       options: e.options,
       result: e.result,
+      timers: Object.fromEntries(
+        Object.entries(e.timers)
+          .filter(([, t]) => t.visible)
+          .map(([name, t]) => [name, t.deadline]),
+      ),
     };
   }
 
@@ -549,6 +780,7 @@ export class TableRuntime {
   /** Resolves once the queue is empty, including follow-up entries such as auto-start. */
   async idle(): Promise<void> {
     while (this.pending > 0) await this.tail.catch(() => undefined);
+    await this.walletChain;
   }
 
   // -------------------------------------------------------------------------------
@@ -667,6 +899,20 @@ export class TableRuntime {
     await this.seatEvent('reconnect', args.player);
   }
 
+  /** Updates the display name on every seat `player` holds. No game hook runs. */
+  async rename(args: { player: string; name: string }): Promise<void> {
+    await this.enqueueExternal(async () => {
+      for (const seat of this.seatsOf(this.root.engine, args.player)) {
+        await this.run({
+          kind: 'system',
+          event: 'rename',
+          seat,
+          player: { id: args.player, name: args.name },
+        });
+      }
+    });
+  }
+
   /** Starts a table that is waiting (operator API, or `autoStart: false`). */
   async start(): Promise<void> {
     await this.enqueueExternal(() =>
@@ -734,21 +980,46 @@ export class TableRuntime {
     const [draft, finalize] = create(this.root as object, {
       enableAutoFreeze: this.dev,
     }) as unknown as [Root, () => Root];
-    const tx: Tx = { draft, at, draws: [], events: [], after: [] };
+    const tx: Tx = {
+      draft,
+      at,
+      draws: [],
+      events: [],
+      after: [],
+      effects: [],
+      replayEffects: opts.replay ? [...(opts.replay.effects ?? [])] : null,
+      deferred: [],
+      reserved: [],
+      closed: false,
+    };
     const ctx = this.makeCtx(tx);
     let result: unknown;
     let logged: EntryInput;
-    try {
-      [result, logged] = await this.dispatch(input, tx, ctx);
+    const work = async (): Promise<[unknown, EntryInput]> => {
+      const out = await this.dispatch(input, tx, ctx);
       let chained = 0;
       while (tx.after.length > 0) {
         if (++chained > MAX_CHAINED)
           throw shoehiveError('INTERNAL', 'Too many chained phase changes or hooks in one entry');
         await tx.after.shift()!();
       }
+      return out;
+    };
+    try {
+      [result, logged] = opts.replay ? await work() : await this.withEntryTimeout(work());
     } catch (error) {
+      tx.closed = true;
+      // ADR 0007 rule 3: a rolled-back entry releases every key it tried to reserve.
+      if (!opts.replay) for (const key of tx.reserved) this.sendWallet({ op: 'release', key });
       if (error === NOOP) return NOOP;
       throw this.normalize(error);
+    }
+    tx.closed = true;
+    if (opts.replay && tx.replayEffects && tx.replayEffects.length > 0) {
+      throw new ReplayDivergenceError(
+        opts.replay.seq,
+        'the entry made fewer wallet calls than recorded',
+      );
     }
     if (result !== undefined) {
       this.checkJson(result, 'run() returned a value that is not JSON');
@@ -758,7 +1029,14 @@ export class TableRuntime {
     tx.draft.engine.seq += 1;
     const next = finalize();
     this.checkJson(next.state, 'state is not JSON after this entry');
-    const entry = { ...logged, seq: next.engine.seq, at, draws: tx.draws };
+    const entry = {
+      ...logged,
+      seq: next.engine.seq,
+      at,
+      draws: tx.draws,
+      ...(tx.effects.length > 0 ? { effects: tx.effects } : {}),
+      ...(tx.deferred.length > 0 ? { wallet: tx.deferred } : {}),
+    };
     if (opts.replay) {
       if (!jsonEqual(entry.draws, opts.replay.draws)) {
         throw new ReplayDivergenceError(
@@ -783,7 +1061,9 @@ export class TableRuntime {
       this.entries.push(entry);
     }
     this.root = next;
+    this.trackReservations(tx.effects, tx.deferred);
     if (this.live) {
+      for (const op of tx.deferred) this.sendWallet(op);
       this.syncTimers();
       const commit: Commit = { rev: next.engine.rev, entry, events: tx.events };
       for (const listener of this.listeners) listener(commit);
@@ -854,6 +1134,13 @@ export class TableRuntime {
   ): Promise<void> {
     const e = tx.draft.engine;
     switch (input.event) {
+      case 'rename': {
+        const s = e.seats[input.seat];
+        const current = s?.player;
+        if (current?.id !== input.player.id || current.name === input.player.name) throw NOOP;
+        current.name = input.player.name;
+        return;
+      }
       case 'sit': {
         const { seat, player } = input;
         if (!Number.isInteger(seat) || seat < 0 || seat >= e.seats.length) {
@@ -974,8 +1261,13 @@ export class TableRuntime {
   private async endTable(tx: Tx, ctx: LooseCtx, result: Json): Promise<void> {
     const e = tx.draft.engine;
     if (e.status === 'ended') return;
+    // A result that fails the game's own `result` schema is a game bug: roll back.
+    const schema = this.game.result as StandardSchemaV1 | undefined;
+    const checked = schema
+      ? await runSchema(schema, result, 'INTERNAL', 'result passed to ctx.end()')
+      : result;
     e.status = 'ended';
-    e.result = result;
+    e.result = checked;
     e.timers = {};
     if (e.round) {
       e.round.open = false;
@@ -1271,7 +1563,13 @@ export class TableRuntime {
       turn,
       round,
       timers: {
-        after(name: string, ms: number, action: string, input: Json = null) {
+        after(
+          name: string,
+          ms: number,
+          action: string,
+          input: Json = null,
+          options: { visible?: boolean } = {},
+        ) {
           if (name === '__round') throw new TypeError('ctx.timers.after(): "__round" is reserved');
           if (!(ms >= 0) || !Number.isFinite(ms))
             throw new RangeError('ctx.timers.after(): ms must be a finite number >= 0');
@@ -1297,7 +1595,12 @@ export class TableRuntime {
             }
             value = plain((result.value ?? null) as Json);
           }
-          e().timers[name] = { deadline: tx.at + ms, action, input: value };
+          e().timers[name] = {
+            deadline: tx.at + ms,
+            action,
+            input: value,
+            ...(options.visible ? { visible: true as const } : {}),
+          };
         },
         cancel(name: string) {
           delete e().timers[name];
@@ -1309,6 +1612,7 @@ export class TableRuntime {
           return e().timers[name]?.deadline ?? null;
         },
       },
+      wallet: runtime.makeWallet(tx),
       emit(name: string, payload: Json = null, options: { to?: EventAudience } = {}) {
         runtime.checkJson(payload, `ctx.emit("${name}"): payload is not JSON`);
         tx.events.push({

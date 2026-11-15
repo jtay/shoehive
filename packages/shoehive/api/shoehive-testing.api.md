@@ -43,6 +43,9 @@ export interface RecordedEvent extends EmittedEvent {
 export function runStoreConformance(createStore: () => Store | Promise<Store>, input: ConformanceRunner): void;
 
 // @public
+export function runWalletConformance(createWallet: (funds: WalletFunds) => Wallet | Promise<Wallet>, input: ConformanceRunner): void;
+
+// @public
 export const TEST_SEED = "shoehive-test";
 
 // @public
@@ -77,6 +80,11 @@ export class TestTable<G extends AnyGame> {
     get state(): GameState<G>;
     verifyReplay(): Promise<void>;
     viewOf(seat: number | 'spectator'): GameView<G>;
+    readonly wallet: Wallet;
+    readonly walletErrors: {
+        op: WalletOp;
+        error: unknown;
+    }[];
 }
 
 // @public (undocumented)
@@ -85,7 +93,11 @@ export interface TestTableOptions {
     players?: number | readonly string[];
     seed?: string;
     startAt?: number;
+    wallet?: Wallet;
 }
+
+// @public
+export type WalletFunds = Record<string, Amount>;
 
 // (No @packageDocumentation comment for this package)
 

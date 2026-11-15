@@ -8,11 +8,15 @@ import {
   defineGame,
   reject,
   type GameActions,
+  type GameId,
   type GameOptions,
+  type GameResult,
+  type Json,
   type GamePhases,
   type GameState,
   type GameView,
 } from '../../src/index';
+import { createClient } from '../../src/client/index';
 import { createTestTable } from '../../src/testing/index';
 
 const game = defineGame({
@@ -156,5 +160,49 @@ describe('type inference without any input schemas', () => {
       back: undefined;
     }>();
     expectTypeOf<GamePhases<typeof _inputlessPhases>>().toEqualTypeOf<'a' | 'b'>();
+  });
+});
+
+describe('literal ids and typed results', () => {
+  const scored = defineGame({
+    id: 'scored',
+    seats: { min: 1, max: 2 },
+    result: z.object({ winner: z.number().nullable() }),
+    setup: () => ({ done: false }),
+    actions: {
+      finish: {
+        run({ ctx }) {
+          ctx.end({ winner: 0 });
+          // @ts-expect-error -- the result must match the game's result schema
+          ctx.end({ loser: 1 });
+          // @ts-expect-error -- and is required when the game declares one
+          ctx.end();
+        },
+      },
+    },
+  });
+
+  it('keeps the literal game id', () => {
+    expectTypeOf(scored.id).toEqualTypeOf<'scored'>();
+    expectTypeOf<GameId<typeof scored>>().toEqualTypeOf<'scored'>();
+    expectTypeOf<GameId<typeof game>>().toEqualTypeOf<'types'>();
+  });
+
+  it('types the result from its schema, and leaves it JSON without one', () => {
+    expectTypeOf<GameResult<typeof scored>>().toEqualTypeOf<{ winner: number | null }>();
+    expectTypeOf<GameResult<typeof game>>().toEqualTypeOf<Json>();
+  });
+
+  it('types createTable options and the handle by game id', () => {
+    const client = createClient<[typeof game, typeof scored]>({
+      url: 'ws://x',
+      autoConnect: false,
+    });
+    type CreateOptions = Parameters<typeof client.createTable<'types'>>[1];
+    expectTypeOf<CreateOptions>().toEqualTypeOf<{ target: number } | undefined>();
+    type Handle = Awaited<ReturnType<typeof client.createAndJoin<'scored'>>>;
+    expectTypeOf<Handle['meta']['result']>().toEqualTypeOf<{ winner: number | null } | null>();
+    // @ts-expect-error -- unknown game id
+    void client.createTable('nope');
   });
 });
