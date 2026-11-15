@@ -1,8 +1,14 @@
 // The Shoehive server: sessions, lobby, tables, seats and the wire protocol
 // (docs/reference/protocol.md; ADRs 0003, 0009, 0010).
 
-import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
+import {
+  createServer as createHttpServer,
+  type IncomingMessage,
+  type Server as HttpServer,
+  type ServerResponse,
+} from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { Duplex } from 'node:stream';
 import { systemClock, type Clock, type TimerHandle } from '../core/clock';
 import type { AnyGame } from '../core/define';
 import { diff } from '../core/diff';
@@ -41,6 +47,15 @@ import {
   type UpgradeRequest,
 } from './transport';
 import type { Wallet, WalletOp } from '../core/wallet';
+// Types only: the devtools module itself is imported dynamically, and only when enabled
+// (ADR 0011 rule 7).
+import type {
+  DevtoolsBackend,
+  DevtoolsConfig,
+  DevtoolsHandle,
+  DevtoolsHost,
+  DevtoolsOption,
+} from '../devtools/server';
 
 // ---------------------------------------------------------------------------------
 // Options and public types
@@ -98,6 +113,13 @@ export interface ServerOptions {
   clock?: Clock;
   /** Dev checks in table runtimes. Default: `NODE_ENV !== 'production'`. */
   dev?: boolean;
+  /**
+   * The inspector (`shoehive/devtools`, ADR 0011). Off by default. `true` enables it
+   * outside production with a generated token, and the inspector URL is logged once at
+   * startup. In production it needs `{ enabled: true, allowInProduction: true, token }`
+   * (a token of at least 32 characters), otherwise `createServer` throws.
+   */
+  devtools?: DevtoolsOption;
 }
 
 export interface TableInfo {
@@ -127,10 +149,16 @@ export interface ShoehiveServer {
   readonly ready: Promise<void>;
   /** Starts an HTTP server with the WebSocket endpoint. */
   listen(options?: { port?: number; host?: string }): Promise<{ port: number; url: string }>;
-  /** Adds the WebSocket endpoint to an existing HTTP server. */
+  /**
+   * Adds the WebSocket endpoint to an existing HTTP server. With devtools enabled it also
+   * routes devtools paths ahead of the server's current `request` listeners (restored on
+   * `close()`); every other request reaches them unchanged.
+   */
   attach(server: HttpServer): Promise<void>;
   /** Opens an in-memory connection (tests, same-process clients). */
   connect(request?: UpgradeRequest): MemorySocket;
+  /** The devtools inspector, present only when devtools is enabled (ADR 0011). */
+  readonly devtools?: DevtoolsHandle;
   readonly tables: {
     create(game: string, options?: { options?: unknown; id?: string }): Promise<TableInfo>;
     get(id: string): TableInfo | undefined;
@@ -191,6 +219,7 @@ interface Conn {
   inFlight: number;
   helloTimer: TimerHandle | null;
   closed: boolean;
+  connectedAt: number;
 }
 
 interface TableEntry {
@@ -201,6 +230,8 @@ interface TableEntry {
   lastSnapshotSeq: number;
   lastPhase: string | null;
   lastStatus: TableRuntime['status'];
+  /** A devtools fork: hidden from the lobby, never persisted (ADR 0011 rule 13). */
+  dev: boolean;
 }
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -209,6 +240,75 @@ const BACKPRESSURE_BYTES = 1024 * 1024;
 function defaultDev(): boolean {
   return process.env['NODE_ENV'] !== 'production';
 }
+
+const DEVTOOLS_PATH = '/__shoehive';
+const DEVTOOLS_PATH_PATTERN = /^\/[A-Za-z0-9._~\-/]*[A-Za-z0-9._~-]$/;
+
+/**
+ * Applies ADR 0011 rules 1 to 4 to the `devtools` option: `null` when devtools stays
+ * off, the settings otherwise. Throws for a production setup that is not deliberate.
+ */
+function resolveDevtools(
+  option: DevtoolsOption | undefined,
+  gamePath: string,
+  logger: Logger,
+): (DevtoolsConfig & { generated: boolean }) | null {
+  if (option === undefined || option === false) return null;
+  const production = process.env['NODE_ENV'] === 'production';
+  if (option === true) {
+    if (production) {
+      logger.warn(
+        'devtools: true is ignored in production. Use { enabled: true, allowInProduction: true, token } for a deliberate debugging session.',
+      );
+      return null;
+    }
+    option = { enabled: true };
+  }
+  if (!option.enabled) return null;
+  if (production) {
+    if (!option.allowInProduction) {
+      throw new Error(
+        'createServer(): devtools is enabled in production without allowInProduction: true (ADR 0011)',
+      );
+    }
+    if (option.token === undefined || option.token.length < 32) {
+      throw new Error(
+        'createServer(): devtools in production needs a token of at least 32 characters (ADR 0011)',
+      );
+    }
+  }
+  if (option.token?.length === 0) throw new TypeError('createServer(): devtools token is empty');
+  const path = option.path ?? DEVTOOLS_PATH;
+  if (!DEVTOOLS_PATH_PATTERN.test(path) || path.includes('//')) {
+    throw new TypeError(
+      `createServer(): devtools path "${path}" must start with "/" and not end with "/"`,
+    );
+  }
+  if (gamePath === path || gamePath.startsWith(`${path}/`)) {
+    throw new TypeError(
+      `createServer(): the game socket path "${gamePath}" is inside the devtools path "${path}"`,
+    );
+  }
+  if (option.token !== undefined && option.token.length < 32) {
+    logger.warn('The devtools token is shorter than 32 characters.');
+  }
+  return {
+    token: option.token ?? generateSecret(),
+    generated: option.token === undefined,
+    path,
+    allowRemote: option.allowRemote ?? false,
+    production,
+  };
+}
+
+function isDevtoolsPath(url: string | undefined, prefix: string): boolean {
+  const raw = url ?? '/';
+  const end = raw.search(/[?#]/);
+  const path = end < 0 ? raw : raw.slice(0, end);
+  return path === prefix || path.startsWith(`${prefix}/`);
+}
+
+type RequestListener = (req: IncomingMessage, res: ServerResponse) => void;
 
 function toWire(error: unknown, dev: boolean): WireError {
   if (isShoehiveError(error)) return error.toJSON();
@@ -267,6 +367,8 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     heartbeatMs: options.limits?.heartbeatMs ?? 15_000,
   };
 
+  const devtoolsConfig = resolveDevtools(options.devtools, path, logger);
+
   const games = new Map<string, AnyGame>();
   for (const game of options.games) {
     if (games.has(game.id))
@@ -308,6 +410,8 @@ export function createServer(options: ServerOptions): ShoehiveServer {
   let closing = false;
   const detachers: (() => Promise<void>)[] = [];
   const httpServers: HttpServer[] = [];
+  /** The devtools backend once its module has loaded (only when enabled). */
+  let devtools: DevtoolsBackend | null = null;
 
   const emit = <E extends keyof ServerEvents>(event: E, payload: ServerEvents[E]): void => {
     for (const listener of listeners.get(event) ?? []) {
@@ -407,21 +511,24 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       description: g.description ?? null,
       seats: { min: g.seats.min, max: g.seats.max },
     })),
-    tables: [...tables].map(([id, entry]) => ({
-      id,
-      game: entry.game.id,
-      status: entry.runtime.status,
-      seats: {
-        taken: entry.runtime.seats().filter((s) => s.status !== 'empty').length,
-        total: entry.game.seats.max,
-      },
-      spectators: spectatorCount(id, entry.runtime),
-      createdAt: entry.createdAt,
-      listed: null,
-    })),
+    tables: [...tables]
+      .filter(([, entry]) => !entry.dev)
+      .map(([id, entry]) => ({
+        id,
+        game: entry.game.id,
+        status: entry.runtime.status,
+        seats: {
+          taken: entry.runtime.seats().filter((s) => s.status !== 'empty').length,
+          total: entry.game.seats.max,
+        },
+        spectators: spectatorCount(id, entry.runtime),
+        createdAt: entry.createdAt,
+        listed: null,
+      })),
   });
 
   const syncLobby = (): void => {
+    devtools?.tablesChanged();
     const next = buildLobby();
     const ops = diff(lobbyDoc as unknown as Json, next as unknown as Json);
     if (ops.length === 0) return;
@@ -463,6 +570,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
 
   const onCommit = (tableId: string, entry: TableEntry) => (commit: Commit) => {
     syncTable(tableId);
+    devtools?.tableCommitted(tableId);
     for (const event of commit.events) {
       for (const conn of conns) {
         if (!conn.tables.has(tableId) || conn.closed) continue;
@@ -490,7 +598,9 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     const ended = runtime.status === 'ended' && entry.lastStatus !== 'ended';
     entry.lastPhase = runtime.engine.phase;
     entry.lastStatus = runtime.status;
-    if (phaseChanged || ended || runtime.engine.seq - entry.lastSnapshotSeq >= snapshotEvery) {
+    const due =
+      phaseChanged || ended || runtime.engine.seq - entry.lastSnapshotSeq >= snapshotEvery;
+    if (due && !entry.dev) {
       saveSnapshot(tableId, entry).catch((error: unknown) => {
         logger.error('Could not write a snapshot', { table: tableId, error });
       });
@@ -505,6 +615,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     game: AnyGame,
     runtime: TableRuntime,
     createdAt: number,
+    dev = false,
   ): TableEntry => {
     const entry: TableEntry = {
       runtime,
@@ -514,6 +625,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       lastSnapshotSeq: runtime.engine.seq,
       lastPhase: runtime.engine.phase,
       lastStatus: runtime.status,
+      dev,
     };
     tables.set(tableId, entry);
     runtime.onCommit(onCommit(tableId, entry));
@@ -615,7 +727,8 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       if (timer !== undefined) clock.clearTimer(timer);
       session.grace.delete(tableId);
     }
-    await store.closeTable(tableId, reason);
+    if (!entry.dev) await store.closeTable(tableId, reason);
+    devtools?.tableClosed(tableId, reason);
     emit('table:closed', { table: tableId, reason });
     syncLobby();
   };
@@ -1107,6 +1220,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
         inFlight: 0,
         helloTimer: null,
         closed: false,
+        connectedAt: clock.now(),
       };
       conns.add(conn);
       conn.helloTimer = clock.setTimer(clock.now() + limits.helloTimeoutMs, () => {
@@ -1187,10 +1301,172 @@ export function createServer(options: ServerOptions): ShoehiveServer {
   })();
 
   // -------------------------------------------------------------------------------
+  // Devtools (ADR 0011). Nothing below runs unless devtools is enabled.
+
+  /** A fork from devtools: a live dev table, hidden from the lobby, never persisted. */
+  const registerFork: DevtoolsHost['registerFork'] = async ({ id, game, runtime }) => {
+    if (closing) throw shoehiveError('TABLE_UNAVAILABLE', 'The server is shutting down');
+    if (tables.has(id)) throw shoehiveError('BAD_REQUEST', `Table "${id}" already exists`);
+    register(id, game, runtime, clock.now(), true);
+    // As after a restart, every seated player starts disconnected with a grace period:
+    // whoever held the seat can join the fork and play on from their own client.
+    for (const seat of runtime.seats()) {
+      if (!seat.player) continue;
+      const session =
+        sessions.get(seat.player.id) ??
+        getSession({
+          id: seat.player.id,
+          name: seat.player.name,
+          guest: !options.auth,
+          metadata: null,
+        });
+      session.joined.add(id);
+      await startGrace(session, id);
+      scheduleSessionCleanup(session);
+    }
+    emit('table:created', { table: id, game: game.id });
+    syncLobby();
+    scheduleIdleCheck(id);
+  };
+
+  const devtoolsHost = (production: boolean): DevtoolsHost => {
+    const hostTable = (id: string, entry: TableEntry) => ({
+      id,
+      game: entry.game,
+      runtime: entry.runtime,
+      createdAt: entry.createdAt,
+      dev: entry.dev,
+      connections: [...conns].filter((c) => c.tables.has(id)).length,
+    });
+    return {
+      production,
+      dev,
+      logger,
+      clock,
+      store,
+      origins: options.origins ?? [],
+      games: () => [...games.values()],
+      tables: () => [...tables].map(([id, entry]) => hostTable(id, entry)),
+      table: (id) => {
+        const entry = tables.get(id);
+        return entry ? hostTable(id, entry) : undefined;
+      },
+      sessions: () => ({
+        sessions: [...sessions.values()].map((s) => ({
+          player: s.player.id,
+          name: s.player.name,
+          guest: s.player.guest,
+          connections: s.conns.size,
+          tables: [...new Set([...s.joined, ...seatedTables(s.player.id)])],
+        })),
+        connections: [...conns].map((c) => ({
+          player: c.session?.player.id ?? null,
+          remote: null,
+          connectedAt: c.connectedAt,
+          tables: [...c.tables.keys()],
+        })),
+      }),
+      registerFork,
+    };
+  };
+
+  const devtoolsLoaded: Promise<DevtoolsBackend> | null = devtoolsConfig
+    ? import('../devtools/server').then(({ createDevtools }) => {
+        devtools = createDevtools(devtoolsHost(devtoolsConfig.production), devtoolsConfig);
+        return devtools;
+      })
+    : null;
+  // Surfaced by attach() and listen(); do not report it twice as unhandled.
+  devtoolsLoaded?.catch(() => undefined);
+
+  let announced = false;
+  /** Logs the inspector URL once, with the token in the fragment (never sent to servers). */
+  const announceDevtools = (server: HttpServer): void => {
+    if (!devtoolsConfig || announced) return;
+    const address = server.address();
+    if (address === null) {
+      server.once('listening', () => {
+        announceDevtools(server);
+      });
+      return;
+    }
+    announced = true;
+    let base = devtoolsConfig.path;
+    if (typeof address !== 'string') {
+      let hostname = address.address;
+      if (hostname === '' || hostname === '0.0.0.0' || hostname === '::') hostname = 'localhost';
+      if (hostname.includes(':')) hostname = `[${hostname}]`;
+      base = `http://${hostname}:${String(address.port)}${devtoolsConfig.path}`;
+    }
+    if (devtoolsConfig.production) {
+      logger.warn(
+        `Devtools is LIVE in production at ${base}/ (open it with #token=<your token>). Turn it off when you are done.`,
+      );
+    } else {
+      logger.warn(`Devtools inspector: ${base}/#token=${devtoolsConfig.token}`);
+    }
+  };
+
+  /**
+   * Routes devtools paths ahead of the server's current `request` listeners; everything
+   * else reaches them unchanged. Returns a function that restores them.
+   */
+  const wrapRequestListeners = (server: HttpServer, backend: DevtoolsBackend): (() => void) => {
+    const original = server.listeners('request') as RequestListener[];
+    for (const listener of original) server.off('request', listener);
+    const dispatch: RequestListener = (req, res) => {
+      if (backend.handleRequest(req, res)) return;
+      for (const listener of original) listener.call(server, req, res);
+    };
+    server.on('request', dispatch);
+    return () => {
+      server.off('request', dispatch);
+      for (const listener of [...original].reverse()) server.prependListener('request', listener);
+    };
+  };
+
+  const mountDevtools = async (server: HttpServer, wrap: boolean): Promise<void> => {
+    if (!devtoolsLoaded) return;
+    const backend = await devtoolsLoaded;
+    const restore = wrap ? wrapRequestListeners(server, backend) : () => undefined;
+    const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
+      backend.handleUpgrade(req, socket, head);
+    };
+    server.on('upgrade', onUpgrade);
+    detachers.push(() => {
+      server.off('upgrade', onUpgrade);
+      restore();
+      return Promise.resolve();
+    });
+    announceDevtools(server);
+  };
+
+  const devtoolsHandle: DevtoolsHandle | undefined = devtoolsConfig
+    ? {
+        path: devtoolsConfig.path,
+        handleRequest: (req, res) => {
+          if (!isDevtoolsPath(req.url, devtoolsConfig.path)) return false;
+          if (devtools) return devtools.handleRequest(req, res);
+          // Still loading: claim the request and answer it once the module is in.
+          devtoolsLoaded!.then(
+            (backend) => {
+              if (!backend.handleRequest(req, res)) res.writeHead(404).end();
+            },
+            () => {
+              res.writeHead(500).end();
+            },
+          );
+          return true;
+        },
+      }
+    : undefined;
+
+  // -------------------------------------------------------------------------------
   // Public API
 
-  const attach = async (server: HttpServer): Promise<void> => {
+  const attachTo = async (server: HttpServer, wrap: boolean): Promise<void> => {
     await ready;
+    await mountDevtools(server, wrap);
     detachers.push(
       attachWebSocket(server, handler, {
         path,
@@ -1201,17 +1477,22 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     );
   };
 
+  const attach = (server: HttpServer): Promise<void> => attachTo(server, true);
+
   return {
     ready,
     attach,
+    ...(devtoolsHandle ? { devtools: devtoolsHandle } : {}),
     async listen({ port = 0, host = '127.0.0.1' } = {}) {
-      const server = createHttpServer((_req, res) => {
+      const server = createHttpServer((req, res) => {
+        // Devtools paths go to devtools when it is enabled; otherwise the normal 426.
+        if (devtools?.handleRequest(req, res)) return;
         res
           .writeHead(426, { 'Content-Type': 'text/plain' })
           .end('Shoehive: connect with a WebSocket\n');
       });
       httpServers.push(server);
-      await attach(server);
+      await attachTo(server, false);
       await new Promise<void>((resolve) => server.listen(port, host, resolve));
       const address = server.address() as AddressInfo;
       return { port: address.port, url: `ws://${host}:${String(address.port)}${path}` };
@@ -1232,10 +1513,12 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       },
       reload: async (id) => {
         const entry = requireTable(id);
+        if (entry.dev) throw shoehiveError('BAD_REQUEST', 'A devtools fork is not stored');
         entry.runtime.dispose();
         tables.delete(id);
         await recoverTable(id);
         for (const conn of conns) if (conn.tables.has(id)) sendSnapshot(conn, id);
+        devtools?.tableCommitted(id);
       },
       runtime: (id) => tables.get(id)?.runtime,
     },
@@ -1254,6 +1537,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       if (graceful) {
         for (const [id, entry] of tables) {
           await entry.runtime.idle();
+          if (entry.dev) continue;
           await saveSnapshot(id, entry).catch((error: unknown) => {
             logger.error('Could not write the final snapshot', { table: id, error });
           });
@@ -1274,6 +1558,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
         if (session.cleanup !== null) clock.clearTimer(session.cleanup);
       }
       sessions.clear();
+      await devtools?.close();
       await Promise.all(detachers.map((detach) => detach()));
       await Promise.all(
         httpServers.map(

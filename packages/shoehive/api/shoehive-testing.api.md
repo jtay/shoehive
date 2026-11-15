@@ -33,11 +33,34 @@ export class FakeClock implements Clock {
     setTimer(atMs: number, fn: () => void): TimerHandle;
 }
 
+// @public
+export interface Fixture {
+    entries: LogEntry[];
+    expect?: {
+        rev: number;
+        stateHash: string;
+    };
+    // (undocumented)
+    game: string;
+    // (undocumented)
+    shoehiveFixture: 1;
+    // (undocumented)
+    version: number;
+}
+
+// @public
+export function fixtureStateHash(state: unknown): string;
+
 // @public (undocumented)
 export interface RecordedEvent extends EmittedEvent {
     // (undocumented)
     rev: number;
 }
+
+// @public
+export function replayFixture<G extends AnyGame>(game: G, fixture: Fixture, options?: {
+    wallet?: Wallet;
+}): Promise<TestTable<G>>;
 
 // @public
 export function runStoreConformance(create: StoreConformanceTarget, input: ConformanceRunner): void;
@@ -69,6 +92,11 @@ export class TestTable<G extends AnyGame> {
     // (undocumented)
     disconnect(seat: number): Promise<void>;
     readonly events: RecordedEvent[];
+    // @internal
+    static fromRuntime<G extends AnyGame>(runtime: TableRuntime, clock: FakeClock, wallet: Wallet, walletErrors?: {
+        op: WalletOp;
+        error: unknown;
+    }[]): TestTable<G>;
     // (undocumented)
     get log(): readonly LogEntry[];
     // (undocumented)
