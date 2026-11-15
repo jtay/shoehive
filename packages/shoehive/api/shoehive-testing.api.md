@@ -40,10 +40,20 @@ export interface RecordedEvent extends EmittedEvent {
 }
 
 // @public
-export function runStoreConformance(createStore: () => Store | Promise<Store>, input: ConformanceRunner): void;
+export function runStoreConformance(create: StoreConformanceTarget, input: ConformanceRunner): void;
 
 // @public
 export function runWalletConformance(createWallet: (funds: WalletFunds) => Wallet | Promise<Wallet>, input: ConformanceRunner): void;
+
+// @public
+export interface StoreBackend {
+    destroy?(): void | Promise<void>;
+    // (undocumented)
+    open(): Store | Promise<Store>;
+}
+
+// @public
+export type StoreConformanceTarget = () => Store | StoreBackend | Promise<Store | StoreBackend>;
 
 // @public
 export const TEST_SEED = "shoehive-test";

@@ -62,7 +62,10 @@ player ids, and `rev`. It never holds views; those are recomputed. Table creatio
 writes the `create` entry and an initial snapshot at `seq: 0`.
 
 `appendLog` must reject an entry whose `seq` is not exactly one more than the last
-stored `seq` for that table (`StoreConflictError`). This catches double writers.
+stored `seq` for that table (`StoreConflictError`). This catches double writers. A batch
+is all or nothing, and a log starts at seq 0. A batch whose entries are all already
+stored with identical data succeeds without writing (added in Phase 5: drivers such as
+ioredis re-send a command after a lost reply, and that retry must not fault the table).
 
 ### Write path
 
@@ -129,17 +132,30 @@ tables, and it does so loudly.
 
 ### Adapters and conformance
 
-| Adapter    | Storage                    | Notes                                                                         |
-| ---------- | -------------------------- | ----------------------------------------------------------------------------- |
-| `memory`   | `Map`                      | default; lost on exit, used by the Phase 2 kill-and-restart test in-process   |
-| `sqlite`   | `better-sqlite3`, WAL mode | tables `entries`, `snapshots`, `sessions`, `open_tables`                      |
-| `postgres` | `pg`                       | same schema, `migrate()` helper creates it                                    |
-| `redis`    | `ioredis`                  | list per table log, string per snapshot, set of open tables; docs require AOF |
+| Adapter    | Storage                    | Notes                                                                                                             |
+| ---------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `memory`   | `Map`                      | default; lost on exit, used by the Phase 2 kill-and-restart test in-process                                       |
+| `sqlite`   | `better-sqlite3`, WAL mode | tables `entries`, `snapshots`, `sessions`, `open_tables`, `meta`; `synchronous = FULL` on files it opens          |
+| `postgres` | `pg`                       | same tables as text columns; created lazily or by `migratePostgres()`; one guarded `INSERT ... SELECT` per append |
+| `redis`    | `ioredis`                  | list per table log, string per snapshot, set of open tables, hash of closed ones; Lua appends; docs require AOF   |
 
-`shoehive/testing` exports `runStoreConformance(createStore, { describe, it, expect })`.
-It takes the test functions as arguments so it has no test-runner dependency. It covers
-ordering, `seq` conflicts, snapshot replacement, tail loading, open-table listing,
-sessions, large payloads (1 MiB) and concurrent tables. CI runs it on all four adapters.
+Phase 5 notes: the helper is `migratePostgres()` rather than `migrate()`, to avoid a
+clash with the game-version `migrate` hook above. Adapters take a client the caller
+constructs (ADR 0002) and never close it. A snapshot saved after `closeTable` does not
+reopen a table (the engine snapshots tables as they end). Log pruning
+(`retainLog: 'since-snapshot'`) is not in the `Store` interface yet; adding it needs a
+stored base seq so "continue from the last seq" still holds after the log is emptied.
+See `docs/reference/stores.md` for configuration and durability settings.
+
+`shoehive/testing` exports `runStoreConformance(create, { describe, it, expect })`.
+It takes the test functions as arguments so it has no test-runner dependency. `create`
+returns a store, or a backend (`{ open, destroy }`) whose `open()` can be called again
+after `close()` to check durability. It covers ordering, `seq` conflicts and their
+fields, atomic batches, concurrent writers, idempotent retries, snapshot replacement,
+tail loading, open and closed tables, sessions, large payloads (1 MiB), exact round-trip
+of unusual JSON and ids, many tables, and data surviving close and reopen. CI runs it on
+all four adapters, with Postgres 16 and Redis 7 as service containers, plus a
+restart-recovery end-to-end test per adapter.
 
 ## Consequences
 
