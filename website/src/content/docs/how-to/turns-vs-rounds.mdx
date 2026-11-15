@@ -1,11 +1,88 @@
 ---
 title: 'Turns vs rounds'
 description: 'Choose between one seat acting at a time and everyone acting at once.'
-todo: 'turns (round-robin and custom order) versus rounds (simultaneous, once actions, closeWhen), and when to use each. Sources: ADR 0008.'
 sidebar:
   order: 5
 ---
 
-{/* TODO: write this page. Delete `todo:` in the frontmatter when it is done. */}
+import Snippet from '../../../components/Snippet.astro';
 
-Choose between one seat acting at a time and everyone acting at once.
+Shoehive has two models for who may act and when. A phase uses **turns**, **rounds** or
+neither. The reasoning is in [ADR 0008](/contributing/adr/0008-turns-and-rounds/).
+
+| Use     | When                                                  | Examples                                     |
+| ------- | ----------------------------------------------------- | -------------------------------------------- |
+| Turns   | One seat acts, then the next. Order matters.          | tic-tac-toe, poker, blackjack play           |
+| Rounds  | Everyone acts at once, usually against a clock.       | quiz answers, sealed bids, blackjack betting |
+| Neither | The game reacts to events, or only timers move it on. | a lobby, a reveal screen                     |
+
+A game with no `phases` sets `turns` or `rounds` at the top level. A game with `phases` sets
+them per phase (a top-level one is an error), and one phase cannot have both. Blackjack
+mixes them: betting is a round, play is turns.
+
+## Turns
+
+Add `turns` and the engine tracks `ctx.turn.seat`, `ctx.turn.number` (1-based, per phase)
+and `ctx.turn.order`. The simplest form is `turns: { order: 'round-robin' }`, which cycles
+through the occupied seats in ascending order. Everything else is optional:
+
+<Snippet file="website/snippets/turns-vs-rounds/src/turns.ts" region="game" title="turns.ts" />
+
+- `order` is `'round-robin'` or a function returning every seat that should play, in order.
+- `first` is `'lowest'` (the default) or a function returning the starting seat, for example
+  "left of the big blind". A skipped seat passes to the next eligible one.
+- `skip` says which seats to pass over each time the turn advances, such as folded players.
+- `timeoutMs` and `onTimeout` add a turn clock: see
+  [Timers and turn clocks](/how-to/timers-and-turn-clocks/).
+
+In an action, `ctx.turn.next()` moves to the next eligible seat and `ctx.turn.set(seat)`
+jumps to one (it throws if the seat is not in the order). When no seat is eligible,
+`ctx.turn.seat` is `null`. Blackjack uses that to leave the play phase.
+
+**The engine does not reject off-turn actions.** Check `ctx.turn.seat !== seat` and
+`reject('NOT_YOUR_TURN')` yourself, as above. Forgetting is a cheating bug, so make it your
+first test: an out-of-turn `t.act` that must reject.
+
+A seat that stands up leaves the order. A seat that sits down mid-phase joins the order but
+does not get the current turn.
+
+## Rounds
+
+A rounds phase opens a round when it starts. Every seat occupied at that moment is a
+**participant**. Mark the action that counts as an answer with `once: true`, and the engine
+does the bookkeeping:
+
+<Snippet file="website/snippets/turns-vs-rounds/src/rounds.ts" region="game" title="rounds.ts" />
+
+- A second `once` action from the same seat rejects with `ALREADY_SUBMITTED` before `run`
+  starts. Seats that were not participants get `NOT_PARTICIPANT`, and calls after the
+  round closed get `ROUND_CLOSED`. Actions without `once` can be called freely and never
+  count.
+- `closeWhen: 'all-submitted'` closes the round when nobody is pending or when
+  `durationMs` runs out, whichever is first. `closeWhen: 'timeout'` waits for `durationMs`
+  even if everyone has answered, for games that reveal on a fixed beat. It needs
+  `durationMs`.
+- `onClose` is required. It runs exactly once, in its own entry, so the last answer is
+  committed and synced to clients before your scoring code runs. An error in `onClose`
+  rolls back only the close.
+- Rounds do not reopen by themselves. In `onClose`, call `ctx.round.next()` to open the next
+  one, or `ctx.phase.go(...)` to move on (the quiz goes to `reveal`).
+- `onOpen` runs when a round opens, which is a good place to reset per-round state.
+
+In code, `ctx.round` has `number`, `open`, `participants`, `submitted`, `pending` and
+`deadline`, plus `ctx.round.close()` to end the round early. A seat that sits down during a
+round waits for the next one. A seat that stands up leaves `pending`. Clients see the
+progress in `meta.round`.
+
+Submissions can arrive in any order, but never at the same time: everything runs in one
+queue per table, so there are no races to guard against.
+
+## Test both
+
+<Snippet file="website/snippets/turns-vs-rounds/test/game.test.ts" region="round" title="" />
+
+Use `t.advance(ms)` to reach a round's deadline. There is no tick loop in v1: time only
+enters through timers.
+
+Related: [Phases](/how-to/phases/), and the concept page
+[Turns and rounds](/concepts/turns-and-rounds/).
