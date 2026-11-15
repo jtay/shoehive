@@ -44,6 +44,7 @@ import {
   type Connection,
   type ConnectionHandler,
   type MemorySocket,
+  type UnknownUpgradePolicy,
   type UpgradeRequest,
 } from './transport';
 import type { Wallet, WalletOp } from '../core/wallet';
@@ -101,6 +102,16 @@ export interface ServerOptions {
   path?: string;
   /** Allowed `Origin` headers. Default: any. */
   origins?: readonly string[];
+  /**
+   * What `attach()` does with WebSocket upgrades for paths Shoehive does not serve.
+   * `'ignore'` (default) leaves them to the HTTP server's other `upgrade` listeners.
+   * `'refuse'` answers HTTP 404 and closes the socket at once: use it when Shoehive is
+   * the only WebSocket handler on that server. `{ refuseAfterMs }` answers 404 after
+   * that long unless another listener has written to or closed the socket by then, which
+   * keeps other handlers working while still closing sockets nobody takes.
+   * `listen()` owns its HTTP server and always refuses at once.
+   */
+  unknownUpgrades?: 'ignore' | 'refuse' | { refuseAfterMs: number };
   /** How long a seat is held after its player disconnects. Default 60 000 ms. */
   reconnectGraceMs?: number;
   /** Resume token lifetime, renewed on every connect. Default 7 days. */
@@ -147,12 +158,13 @@ export interface ServerEvents {
 export interface ShoehiveServer {
   /** Resolves once stored tables are recovered (connections wait for it automatically). */
   readonly ready: Promise<void>;
-  /** Starts an HTTP server with the WebSocket endpoint. */
+  /** Starts an HTTP server with the WebSocket endpoint. Upgrades to other paths get HTTP 404. */
   listen(options?: { port?: number; host?: string }): Promise<{ port: number; url: string }>;
   /**
    * Adds the WebSocket endpoint to an existing HTTP server. With devtools enabled it also
    * routes devtools paths ahead of the server's current `request` listeners (restored on
-   * `close()`); every other request reaches them unchanged.
+   * `close()`); every other request reaches them unchanged. Upgrades to other paths follow
+   * `unknownUpgrades`.
    */
   attach(server: HttpServer): Promise<void>;
   /** Opens an in-memory connection (tests, same-process clients). */
@@ -368,6 +380,16 @@ export function createServer(options: ServerOptions): ShoehiveServer {
   };
 
   const devtoolsConfig = resolveDevtools(options.devtools, path, logger);
+
+  const unknownUpgrades = options.unknownUpgrades ?? 'ignore';
+  if (
+    typeof unknownUpgrades === 'object' &&
+    !(Number.isFinite(unknownUpgrades.refuseAfterMs) && unknownUpgrades.refuseAfterMs > 0)
+  ) {
+    throw new TypeError(
+      'createServer(): `unknownUpgrades.refuseAfterMs` must be a positive number of milliseconds',
+    );
+  }
 
   const games = new Map<string, AnyGame>();
   for (const game of options.games) {
@@ -1464,7 +1486,11 @@ export function createServer(options: ServerOptions): ShoehiveServer {
   // -------------------------------------------------------------------------------
   // Public API
 
-  const attachTo = async (server: HttpServer, wrap: boolean): Promise<void> => {
+  const attachTo = async (
+    server: HttpServer,
+    wrap: boolean,
+    policy: UnknownUpgradePolicy,
+  ): Promise<void> => {
     await ready;
     await mountDevtools(server, wrap);
     detachers.push(
@@ -1473,11 +1499,14 @@ export function createServer(options: ServerOptions): ShoehiveServer {
         maxMessageBytes: limits.maxMessageBytes,
         heartbeatMs: limits.heartbeatMs,
         origins: options.origins ?? [],
+        unknownUpgrades: policy,
+        // The devtools listener (mounted above) answers its own socket path.
+        siblingPaths: devtoolsConfig ? [`${devtoolsConfig.path}/ws`] : [],
       }),
     );
   };
 
-  const attach = (server: HttpServer): Promise<void> => attachTo(server, true);
+  const attach = (server: HttpServer): Promise<void> => attachTo(server, true, unknownUpgrades);
 
   return {
     ready,
@@ -1492,7 +1521,8 @@ export function createServer(options: ServerOptions): ShoehiveServer {
           .end('Shoehive: connect with a WebSocket\n');
       });
       httpServers.push(server);
-      await attachTo(server, false);
+      // Shoehive owns this server, so no other listener can take an unknown path.
+      await attachTo(server, false, 'refuse');
       await new Promise<void>((resolve) => server.listen(port, host, resolve));
       const address = server.address() as AddressInfo;
       return { port: address.port, url: `ws://${host}:${String(address.port)}${path}` };

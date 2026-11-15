@@ -2,6 +2,7 @@
 // v1 ships a WebSocket transport (`ws`, Node) and an in-memory one for tests.
 
 import type { IncomingMessage, Server as HttpServer } from 'node:http';
+import type { Socket } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 
@@ -121,24 +122,49 @@ export function connectMemory(
 // ---------------------------------------------------------------------------------
 // WebSocket transport
 
+/**
+ * What to do with an upgrade request for a path this transport does not serve.
+ * `'ignore'` leaves it to the server's other `upgrade` listeners; `'refuse'` answers 404
+ * at once; `{ refuseAfterMs }` answers 404 after that long unless another listener has
+ * written to or closed the socket by then.
+ */
+export type UnknownUpgradePolicy = 'ignore' | 'refuse' | { refuseAfterMs: number };
+
 export interface WsTransportOptions {
   path: string;
   maxMessageBytes: number;
   heartbeatMs: number;
   /** Allowed `Origin` values. Empty means any origin. */
   origins: readonly string[];
+  unknownUpgrades: UnknownUpgradePolicy;
+  /**
+   * Other upgrade paths Shoehive serves on the same HTTP server (devtools, ADR 0011).
+   * They are never refused here: their own listener answers them.
+   */
+  siblingPaths?: readonly string[];
 }
 
 const STATUS_TEXT: Record<number, string> = {
   401: 'Unauthorized',
   403: 'Forbidden',
+  404: 'Not Found',
   500: 'Internal Server Error',
 };
 
+/** Answers an upgrade with an HTTP error and destroys the socket once it is flushed. */
 function refuse(socket: Duplex, status: number): void {
+  if (socket.destroyed) return;
+  // The HTTP server allows half-open sockets, so `end()` alone would leave the socket
+  // open until the client closes its side. Destroy it as soon as the response is out.
+  socket.once('finish', () => socket.destroy());
   socket.end(
     `HTTP/1.1 ${String(status)} ${STATUS_TEXT[status] ?? ''}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`,
   );
+}
+
+/** True once some listener has answered, upgraded or closed the socket. */
+function claimed(socket: Duplex): boolean {
+  return socket.destroyed || socket.writableEnded || (socket as Socket).bytesWritten > 0;
 }
 
 /** Attaches a WebSocket endpoint to `server`. Returns a function that detaches it. */
@@ -153,10 +179,34 @@ export function attachWebSocket(
     handleProtocols: (protocols) => (protocols.has('shoehive.v1') ? 'shoehive.v1' : false),
   });
   const alive = new WeakMap<WebSocket, number>(); // missed heartbeats
+  const pending = new Set<NodeJS.Timeout>(); // unknown-path refusal timers
+  const policy = options.unknownUpgrades;
+  const siblings = new Set(options.siblingPaths ?? []);
+
+  const onUnknownPath = (socket: Duplex): void => {
+    if (policy === 'ignore') return; // another listener may own this path
+    if (policy === 'refuse') {
+      refuse(socket, 404);
+      return;
+    }
+    const timer = setTimeout(() => {
+      pending.delete(timer);
+      if (!claimed(socket)) refuse(socket, 404);
+    }, policy.refuseAfterMs);
+    timer.unref();
+    pending.add(timer);
+    socket.once('close', () => {
+      clearTimeout(timer);
+      pending.delete(timer);
+    });
+  };
 
   const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer): void => {
-    const path = (request.url ?? '/').split('?')[0];
-    if (path !== options.path) return; // another handler may own this path
+    const path = (request.url ?? '/').split('?')[0] ?? '/';
+    if (path !== options.path) {
+      if (!siblings.has(path)) onUnknownPath(socket);
+      return;
+    }
     const origin = request.headers.origin;
     if (options.origins.length > 0 && (origin === undefined || !options.origins.includes(origin))) {
       refuse(socket, 403);
@@ -197,6 +247,8 @@ export function attachWebSocket(
   return () =>
     new Promise<void>((resolve) => {
       clearInterval(heartbeat);
+      for (const timer of pending) clearTimeout(timer);
+      pending.clear();
       server.off('upgrade', onUpgrade);
       for (const ws of wss.clients) ws.terminate();
       wss.close(() => {

@@ -42,6 +42,19 @@ one spec.
   query-string tokens are the usual choice.
 - If an origin allowlist is configured and the `Origin` header is not on it, the upgrade is
   answered with HTTP 403.
+- An upgrade the server refuses (401, 403, 404, 500) gets the HTTP response and then the TCP
+  socket is closed, even if the client keeps its side open.
+- Upgrades to other paths: when Shoehive starts its own HTTP server (`listen()`), they are
+  answered with HTTP 404 and closed at once. When it is added to an existing server
+  (`attach()`), the `unknownUpgrades` option decides: `'ignore'` (default) leaves them to the
+  server's other `upgrade` listeners, `'refuse'` answers 404 at once, and
+  `{ refuseAfterMs }` answers 404 after that delay unless another listener has written to or
+  closed the socket first. With `'ignore'`, an upgrade that no listener takes stays open until
+  the client closes it, so pick one of the others when no other WebSocket handler shares the
+  server.
+- The devtools socket (`<devtools path>/ws`, ADR 0011) is never refused by the game transport
+  while devtools is enabled: devtools answers it. With devtools disabled it gets the same 404 as
+  any other unknown path in `listen()` mode.
 
 ---
 
