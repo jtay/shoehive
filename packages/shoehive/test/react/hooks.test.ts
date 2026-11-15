@@ -95,6 +95,18 @@ describe('shoehive/react', () => {
     });
   });
 
+  it('useConnection re-renders when the player renames', async () => {
+    const client = makeClient();
+    render(h(ShoehiveProvider, { client }, h(Status)));
+    await waitFor(() => {
+      expect(screen.getByTestId('status').textContent).toMatch(/^open Guest/);
+    });
+    await reactAct(async () => {
+      await client.rename('Grace');
+    });
+    expect(screen.getByTestId('status').textContent).toBe('open Grace');
+  });
+
   it('useTable renders the live view and binds typed actions', async () => {
     const ada = makeClient();
     const bob = makeClient();

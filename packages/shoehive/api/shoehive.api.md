@@ -20,9 +20,9 @@ export type Ack = {
 };
 
 // @public (undocumented)
-export interface ActionArgs<S, I, O, PN extends string> {
+export interface ActionArgs<S, I, O, PN extends string, R = Json> {
     // (undocumented)
-    ctx: ActionCtx<O, PN>;
+    ctx: ActionCtx<O, PN, R>;
     input: I;
     player: string | null;
     seat: number;
@@ -30,11 +30,11 @@ export interface ActionArgs<S, I, O, PN extends string> {
 }
 
 // @public
-export interface ActionCtx<O, PN extends string> extends Omit<ReadCtx<O>, 'turn' | 'round' | 'phase'> {
+export interface ActionCtx<O, PN extends string, R = Json> extends Omit<ReadCtx<O>, 'turn' | 'round' | 'phase'> {
     emit(name: string, payload?: Json, options?: {
         to?: EventAudience;
     }): void;
-    end(result?: Json): void;
+    end(...result: Json extends R ? [result?: R] : [result: R]): void;
     now(): number;
     // (undocumented)
     readonly phase: {
@@ -48,20 +48,24 @@ export interface ActionCtx<O, PN extends string> extends Omit<ReadCtx<O>, 'turn'
     // (undocumented)
     readonly timers: CtxTimers;
     readonly turn: CtxTurn;
+    readonly wallet: CtxWallet;
 }
 
 // @public (undocumented)
-export interface ActionDef<S, I, O, PN extends string> {
+export interface ActionDef<S, I, O, PN extends string, R = Json> {
     input?: StandardSchemaV1<unknown, I>;
     internal?: boolean;
     once?: boolean;
     preStart?: boolean;
-    run(args: ActionArgs<S, I, O, PN>): void | Json | Promise<void | Json>;
+    run(args: ActionArgs<S, I, O, PN, R>): void | Json | Promise<void | Json>;
 }
 
 // @public
-export type AnyGame = GameConfig<any, any, any, any, any, any, any, any> & {
-    readonly [gameBrand]: GameTypes<any, any, any, any, any>;
+export type Amount = number;
+
+// @public
+export type AnyGame = GameConfig<any, any, any, any, any, any, any, any, any> & {
+    readonly [gameBrand]: GameTypes<any, any, any, any, any, any, any, any>;
 };
 
 // @public
@@ -96,6 +100,11 @@ export type ClientRequest = {
 } | {
     t: 'lobby.sub';
     id: string;
+    filter?: LobbyFilter;
+} | {
+    t: 'player.rename';
+    id: string;
+    name: string;
 } | {
     t: 'lobby.unsub';
     id: string;
@@ -176,7 +185,9 @@ export interface CtxRound extends RoundInfo {
 
 // @public (undocumented)
 export interface CtxTimers {
-    after(name: string, ms: number, action: string, input?: Json): void;
+    after(name: string, ms: number, action: string, input?: Json, options?: {
+        visible?: boolean;
+    }): void;
     // (undocumented)
     cancel(name: string): void;
     deadline(name: string): number | null;
@@ -190,10 +201,22 @@ export interface CtxTurn extends TurnInfo {
     set(seat: number): void;
 }
 
+// @public
+export interface CtxWallet {
+    balance(seat: number): Promise<Amount>;
+    commit(key: string): void;
+    credit(seat: number, amount: Amount, key: string): void;
+    release(key: string): void;
+    reserve(seat: number, amount: Amount, key: string): Promise<boolean>;
+}
+
 export { current }
 
 // @public
-export function defineGame<S, O = undefined, PN extends string = string, AN extends string = never, A = unknown, PAN extends string = never, P = unknown, V = S>(config: GameConfig<S, O, PN, AN, A, PAN, P, V>): Game<S, O, PN, AN, A, PAN, P, V>;
+export function defineGame<S, O = undefined, PN extends string = string, AN extends string = never, A = unknown, PAN extends string = never, P = unknown, V = S, R = Json, const ID extends string = string, OI = O>(config: GameConfig<S, O, PN, AN, A, PAN, P, V, R> & {
+    id: ID;
+    options?: StandardSchemaV1<OI, O>;
+}): Game<S, O, PN, AN, A, PAN, P, V, R, ID, OI>;
 
 // @public (undocumented)
 export interface Diagnostic {
@@ -248,6 +271,7 @@ export interface EngineState {
     options: Json;
     // (undocumented)
     phase: string | null;
+    reservations: Record<string, string>;
     // (undocumented)
     result: Json;
     // (undocumented)
@@ -284,10 +308,11 @@ export interface EngineState {
 export type EventAudience = 'all' | 'spectators' | readonly number[];
 
 // @public
-export type Game<S = unknown, O = unknown, PN extends string = string, AN extends string = string, A = unknown, PAN extends string = string, P = unknown, V = unknown> = GameConfig<S, O, PN, AN, A, PAN, P, V> & {
+export type Game<S = unknown, O = unknown, PN extends string = string, AN extends string = string, A = unknown, PAN extends string = string, P = unknown, V = unknown, R = Json, ID extends string = string, OI = O> = GameConfig<S, O, PN, AN, A, PAN, P, V, R> & {
+    readonly id: ID;
     readonly [gameBrand]: GameTypes<S, O, PN, {
         [K in AN | PAN]: K extends AN ? InputOf<A, K> : InputOf<PhaseInputs<P>, K>;
-    }, V>;
+    }, V, R, ID, OI>;
 };
 
 // @public
@@ -296,8 +321,8 @@ export type GameActions<G> = TypesOf<G> extends {
 } ? A : never;
 
 // @public
-export interface GameConfig<S, O, PN extends string, AN extends string, A, PAN extends string, P, V> {
-    actions?: ActionDefs<S, O, PN, AN, A> & InputSchemas<A>;
+export interface GameConfig<S, O, PN extends string, AN extends string, A, PAN extends string, P, V, R = Json> {
+    actions?: ActionDefs<S, O, PN, AN, A, R> & InputSchemas<A>;
     autoStart?: boolean;
     // (undocumented)
     description?: string;
@@ -305,26 +330,27 @@ export interface GameConfig<S, O, PN extends string, AN extends string, A, PAN e
     // (undocumented)
     name?: string;
     // (undocumented)
-    onDisconnect?: Hook<S, O, PN>;
+    onDisconnect?: Hook<S, O, PN, R>;
     // (undocumented)
-    onEnd?: Hook<S, O, PN>;
+    onEnd?: Hook<S, O, PN, R>;
     // (undocumented)
-    onReconnect?: Hook<S, O, PN>;
+    onReconnect?: Hook<S, O, PN, R>;
     // (undocumented)
-    onSit?: Hook<S, O, PN>;
+    onSit?: Hook<S, O, PN, R>;
     // (undocumented)
-    onStand?: Hook<S, O, PN>;
+    onStand?: Hook<S, O, PN, R>;
     // (undocumented)
-    onStart?: Hook<S, O, PN>;
+    onStart?: Hook<S, O, PN, R>;
     options?: StandardSchemaV1<unknown, O>;
     phases?: {
-        [K in PN]: PhaseDef<S, O, PN, PAN, K extends keyof P ? P[K] : undefined>;
+        [K in PN]: PhaseDef<S, O, PN, PAN, K extends keyof P ? P[K] : undefined, R>;
     } & {
         [K in keyof P]: {
             actions?: InputSchemas<P[K]>;
         };
     };
-    rounds?: RoundsConfig<S, O, PN>;
+    result?: StandardSchemaV1<unknown, R>;
+    rounds?: RoundsConfig<S, O, PN, R>;
     // (undocumented)
     seats: {
         min: number;
@@ -336,7 +362,7 @@ export interface GameConfig<S, O, PN extends string, AN extends string, A, PAN e
         random: Random;
         seats: number;
     }): S;
-    turns?: TurnsConfig;
+    turns?: TurnsConfig<S, O>;
     version?: number;
     view?(args: ViewArgs<S, O>): V;
 }
@@ -345,9 +371,19 @@ export interface GameConfig<S, O, PN extends string, AN extends string, A, PAN e
 export type GameErrorCode<C extends string> = C extends BuiltinErrorCode ? never : C;
 
 // @public
+export type GameId<G> = TypesOf<G> extends {
+    id: infer ID;
+} ? ID : never;
+
+// @public
 export type GameOptions<G> = TypesOf<G> extends {
     options: infer O;
 } ? O : never;
+
+// @public
+export type GameOptionsInput<G> = TypesOf<G> extends {
+    optionsInput: infer OI;
+} ? OI : never;
 
 // @public
 export type GamePhases<G> = TypesOf<G> extends {
@@ -355,15 +391,26 @@ export type GamePhases<G> = TypesOf<G> extends {
 } ? PN : never;
 
 // @public
-export type GameState<G> = TypesOf<G> extends GameTypes<infer S, unknown, string, unknown, unknown> ? S : never;
+export type GameResult<G> = TypesOf<G> extends {
+    result: infer R;
+} ? R : never;
 
 // @public
-export interface GameTypes<S, O, PN extends string, Actions, V> {
+export type GameState<G> = TypesOf<G> extends {
+    state: infer S;
+} ? S : never;
+
+// @public
+export interface GameTypes<S, O, PN extends string, Actions, V, R = Json, ID extends string = string, OI = O> {
     actions: Actions;
     // (undocumented)
+    id: ID;
+    // (undocumented)
     options: O;
+    optionsInput: OI;
     // (undocumented)
     phases: PN;
+    result: R;
     // (undocumented)
     state: S;
     // (undocumented)
@@ -376,12 +423,12 @@ export type GameView<G> = TypesOf<G> extends {
 } ? V : never;
 
 // @public (undocumented)
-export type Hook<S, O, PN extends string> = (args: HookArgs<S, O, PN>) => void | Promise<void>;
+export type Hook<S, O, PN extends string, R = Json> = (args: HookArgs<S, O, PN, R>) => void | Promise<void>;
 
 // @public (undocumented)
-export interface HookArgs<S, O, PN extends string> {
+export interface HookArgs<S, O, PN extends string, R = Json> {
     // (undocumented)
-    ctx: ActionCtx<O, PN>;
+    ctx: ActionCtx<O, PN, R>;
     player: string | null;
     seat: number | null;
     // (undocumented)
@@ -429,6 +476,12 @@ export interface LobbyDocument {
     tables: LobbyTable[];
 }
 
+// @public
+export interface LobbyFilter {
+    games?: string[];
+    status?: TableStatus[];
+}
+
 // @public (undocumented)
 export interface LobbyTable {
     // (undocumented)
@@ -471,7 +524,7 @@ export type LogEntry = LogEntryBase & ({
     input: Json;
 } | {
     kind: 'system';
-    event: 'sit';
+    event: 'sit' | 'rename';
     seat: number;
     player: {
         id: string;
@@ -493,7 +546,29 @@ export type LogEntry = LogEntryBase & ({
 export interface LogEntryBase {
     at: number;
     draws: number[];
+    effects?: WalletEffect[];
     seq: number;
+    wallet?: WalletOp[];
+}
+
+// @public
+export class MemoryWallet implements Wallet {
+    constructor(options?: {
+        startingBalance?: Amount;
+        balances?: Record<string, Amount>;
+    });
+    // (undocumented)
+    balance(playerId: string): Promise<Amount>;
+    // (undocumented)
+    commit(key: string): Promise<void>;
+    // (undocumented)
+    credit(playerId: string, amount: Amount, key: string): Promise<void>;
+    // (undocumented)
+    release(key: string): Promise<void>;
+    reservation(key: string): WalletReservation | undefined;
+    // (undocumented)
+    reserve(playerId: string, amount: Amount, key: string): Promise<ReserveResult>;
+    set(playerId: string, amount: Amount): void;
 }
 
 // @public
@@ -510,16 +585,16 @@ export type ParseResult = {
 };
 
 // @public (undocumented)
-export interface PhaseDef<S, O, PN extends string, N extends string, A> {
-    actions?: Partial<ActionDefs<S, O, PN, N, A>>;
+export interface PhaseDef<S, O, PN extends string, N extends string, A, R = Json> {
+    actions?: Partial<ActionDefs<S, O, PN, N, A, R>>;
     // (undocumented)
-    onEnter?: Hook<S, O, PN>;
+    onEnter?: Hook<S, O, PN, R>;
     // (undocumented)
-    onExit?: Hook<S, O, PN>;
+    onExit?: Hook<S, O, PN, R>;
     // (undocumented)
-    rounds?: RoundsConfig<S, O, PN>;
+    rounds?: RoundsConfig<S, O, PN, R>;
     // (undocumented)
-    turns?: TurnsConfig;
+    turns?: TurnsConfig<S, O>;
 }
 
 // @public
@@ -565,6 +640,14 @@ export class ReplayDivergenceError extends Error {
 // @public (undocumented)
 export type RequestType = ClientRequest['t'];
 
+// @public (undocumented)
+export type ReserveResult = {
+    ok: true;
+} | {
+    ok: false;
+    reason: 'INSUFFICIENT_FUNDS' | 'UNKNOWN_PLAYER' | 'RELEASED';
+};
+
 // @public
 export interface RoundInfo {
     readonly deadline: number | null;
@@ -579,13 +662,13 @@ export interface RoundInfo {
 }
 
 // @public (undocumented)
-export interface RoundsConfig<S, O, PN extends string> {
+export interface RoundsConfig<S, O, PN extends string, R = Json> {
     closeWhen: 'all-submitted' | 'timeout';
     durationMs?: number;
     // (undocumented)
-    onClose: Hook<S, O, PN>;
+    onClose: Hook<S, O, PN, R>;
     // (undocumented)
-    onOpen?: Hook<S, O, PN>;
+    onOpen?: Hook<S, O, PN, R>;
 }
 
 // @public (undocumented)
@@ -593,7 +676,14 @@ export interface RuntimeOptions {
     // (undocumented)
     clock?: Clock;
     dev?: boolean;
+    entryTimeoutMs?: number;
+    onWalletError?: (info: {
+        op: WalletOp;
+        error: unknown;
+    }) => void;
     persist?: (entry: LogEntry) => Promise<void> | void;
+    wallet?: Wallet;
+    walletTimeoutMs?: number;
 }
 
 // @public
@@ -686,6 +776,10 @@ export interface Snapshot {
     };
     // (undocumented)
     seq: number;
+    wallet?: {
+        pending: WalletOp[];
+        open: string[];
+    };
 }
 
 // @public
@@ -759,10 +853,12 @@ export interface TableMeta {
     round: {
         number: number;
         deadline: number | null;
+        participants: number[];
         submitted: number[];
     } | null;
     // (undocumented)
     status: TableStatus;
+    timers: Record<string, number>;
     // (undocumented)
     turn: {
         seat: number | null;
@@ -807,6 +903,11 @@ export class TableRuntime {
     onCommit(listener: (commit: Commit) => void): () => void;
     reconnect(args: {
         player: string;
+    }): Promise<void>;
+    releaseOpenReservations(): void;
+    rename(args: {
+        player: string;
+        name: string;
     }): Promise<void>;
     static replay(game: AnyGame, log: readonly LogEntry[], args?: RuntimeOptions & {
         from?: Snapshot;
@@ -858,6 +959,15 @@ export interface TimerState {
     deadline: number;
     // (undocumented)
     input: Json;
+    visible?: true;
+}
+
+// @public
+export interface TurnArgs<S, O> {
+    // (undocumented)
+    options: O;
+    seats: readonly number[];
+    state: S;
 }
 
 // @public
@@ -869,19 +979,15 @@ export interface TurnInfo {
 }
 
 // @public (undocumented)
-export interface TurnsConfig {
-    first?: 'lowest' | ((args: {
-        seats: readonly number[];
-    }) => number);
+export interface TurnsConfig<S = unknown, O = unknown> {
+    first?: 'lowest' | ((args: TurnArgs<S, O>) => number);
     onTimeout?: string;
-    order?: 'round-robin' | ((args: {
-        seats: readonly number[];
-    }) => number[]);
+    order?: 'round-robin' | ((args: TurnArgs<S, O>) => number[]);
     skip?: (args: {
         seat: number;
-        state: unknown;
+        state: S;
     }) => boolean;
-    timeoutMs?: number;
+    timeoutMs?: number | ((args: TurnArgs<S, O>) => number);
 }
 
 // @public (undocumented)
@@ -906,6 +1012,51 @@ export type Viewer = {
     readonly seats: readonly number[];
     readonly playerId: null;
 };
+
+// @public
+export interface Wallet {
+    balance(playerId: string): Promise<Amount>;
+    commit(key: string): Promise<void>;
+    credit(playerId: string, amount: Amount, key: string): Promise<void>;
+    release(key: string): Promise<void>;
+    // (undocumented)
+    reserve(playerId: string, amount: Amount, key: string): Promise<ReserveResult>;
+}
+
+// @public
+export type WalletEffect = {
+    op: 'reserve';
+    key: string;
+    ok: boolean;
+} | {
+    op: 'balance';
+    seat: number;
+    amount: number;
+};
+
+// @public
+export type WalletOp = {
+    op: 'commit';
+    key: string;
+} | {
+    op: 'release';
+    key: string;
+} | {
+    op: 'credit';
+    key: string;
+    player: string;
+    amount: Amount;
+};
+
+// @public
+export interface WalletReservation {
+    // (undocumented)
+    amount: Amount;
+    // (undocumented)
+    playerId: string;
+    // (undocumented)
+    state: 'held' | 'committed' | 'released';
+}
 
 // @public (undocumented)
 export interface Welcome {

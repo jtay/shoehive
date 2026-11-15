@@ -13,6 +13,7 @@ import {
   TableRuntime,
   type Commit,
   type LogEntry,
+  type RuntimeOptions,
   type Snapshot,
 } from '../core/runtime';
 import {
@@ -20,6 +21,7 @@ import {
   parseClientMessage,
   type ClientRequest,
   type LobbyDocument,
+  type LobbyFilter,
   type ServerMessage,
   type TableDocument,
   type Welcome,
@@ -38,7 +40,7 @@ import {
   type MemorySocket,
   type UpgradeRequest,
 } from './transport';
-import type { Wallet } from './wallet';
+import type { Wallet, WalletOp } from '../core/wallet';
 
 // ---------------------------------------------------------------------------------
 // Options and public types
@@ -116,6 +118,8 @@ export interface ServerEvents {
   'table:recovery-failed': { table: string; reason: string };
   'player:connected': { player: string };
   'player:disconnected': { player: string };
+  /** A deferred wallet op still failed after retries (ADR 0007): reconcile it by hand. */
+  'wallet:error': { table: string; op: WalletOp; error: unknown };
 }
 
 export interface ShoehiveServer {
@@ -158,7 +162,8 @@ interface Session {
   conns: Set<Conn>;
   /** Tables this session had joined (to restore on resume). */
   joined: Set<string>;
-  lobby: boolean;
+  /** The lobby subscription's filter, or `null` when not subscribed. */
+  lobby: LobbyFilter | null;
   /** Reconnect grace timers per table. */
   grace: Map<string, TimerHandle>;
   cleanup: TimerHandle | null;
@@ -178,7 +183,7 @@ interface Conn {
   identity: PlayerIdentity | null;
   session: Session | null;
   tables: Map<string, Joined>;
-  lobby: { rev: number; doc: LobbyDocument } | null;
+  lobby: { rev: number; doc: LobbyDocument; filter: LobbyFilter } | null;
   tokens: number;
   refilledAt: number;
   rejected: number[];
@@ -215,6 +220,25 @@ function toWire(error: unknown, dev: boolean): WireError {
 }
 
 // ---------------------------------------------------------------------------------
+
+/** A trimmed display name of 1 to 32 characters without control characters, or `null`. */
+function cleanName(raw: string): string | null {
+  const name = raw.trim();
+  return name.length > 0 && name.length <= 32 && !/\p{Cc}/u.test(name) ? name : null;
+}
+
+/** The lobby as one subscriber sees it: every game, only the matching tables. */
+function filterLobby(doc: LobbyDocument, filter: LobbyFilter): LobbyDocument {
+  if (!filter.games && !filter.status) return doc;
+  return {
+    games: doc.games,
+    tables: doc.tables.filter(
+      (t) =>
+        (!filter.games || filter.games.includes(t.game)) &&
+        (!filter.status || filter.status.includes(t.status)),
+    ),
+  };
+}
 
 /**
  * Creates a Shoehive server.
@@ -405,14 +429,18 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     lobbyDoc = next;
     for (const conn of conns) {
       if (!conn.lobby || conn.closed) continue;
-      send(conn, {
-        t: 'lobby.patch',
-        from: conn.lobby.rev,
-        rev: lobbyRev,
-        ops: diff(conn.lobby.doc as unknown as Json, next as unknown as Json),
-      });
-      conn.lobby = { rev: lobbyRev, doc: next };
+      const doc = filterLobby(next, conn.lobby.filter);
+      const ops = diff(conn.lobby.doc as unknown as Json, doc as unknown as Json);
+      if (ops.length === 0) continue;
+      send(conn, { t: 'lobby.patch', from: conn.lobby.rev, rev: lobbyRev, ops });
+      conn.lobby = { rev: lobbyRev, doc, filter: conn.lobby.filter };
     }
+  };
+
+  const subscribeLobby = (conn: Conn, filter: LobbyFilter): void => {
+    const doc = filterLobby(lobbyDoc, filter);
+    conn.lobby = { rev: lobbyRev, doc, filter };
+    send(conn, { t: 'lobby.snapshot', rev: lobbyRev, doc });
   };
 
   // -------------------------------------------------------------------------------
@@ -503,6 +531,17 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     ],
   });
 
+  const walletOptions = (tableId: string): Pick<RuntimeOptions, 'wallet' | 'onWalletError'> =>
+    options.wallet
+      ? {
+          wallet: options.wallet,
+          onWalletError: ({ op, error }) => {
+            logger.error('A wallet operation failed after retries', { table: tableId, op, error });
+            emit('wallet:error', { table: tableId, op, error });
+          },
+        }
+      : {};
+
   const createTable = async (
     gameId: string,
     args: { options?: unknown; id?: string } = {},
@@ -511,7 +550,13 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     if (!game) throw shoehiveError('NOT_FOUND', `Unknown game "${gameId}"`, { kind: 'game' });
     const id = args.id ?? randomTableId();
     if (tables.has(id)) throw shoehiveError('BAD_REQUEST', `Table "${id}" already exists`);
-    const runtime = await TableRuntime.create(game, { id, options: args.options, clock, dev });
+    const runtime = await TableRuntime.create(game, {
+      id,
+      options: args.options,
+      clock,
+      dev,
+      ...walletOptions(id),
+    });
     const createEntry = runtime.log[0]!;
     await store.appendLog(id, [{ seq: 0, data: JSON.stringify(createEntry) }]);
     const entry = register(id, game, runtime, createEntry.at);
@@ -556,6 +601,9 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     if (!entry) throw shoehiveError('NOT_FOUND', `Unknown table "${tableId}"`, { kind: 'table' });
     tables.delete(tableId);
     if (entry.idleTimer !== null) clock.clearTimer(entry.idleTimer);
+    await entry.runtime.idle();
+    // ADR 0007 rule 4: a closed table gives back every reservation it still holds.
+    entry.runtime.releaseOpenReservations();
     await entry.runtime.idle();
     entry.runtime.dispose();
     for (const conn of conns) {
@@ -674,7 +722,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
         player,
         conns: new Set(),
         joined: new Set(),
-        lobby: false,
+        lobby: null,
         grace: new Map(),
         cleanup: null,
       };
@@ -749,9 +797,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       };
       resumed = sessions.has(player.id) || seatedTables(player.id).length > 0 || record !== null;
     } else {
-      const requested = message.name?.trim();
-      const name =
-        requested && requested.length <= 32 && !/\p{Cc}/u.test(requested) ? requested : guestName();
+      const name = (message.name === undefined ? null : cleanName(message.name)) ?? guestName();
       player = { id: guestId(), name, guest: true, metadata: null };
     }
     const session = getSession(player);
@@ -782,10 +828,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       // After the ack: restore the lobby subscription and every joined or seated table.
       queueMicrotask(() => {
         void (async () => {
-          if (session.lobby) {
-            conn.lobby = { rev: lobbyRev, doc: lobbyDoc };
-            send(conn, { t: 'lobby.snapshot', rev: lobbyRev, doc: lobbyDoc });
-          }
+          if (session.lobby) subscribeLobby(conn, session.lobby);
           for (const tableId of new Set([...session.joined, ...seatedTables(player.id)])) {
             if (!tables.has(tableId) || conn.tables.has(tableId)) continue;
             await joinTable(conn, tableId, 'player');
@@ -812,18 +855,44 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     const session = conn.session;
     const player = session.player;
     switch (message.t) {
-      case 'lobby.sub':
-        session.lobby = true;
+      case 'lobby.sub': {
+        const filter = message.filter ?? {};
+        session.lobby = filter;
         return {
           after: () => {
-            conn.lobby = { rev: lobbyRev, doc: lobbyDoc };
-            send(conn, { t: 'lobby.snapshot', rev: lobbyRev, doc: lobbyDoc });
+            subscribeLobby(conn, filter);
           },
         };
+      }
       case 'lobby.unsub':
-        session.lobby = false;
+        session.lobby = null;
         conn.lobby = null;
         return {};
+      case 'player.rename': {
+        if (!player.guest) {
+          throw shoehiveError(
+            'FORBIDDEN',
+            'Names of authenticated players come from the auth hook',
+          );
+        }
+        const name = cleanName(message.name);
+        if (name === null)
+          throw shoehiveError(
+            'BAD_REQUEST',
+            'Names are 1 to 32 characters, with no control characters',
+          );
+        player.name = name;
+        await store.sessions.put({
+          playerId: player.id,
+          name,
+          metadata: player.metadata,
+          updatedAt: clock.now(),
+        });
+        for (const tableId of seatedTables(player.id)) {
+          await tables.get(tableId)?.runtime.rename({ player: player.id, name });
+        }
+        return { result: { name } };
+      }
       case 'table.create': {
         const info = await createTable(message.game, { options: message.options });
         return { result: { table: info.id } };
@@ -1078,6 +1147,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
         clock,
         dev,
         persist: persistEntry(tableId),
+        ...walletOptions(tableId),
       });
     } catch (error) {
       throw new Error(

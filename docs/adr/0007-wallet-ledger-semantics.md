@@ -53,7 +53,14 @@ interface CtxWallet {
 
 1. **Keys.** Game code passes a key unique within the table (`bet:h12:s3`). The engine
    prefixes it with the table id (`tbl_abc:bet:h12:s3`) before calling the backend, so
-   keys are unique per server. Backends must treat each key as a small state machine:
+   keys are unique per server. For `reserve`, the engine also appends a random id per
+   attempt (`tbl_abc:bet:h12:s3:9f3a0c51e2b4`), recorded in the entry's `effects` and
+   mapped from the game key in engine state, so `commit` and `release` take the game key.
+   This lets a game reuse a key after its entry rolled back (the rolled-back attempt's
+   release leaves a tombstone on its own backend key only). A key stays open from a
+   successful `reserve` until `commit` or `release`; reserving an open key again, or
+   settling a key that is not open, throws. `credit` keys are used as given, so they must
+   be unique for good (a counter in state works). Backends must treat each key as a small state machine:
    `reserved`, then exactly one of `committed` or `released`. Repeating the same call
    with the same arguments is a no-op that returns the original result. A conflicting
    call (`commit` after `release`, or `reserve` with a different amount) throws.
@@ -79,22 +86,42 @@ interface CtxWallet {
      discards the draft, releases its reservations, acks `TIMEOUT`, and closes the
      transaction; later `ctx` calls from the abandoned function throw and are logged.
 6. **Deferred op failures.** After commit, deferred ops are sent in order, retried with
-   exponential backoff (5 attempts, up to 30 s total). Persistent failure emits the
+   exponential backoff (5 attempts, about 3 s in all). Persistent failure emits the
    operator event `wallet:error` with the key and op, and is logged at `error`. Table
    state is not rolled back: it is already committed and broadcast.
 7. **Replay.** Results of `reserve` and `balance` are recorded in the entry's `effects`
    (ADR 0006). Replay uses the recorded results and never calls the backend.
-8. **Recovery.** Deferred ops whose completion was not confirmed are kept in engine
-   state and in snapshots. After restart, the server re-sends them and the deferred ops
+8. **Recovery.** Deferred ops whose completion was not confirmed are kept by the
+   runtime and in snapshots (see the implementation note below). After restart, the server re-sends them and the deferred ops
    of every entry in the replayed tail. Idempotency makes duplicates harmless.
 9. **No wallet configured.** Any `ctx.wallet` call throws `WALLET_NOT_CONFIGURED`
    (an `INTERNAL` error to clients, a clear message in logs).
-10. **Dev ledger.** `memoryWallet({ initialBalance?: Amount })` implements the full
-    contract, including tombstones and conflicts. Its source is isomorphic, so it is
-    exported from `shoehive/server` and used by default in `shoehive/testing`. Devtools
+10. **Dev ledger.** `new MemoryWallet({ startingBalance?, balances? })` implements the
+    full contract, including tombstones and conflicts. Its source is isomorphic, so it
+    is exported from `shoehive` and `shoehive/server` and used by default in
+    `shoehive/testing` (every player starts with 1000). Devtools
     forks (ADR 0011) always use a fresh memory wallet, never the real one.
 11. **Conformance.** `shoehive/testing` ships `runWalletConformance(createWallet)`
     covering idempotency, conflicts, tombstones and concurrent keys.
+
+### Implementation note (Phase 4)
+
+Two details differ from the first draft, without changing any rule above:
+
+- **No outbox in engine state.** Pending deferred ops and the set of open reservations
+  are not part of `EngineState` (which is diffed and sent to clients). Each log entry
+  records its own deferred ops in `wallet`, next to `effects`. The runtime tracks ops
+  still in flight and reservations still open in memory, and `snapshot()` writes both
+  to `Snapshot.wallet`. Recovery re-sends the snapshot's pending ops plus every
+  replayed entry's ops, and rebuilds open reservations from the snapshot and the
+  replayed `effects` and ops.
+- **Per-attempt reserve keys** (rule 1). Found while building Hold'em and blackjack: with
+  plain keys, a bet refused after its reserve (or any rollback) burned the key for good.
+- **`onStand` cash-outs.** The seat is empty by the time `onStand` runs, but `ctx.wallet`
+  still resolves it to the player who left in that entry, so games can pay out stacks.
+- **Replay divergence.** A replayed entry that makes a different sequence of wallet
+  calls than it recorded (or fewer) throws `ReplayDivergenceError`, like a different
+  sequence of random draws.
 
 ## Consequences
 

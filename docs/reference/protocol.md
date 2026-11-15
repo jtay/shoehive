@@ -154,23 +154,31 @@ the game's `onStand` hook runs and the seats become `empty`. A player may hold s
 
 ## 5. Requests
 
-| `t`            | Fields                                                        | `result` on success               | Typical errors                                                                                                                                                                                                                |
-| -------------- | ------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hello`        | `v`, `resume?`, `client?`                                     | `Welcome`                         | `UNSUPPORTED_PROTOCOL`                                                                                                                                                                                                        |
-| `lobby.sub`    |                                                               | none (a `lobby.snapshot` follows) |                                                                                                                                                                                                                               |
-| `lobby.unsub`  |                                                               | none                              |                                                                                                                                                                                                                               |
-| `table.create` | `game`, `options?`                                            | `{ table: string }`               | `NOT_FOUND`, `INVALID_OPTIONS`, `FORBIDDEN`                                                                                                                                                                                   |
-| `table.join`   | `table`, `as?: 'player' \| 'spectator'` (default `'player'`)  | none (a `table.snapshot` follows) | `NOT_FOUND`, `TABLE_ENDED`, `FORBIDDEN`                                                                                                                                                                                       |
-| `table.leave`  | `table`                                                       | none                              | `NOT_JOINED`                                                                                                                                                                                                                  |
-| `table.sync`   | `table`                                                       | none (a `table.snapshot` follows) | `NOT_JOINED`                                                                                                                                                                                                                  |
-| `seat.take`    | `table`, `seat?: number` (omit for the first free seat)       | `{ seat: number }`                | `NOT_JOINED`, `SEAT_TAKEN`, `TABLE_FULL`, `ALREADY_SEATED`, game codes from `canSit`                                                                                                                                          |
-| `seat.leave`   | `table`, `seat?: number` (omit for all of the player's seats) | none                              | `NOT_SEATED`                                                                                                                                                                                                                  |
-| `act`          | `table`, `name`, `input?`, `seat?`, `rev?`                    | `{ rev: number, value?: Json }`   | `NOT_SEATED`, `NOT_STARTED`, `ACTION_NOT_ALLOWED`, `INVALID_INPUT`, `ALREADY_SUBMITTED`, `NOT_PARTICIPANT`, `ROUND_CLOSED`, `STALE_REVISION`, `TABLE_ENDED`, `TABLE_UNAVAILABLE`, `WALLET_UNAVAILABLE`, `TIMEOUT`, game codes |
-| `ping`         | `id?`                                                         | answered by `pong`, not `ack`     |                                                                                                                                                                                                                               |
+| `t`             | Fields                                                        | `result` on success                   | Typical errors                                                                                                                                                                                                                |
+| --------------- | ------------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hello`         | `v`, `resume?`, `name?`, `client?`                            | `Welcome`                             | `UNSUPPORTED_PROTOCOL`                                                                                                                                                                                                        |
+| `lobby.sub`     | `filter?: { games?: string[], status?: TableStatus[] }`       | none (a `lobby.snapshot` follows)     | `BAD_REQUEST`                                                                                                                                                                                                                 |
+| `lobby.unsub`   |                                                               | none                                  |                                                                                                                                                                                                                               |
+| `player.rename` | `name`                                                        | `{ name: string }` (the trimmed name) | `BAD_REQUEST` (empty, over 32 characters, control characters), `FORBIDDEN` (authenticated players)                                                                                                                            |
+| `table.create`  | `game`, `options?`                                            | `{ table: string }`                   | `NOT_FOUND`, `INVALID_OPTIONS`, `FORBIDDEN`                                                                                                                                                                                   |
+| `table.join`    | `table`, `as?: 'player' \| 'spectator'` (default `'player'`)  | none (a `table.snapshot` follows)     | `NOT_FOUND`, `TABLE_ENDED`, `FORBIDDEN`                                                                                                                                                                                       |
+| `table.leave`   | `table`                                                       | none                                  | `NOT_JOINED`                                                                                                                                                                                                                  |
+| `table.sync`    | `table`                                                       | none (a `table.snapshot` follows)     | `NOT_JOINED`                                                                                                                                                                                                                  |
+| `seat.take`     | `table`, `seat?: number` (omit for the first free seat)       | `{ seat: number }`                    | `NOT_JOINED`, `SEAT_TAKEN`, `TABLE_FULL`, `ALREADY_SEATED`, game codes from `canSit`                                                                                                                                          |
+| `seat.leave`    | `table`, `seat?: number` (omit for all of the player's seats) | none                                  | `NOT_SEATED`                                                                                                                                                                                                                  |
+| `act`           | `table`, `name`, `input?`, `seat?`, `rev?`                    | `{ rev: number, value?: Json }`       | `NOT_SEATED`, `NOT_STARTED`, `ACTION_NOT_ALLOWED`, `INVALID_INPUT`, `ALREADY_SUBMITTED`, `NOT_PARTICIPANT`, `ROUND_CLOSED`, `STALE_REVISION`, `TABLE_ENDED`, `TABLE_UNAVAILABLE`, `WALLET_UNAVAILABLE`, `TIMEOUT`, game codes |
+| `ping`          | `id?`                                                         | answered by `pong`, not `ack`         |                                                                                                                                                                                                                               |
 
 Notes:
 
 - `table.create` does not join. `shoehive/client` offers `createAndJoin()` that sends both.
+- `lobby.sub` with a `filter` lists only matching tables (every game is still listed). Sending
+  `lobby.sub` again replaces the filter and is answered by a fresh `lobby.snapshot`. Added in
+  Phase 4 (additive, section 10).
+- `player.rename` changes a guest's display name: in the session, the stored session (so it
+  survives resume) and on every seat the player holds, which reaches other viewers as an ordinary
+  `table.patch` of `seats`. Names of authenticated players come from the `auth` hook. Added in
+  Phase 4.
 - `act.seat` is required only when the player holds more than one seat at that table.
 - The `act` result's `value` is the JSON the action's `run` returned, when it returned one.
 - `act.rev`, when present, must equal the table's current revision or the action is rejected with
@@ -200,10 +208,12 @@ interface TableDocument {
       // round-based phases
       number: number;
       deadline: number | null; // epoch ms
+      participants: number[]; // seats taking part (occupied when the round opened)
       submitted: number[]; // seats that have acted this round
     } | null;
     options: unknown; // table options as validated by the game
     result: unknown; // ctx.end() payload once status is 'ended', else null
+    timers: Record<string, number>; // deadlines (epoch ms) of timers the game made visible
   };
   seats: Array<{
     status: 'empty' | 'occupied' | 'reserved';
@@ -214,6 +224,16 @@ interface TableDocument {
   you: { player: string; seats: number[]; role: 'player' | 'spectator' };
 }
 ```
+
+`meta.timers` lists only timers scheduled with `ctx.timers.after(..., { visible: true })`: their
+name and deadline, never the action or input they run. Use it for countdowns such as "next hand
+in 5 s". The turn timer is already in `turn.deadline` (added in Phase 4, additive).
+
+`round.participants` lets a client tell a player who sat after a round opened that they take
+part from the next round (an action from them gets `NOT_PARTICIPANT`). Added in Phase 4.
+
+`meta.result` is checked against the game's `result` schema when it declares one, so clients can
+rely on its shape.
 
 `round.submitted` lists _which_ seats acted, never _what_ they submitted. Contents of submissions
 are part of game state and reach clients only through `view()`.
@@ -289,6 +309,10 @@ interface LobbyDocument {
 { t: 'lobby.snapshot', rev: number, doc: LobbyDocument }
 { t: 'lobby.patch', from: number, rev: number, ops: JsonPatchOp[] }
 ```
+
+With a `filter` (section 5), `tables` holds only the matching tables; `rev` still counts every
+lobby change, so a subscriber may see revisions skip. Patches go out only when the filtered
+document changed.
 
 Game definitions never leak server-only configuration into the lobby: only the fields above.
 
@@ -410,7 +434,7 @@ The server sends `bye { code, reason }` immediately before closing, when it can.
 { "t": "ack", "id": "3", "ok": true }
 { "t": "table.snapshot", "table": "t_q81", "rev": 0, "doc": {
   "view": { "board": [null, null, null, null, null, null, null, null, null], "winner": null },
-  "meta": { "game": "tic-tac-toe", "status": "waiting", "phase": null, "turn": null, "round": null, "options": {}, "result": null },
+  "meta": { "game": "tic-tac-toe", "status": "waiting", "phase": null, "turn": null, "round": null, "options": {}, "result": null, "timers": {} },
   "seats": [ { "status": "empty", "player": null, "connected": false },
              { "status": "empty", "player": null, "connected": false } ],
   "spectators": 0,

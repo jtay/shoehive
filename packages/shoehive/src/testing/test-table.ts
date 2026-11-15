@@ -2,6 +2,7 @@ import type { AnyGame, GameActions, GameState, GameView, SeatInfo } from '../cor
 import type { Json } from '../core/json';
 import { TableRuntime, type EmittedEvent, type LogEntry, type TableMeta } from '../core/runtime';
 import { jsonEqual } from '../core/json';
+import { MemoryWallet, type Wallet, type WalletOp } from '../core/wallet';
 import { FakeClock } from './fake-clock';
 
 /** Default seed for test tables, so every run is reproducible (ADR 0006). */
@@ -16,6 +17,8 @@ export interface TestTableOptions {
   options?: unknown;
   /** Clock start time (epoch ms). */
   startAt?: number;
+  /** The wallet behind `ctx.wallet`. Default: a `MemoryWallet` giving every player 1000. */
+  wallet?: Wallet;
 }
 
 type Inputs<G> = GameActions<G>;
@@ -33,6 +36,8 @@ export interface RecordedEvent extends EmittedEvent {
  */
 export class TestTable<G extends AnyGame> {
   readonly clock: FakeClock;
+  /** The wallet behind `ctx.wallet` (a `MemoryWallet` unless you passed one). */
+  readonly wallet: Wallet;
   /** Ephemeral events emitted by the game, in order. */
   readonly events: RecordedEvent[] = [];
   private readonly playerBySeat = new Map<number, string>();
@@ -40,8 +45,12 @@ export class TestTable<G extends AnyGame> {
   private constructor(
     readonly runtime: TableRuntime,
     clock: FakeClock,
+    wallet: Wallet,
+    /** Deferred wallet ops that failed after retries (a game bug, such as a reused key). */
+    readonly walletErrors: { op: WalletOp; error: unknown }[],
   ) {
     this.clock = clock;
+    this.wallet = wallet;
     runtime.onCommit((commit) => {
       for (const event of commit.events) this.events.push({ ...event, rev: commit.rev });
     });
@@ -53,14 +62,20 @@ export class TestTable<G extends AnyGame> {
     opts: TestTableOptions = {},
   ): Promise<TestTable<G>> {
     const clock = new FakeClock(opts.startAt);
+    const wallet = opts.wallet ?? new MemoryWallet({ startingBalance: 1000 });
+    const walletErrors: { op: WalletOp; error: unknown }[] = [];
     const runtime = await TableRuntime.create(game, {
       clock,
       dev: true,
       seed: opts.seed ?? TEST_SEED,
       options: opts.options,
       id: 'test-table',
+      wallet,
+      onWalletError: (info) => {
+        walletErrors.push(info);
+      },
     });
-    const table = new TestTable<G>(runtime, clock);
+    const table = new TestTable<G>(runtime, clock, wallet, walletErrors);
     const players = opts.players ?? game.seats.min;
     const ids =
       typeof players === 'number'

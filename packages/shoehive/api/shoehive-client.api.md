@@ -39,6 +39,13 @@ export type ConnectionStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' |
 export function createClient<Games extends readonly AnyGame[] = readonly AnyGame[]>(options: ClientOptions): ShoehiveClient<Games>;
 
 // @public
+export type GameById<Games extends readonly AnyGame[], K> = Extract<Games[number], {
+    id: K;
+}> extends never ? Games[number] : Extract<Games[number], {
+    id: K;
+}>;
+
+// @public
 export function isShoehiveError(error: unknown): error is ShoehiveError;
 
 // @public (undocumented)
@@ -57,17 +64,26 @@ export interface LobbyDocument {
     tables: LobbyTable[];
 }
 
+// @public
+export interface LobbyFilter {
+    games?: string[];
+    status?: TableStatus[];
+}
+
 // @public (undocumented)
 export class LobbyHandle {
     // @internal
-    constructor(client: ShoehiveClient);
+    constructor(client: ShoehiveClient, filter: LobbyFilter);
     close(): Promise<void>;
     // (undocumented)
     doc: LobbyDocument | null;
+    filter: LobbyFilter;
     // @internal (undocumented)
     receive(message: ServerMessage): void;
     // (undocumented)
     rev: number;
+    // @internal
+    subFields(): Record<string, Json>;
     // (undocumented)
     subscribe(listener: Listener<LobbyDocument>): () => void;
 }
@@ -78,10 +94,10 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
     clockOffset: number;
     close(): void;
     connect(): Promise<Welcome>;
-    createAndJoin<G extends AnyGame = Games[number]>(game: Games[number]['id'], options?: Json, input?: {
+    createAndJoin<K extends Games[number]['id'], G extends AnyGame = GameById<Games, K>>(game: K, options?: GameOptionsInput<G>, input?: {
         sit?: boolean;
     }): Promise<TableHandle<G>>;
-    createTable(game: Games[number]['id'], options?: Json): Promise<string>;
+    createTable<K extends Games[number]['id']>(game: K, options?: GameOptionsInput<GameById<Games, K>>): Promise<string>;
     // @internal (undocumented)
     dropLobby(): void;
     // @internal (undocumented)
@@ -89,10 +105,13 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
     join<G extends AnyGame = Games[number]>(tableId: string, options?: {
         as?: 'player' | 'spectator';
     }): Promise<TableHandle<G>>;
-    lobby(): Promise<LobbyHandle>;
+    lobby(options?: {
+        filter?: LobbyFilter;
+    }): Promise<LobbyHandle>;
     onStatus(listener: Listener<ConnectionStatus>): () => void;
     ping(): Promise<number>;
     player: Welcome['player'] | null;
+    rename(name: string): Promise<string>;
     request(t: string, fields?: Record<string, unknown>): Promise<Json | undefined>;
     serverNow(): number;
     // (undocumented)
@@ -155,8 +174,7 @@ export class TableHandle<G extends AnyGame = AnyGame> {
     // @internal
     joining: number;
     leave(): Promise<void>;
-    // (undocumented)
-    get meta(): TableMeta;
+    get meta(): TypedTableMeta<G>;
     get mySeat(): number | null;
     on(name: string, listener: Listener<{
         payload: Json;
@@ -186,6 +204,12 @@ export interface TokenStorage {
     // (undocumented)
     set(token: string | null): void;
 }
+
+// @public
+export type TypedTableMeta<G> = Omit<TableMeta, 'result' | 'options'> & {
+    options: GameOptions<G>;
+    result: GameResult<G> | null;
+};
 
 // @public
 export interface WebSocketLike {

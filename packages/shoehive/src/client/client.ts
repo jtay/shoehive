@@ -1,7 +1,15 @@
 // shoehive/client: the framework-agnostic TypeScript client (RFC 0001 section 5.4).
 // Speaks protocol v1 (docs/reference/protocol.md). Isomorphic: browsers and Node 22+.
 
-import type { AnyGame, GameActions, GameView, SeatInfo } from '../core/define';
+import type {
+  AnyGame,
+  GameActions,
+  GameOptions,
+  GameOptionsInput,
+  GameResult,
+  GameView,
+  SeatInfo,
+} from '../core/define';
 import { applyPatch } from '../core/diff';
 import { ShoehiveError } from '../core/errors';
 import type { Json } from '../core/json';
@@ -9,6 +17,7 @@ import type { TableMeta } from '../core/runtime';
 import type {
   Ack,
   LobbyDocument,
+  LobbyFilter,
   ServerMessage,
   TableDocument,
   Welcome,
@@ -113,6 +122,19 @@ function clientError(code: (typeof CLIENT_ERROR_CODES)[number], message: string)
 // ---------------------------------------------------------------------------------
 // Table handle
 
+/** The game in `Games` whose id is `K` (any game if the client is untyped). */
+export type GameById<Games extends readonly AnyGame[], K> =
+  Extract<Games[number], { id: K }> extends never
+    ? Games[number]
+    : Extract<Games[number], { id: K }>;
+
+/** The table metadata with `result` typed by the game's `result` schema. */
+export type TypedTableMeta<G> = Omit<TableMeta, 'result' | 'options'> & {
+  /** The table's options, as validated (the schema's output). */
+  options: GameOptions<G>;
+  result: GameResult<G> | null;
+};
+
 export interface ActResult {
   rev: number;
   value?: Json;
@@ -158,8 +180,9 @@ export class TableHandle<G extends AnyGame = AnyGame> {
   get view(): GameView<G> {
     return this.requireDoc().view as GameView<G>;
   }
-  get meta(): TableMeta {
-    return this.requireDoc().meta;
+  /** Status, phase, turn, round, options and (once ended) the typed result. */
+  get meta(): TypedTableMeta<G> {
+    return this.requireDoc().meta as TypedTableMeta<G>;
   }
   get seats(): SeatInfo[] {
     return this.requireDoc().seats;
@@ -276,8 +299,21 @@ export class LobbyHandle {
   rev = -1;
   private readonly listeners = new Set<Listener<LobbyDocument>>();
 
+  /** The filter this subscription uses (see `client.lobby()`). */
+  filter: LobbyFilter;
+
   /** @internal */
-  constructor(private readonly client: ShoehiveClient) {}
+  constructor(
+    private readonly client: ShoehiveClient,
+    filter: LobbyFilter,
+  ) {
+    this.filter = filter;
+  }
+
+  /** @internal The `lobby.sub` request fields for this handle. */
+  subFields(): Record<string, Json> {
+    return this.filter.games || this.filter.status ? { filter: this.filter as Json } : {};
+  }
 
   subscribe(listener: Listener<LobbyDocument>): () => void {
     this.listeners.add(listener);
@@ -297,7 +333,7 @@ export class LobbyHandle {
       this.rev = message.rev;
     } else if (message.t === 'lobby.patch') {
       if (!this.doc || message.from !== this.rev) {
-        void this.client.request('lobby.sub').catch(() => undefined);
+        void this.client.request('lobby.sub', this.subFields()).catch(() => undefined);
         return;
       }
       this.doc = applyPatch(this.doc as unknown as Json, message.ops) as unknown as LobbyDocument;
@@ -311,6 +347,12 @@ export class LobbyHandle {
 
 // ---------------------------------------------------------------------------------
 // Client
+
+function sameFilter(a: LobbyFilter, b: LobbyFilter): boolean {
+  const same = (x: readonly string[] | undefined, y: readonly string[] | undefined): boolean =>
+    x === y || (x?.length === y?.length && (x ?? []).every((v, i) => v === y?.[i]));
+  return same(a.games, b.games) && same(a.status, b.status);
+}
 
 interface Pending {
   resolve: (value: Json | undefined) => void;
@@ -353,6 +395,7 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
   }
 
   /** Calls `listener` on every connection status change. */
+  /** Called on every status change, and when `player` changes (for example a rename). */
   onStatus(listener: Listener<ConnectionStatus>): () => void {
     this.statusListeners.add(listener);
     return () => this.statusListeners.delete(listener);
@@ -376,12 +419,22 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
     this.setStatus('closed');
   }
 
-  /** Subscribes to the lobby. */
-  async lobby(): Promise<LobbyHandle> {
+  /**
+   * Subscribes to the lobby. A `filter` narrows the tables listed (every game is always
+   * listed). There is one lobby subscription per client: calling again with a different
+   * filter switches it, and every holder of the handle sees the new filter.
+   */
+  async lobby(options: { filter?: LobbyFilter } = {}): Promise<LobbyHandle> {
+    const filter = options.filter ?? {};
+    if (this.lobbyHandle && !sameFilter(this.lobbyHandle.filter, filter)) {
+      const handle = this.lobbyHandle;
+      handle.filter = filter;
+      this.lobbySubscribed = this.request('lobby.sub', handle.subFields()).then(() => undefined);
+    }
     if (!this.lobbyHandle) {
-      const handle = new LobbyHandle(this);
+      const handle = new LobbyHandle(this, filter);
       this.lobbyHandle = handle;
-      this.lobbySubscribed = this.request('lobby.sub').then(
+      this.lobbySubscribed = this.request('lobby.sub', handle.subFields()).then(
         () => undefined,
         (error: unknown) => {
           // Do not cache a handle that never subscribed: the next call retries.
@@ -397,11 +450,25 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
 
   private lobbySubscribed: Promise<void> = Promise.resolve();
 
-  /** Creates a table and returns its id. Does not join it. */
-  async createTable(game: Games[number]['id'], options?: Json): Promise<string> {
+  /** Changes this guest's display name, on every seat it holds too. Resolves the name used. */
+  async rename(name: string): Promise<string> {
+    const result = (await this.request('player.rename', { name })) as { name: string };
+    if (this.player) this.player = { ...this.player, name: result.name };
+    emitAll(this.statusListeners, this.status);
+    return result.name;
+  }
+
+  /**
+   * Creates a table and returns its id. Does not join it. `options` is typed by the
+   * game's options schema (the server validates it).
+   */
+  async createTable<K extends Games[number]['id']>(
+    game: K,
+    options?: GameOptionsInput<GameById<Games, K>>,
+  ): Promise<string> {
     const result = (await this.request(
       'table.create',
-      options === undefined ? { game } : { game, options },
+      options === undefined ? { game } : { game, options: options as Json },
     )) as {
       table: string;
     };
@@ -435,13 +502,13 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
     return handle;
   }
 
-  /** Creates a table, joins it and takes a seat. */
-  async createAndJoin<G extends AnyGame = Games[number]>(
-    game: Games[number]['id'],
-    options?: Json,
+  /** Creates a table, joins it and takes a seat. The handle is typed by the game id. */
+  async createAndJoin<K extends Games[number]['id'], G extends AnyGame = GameById<Games, K>>(
+    game: K,
+    options?: GameOptionsInput<G>,
     { sit = true }: { sit?: boolean } = {},
   ): Promise<TableHandle<G>> {
-    const id = await this.createTable(game, options);
+    const id = await this.createTable(game, options as GameOptionsInput<GameById<Games, K>>);
     const table = await this.join<G>(id);
     if (sit) await table.sit();
     return table;
@@ -605,7 +672,9 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
     for (const [tableId, handle] of this.tables) {
       void this.request('table.join', { table: tableId, as: handle.role }).catch(() => undefined);
     }
-    if (this.lobbyHandle) void this.request('lobby.sub').catch(() => undefined);
+    if (this.lobbyHandle) {
+      void this.request('lobby.sub', this.lobbyHandle.subFields()).catch(() => undefined);
+    }
   }
 
   private scheduleReconnect(): void {

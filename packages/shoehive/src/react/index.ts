@@ -33,11 +33,11 @@ import {
   type ConnectionStatus,
   type ShoehiveClient,
   type TableHandle,
+  type TypedTableMeta,
 } from '../client/client';
 import type { AnyGame, GameActions, GameView, SeatInfo } from '../core/define';
 import type { Json } from '../core/json';
-import type { TableMeta } from '../core/runtime';
-import type { LobbyDocument, TableDocument, Welcome } from '../protocol/messages';
+import type { LobbyDocument, LobbyFilter, TableDocument, Welcome } from '../protocol/messages';
 
 const ClientContext = createContext<ShoehiveClient | null>(null);
 
@@ -89,22 +89,33 @@ export function useClient<
 /** Connection status and the current player. Re-renders on changes. */
 export function useConnection(): { status: ConnectionStatus; player: Welcome['player'] | null } {
   const client = useClient();
+  const subscribe = useCallback((onChange: () => void) => client.onStatus(onChange), [client]);
   const status = useSyncExternalStore(
-    (onChange) => client.onStatus(onChange),
+    subscribe,
     () => client.status,
     () => client.status,
   );
-  return { status, player: client.player };
+  const player = useSyncExternalStore(
+    subscribe,
+    () => client.player,
+    () => client.player,
+  );
+  return { status, player };
 }
 
-/** The lobby document, kept up to date while the component is mounted. */
-export function useLobby(): LobbyDocument | null {
+/**
+ * The lobby document, kept up to date while the component is mounted. `filter` narrows
+ * the tables listed (one subscription per client: the last filter wins).
+ */
+export function useLobby(options: { filter?: LobbyFilter } = {}): LobbyDocument | null {
   const client = useClient();
   const [doc, setDoc] = useState<LobbyDocument | null>(null);
+  const key = JSON.stringify(options.filter ?? {});
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     let cancelled = false;
-    client.lobby().then(
+    const filter = JSON.parse(key) as LobbyFilter;
+    client.lobby({ filter }).then(
       (lobby) => {
         if (cancelled) return;
         setDoc(lobby.doc);
@@ -118,7 +129,7 @@ export function useLobby(): LobbyDocument | null {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [client]);
+  }, [client, key]);
   return doc;
 }
 
@@ -129,7 +140,7 @@ export interface UseTable<G extends AnyGame> {
   table: TableHandle<G> | null;
   doc: TableDocument | null;
   view: GameView<G> | null;
-  meta: TableMeta | null;
+  meta: TypedTableMeta<G> | null;
   seats: SeatInfo[];
   you: TableDocument['you'] | null;
   mySeat: number | null;
@@ -255,7 +266,7 @@ export function useTable<G extends AnyGame = AnyGame>(
     table,
     doc,
     view: (doc?.view as GameView<G> | undefined) ?? null,
-    meta: doc?.meta ?? null,
+    meta: (doc?.meta as TypedTableMeta<G> | undefined) ?? null,
     seats: doc?.seats ?? [],
     you: doc?.you ?? null,
     mySeat: doc?.you.seats[0] ?? null,

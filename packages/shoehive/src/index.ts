@@ -19,8 +19,11 @@ export {
   type Game,
   type GameActions,
   type GameConfig,
+  type GameId,
   type GameOptions,
+  type GameOptionsInput,
   type GamePhases,
+  type GameResult,
   type GameTypes,
   type GameState,
   type GameView,
@@ -33,6 +36,7 @@ export {
   type SeatInfo,
   type TableStatus,
   type TurnInfo,
+  type TurnArgs,
   type TurnsConfig,
   type Viewer,
   type ViewArgs,
@@ -59,8 +63,18 @@ export type {
   Snapshot,
   TableMeta,
   TimerState,
+  WalletEffect,
 } from './core/runtime';
 export { systemClock, type Clock, type TimerHandle } from './core/clock';
+export {
+  MemoryWallet,
+  type Amount,
+  type CtxWallet,
+  type ReserveResult,
+  type Wallet,
+  type WalletOp,
+  type WalletReservation,
+} from './core/wallet';
 export type { Random } from './core/random';
 export { applyPatch, diff, type JsonPatchOp } from './core/diff';
 export type { Json } from './core/json';
@@ -78,6 +92,7 @@ export {
   type RequestType,
   type ClientRequest,
   type LobbyDocument,
+  type LobbyFilter,
   type LobbyTable,
   type ServerMessage,
   type TableDocument,

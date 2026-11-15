@@ -22,8 +22,10 @@ export {
   type ActResult,
   type ClientOptions,
   type ConnectionStatus,
+  type GameById,
   type TokenStorage,
+  type TypedTableMeta,
   type WebSocketLike,
 } from './client';
 export { ShoehiveError, isShoehiveError } from '../core/errors';
-export type { LobbyDocument, TableDocument, Welcome } from '../protocol/messages';
+export type { LobbyDocument, LobbyFilter, TableDocument, Welcome } from '../protocol/messages';

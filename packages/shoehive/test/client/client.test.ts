@@ -75,7 +75,7 @@ describe.each(['memory', 'ws'] as const)('shoehive/client over %s', (transport) 
     expect((await ada.connect()).player.name).toBe('Ada');
     expect(ada.status).toBe('open');
 
-    const table = await ada.createAndJoin<typeof ticTacToe>('tic-tac-toe');
+    const table = await ada.createAndJoin('tic-tac-toe');
     expect(table.mySeat).toBe(0);
     const bobTable = await bob.join<typeof ticTacToe>(table.id);
     expect(await bobTable.sit()).toBe(1);
@@ -99,7 +99,7 @@ describe.each(['memory', 'ws'] as const)('shoehive/client over %s', (transport) 
   it('notifies subscribers and event listeners', async () => {
     const { client } = await setup(transport);
     const ada = client();
-    const table = await ada.createAndJoin<typeof ticTacToe>('tic-tac-toe');
+    const table = await ada.createAndJoin('tic-tac-toe');
     const revs: number[] = [];
     const unsubscribe = table.subscribe(() => revs.push(table.rev));
     const bob = client();
@@ -119,12 +119,38 @@ describe.each(['memory', 'ws'] as const)('shoehive/client over %s', (transport) 
     await until(() => lobby.doc!.tables.some((t) => t.id === id), 'lobby patch');
   });
 
+  it('filters the lobby and switches the filter in place', async () => {
+    const { client } = await setup(transport);
+    const ada = client();
+    const quizId = await ada.createTable('quiz', { questions: 1 });
+    const tttId = await ada.createTable('tic-tac-toe');
+    const lobby = await ada.lobby({ filter: { games: ['quiz'] } });
+    await until(() => lobby.doc?.tables.length === 1, 'filtered snapshot');
+    expect(lobby.doc!.tables[0]!.id).toBe(quizId);
+    const same = await ada.lobby({ filter: { games: ['tic-tac-toe'] } });
+    expect(same).toBe(lobby);
+    await until(() => lobby.doc?.tables[0]?.id === tttId, 'switched filter');
+    expect(lobby.doc!.tables).toHaveLength(1);
+  });
+
+  it('renames the player and updates their seat', async () => {
+    const { client } = await setup(transport);
+    const ada = client({ name: 'Ada' });
+    const table = await ada.createAndJoin('tic-tac-toe');
+    let statusCalls = 0;
+    ada.onStatus(() => (statusCalls += 1));
+    expect(await ada.rename('Ada Lovelace')).toBe('Ada Lovelace');
+    expect(ada.player?.name).toBe('Ada Lovelace');
+    expect(statusCalls).toBeGreaterThan(0);
+    await until(() => table.seats[0]?.player?.name === 'Ada Lovelace', 'renamed seat');
+  });
+
   it('reconnects on its own and keeps the seat', async () => {
     const { client, sockets, server } = await setup(transport);
     const storage = memoryStorage();
     const ada = client({ storage });
     const bob = client();
-    const table = await ada.createAndJoin<typeof ticTacToe>('tic-tac-toe');
+    const table = await ada.createAndJoin('tic-tac-toe');
     const playerId = ada.player!.id;
     await (await bob.join(table.id)).sit();
     await until(() => table.meta.status === 'active', 'start');

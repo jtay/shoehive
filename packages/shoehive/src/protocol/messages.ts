@@ -18,7 +18,8 @@ export type ClientRequest =
       name?: string;
       client?: { name: string; version: string };
     }
-  | { t: 'lobby.sub'; id: string }
+  | { t: 'lobby.sub'; id: string; filter?: LobbyFilter }
+  | { t: 'player.rename'; id: string; name: string }
   | { t: 'lobby.unsub'; id: string }
   | { t: 'table.create'; id: string; game: string; options?: Json }
   | { t: 'table.join'; id: string; table: string; as?: 'player' | 'spectator' }
@@ -79,6 +80,14 @@ export interface LobbyTable {
   spectators: number;
   createdAt: number;
   listed: Json;
+}
+
+/** Narrows a lobby subscription (protocol section 6.3). Omitted fields match everything. */
+export interface LobbyFilter {
+  /** Only tables of these games. */
+  games?: string[];
+  /** Only tables with these statuses. */
+  status?: TableStatus[];
 }
 
 export interface LobbyDocument {
@@ -171,9 +180,38 @@ export function parseClientMessage(raw: string): ParseResult {
       }
       return { ok: true, message: out };
     }
-    case 'lobby.sub':
+    case 'lobby.sub': {
+      const filter = data['filter'];
+      if (filter === undefined) return { ok: true, message: { t, id } };
+      if (!isObject(filter)) return bad('"filter" must be an object');
+      const out: LobbyFilter = {};
+      const gamesIn = filter['games'];
+      if (gamesIn !== undefined) {
+        if (
+          !Array.isArray(gamesIn) ||
+          gamesIn.length > 64 ||
+          !gamesIn.every((g) => isString(g, 128))
+        )
+          return bad('"filter.games" must be an array of up to 64 strings');
+        out.games = gamesIn;
+      }
+      const statusIn = filter['status'];
+      if (statusIn !== undefined) {
+        if (
+          !Array.isArray(statusIn) ||
+          !statusIn.every((s) => s === 'waiting' || s === 'active' || s === 'ended')
+        )
+          return bad('"filter.status" must be an array of "waiting", "active" or "ended"');
+        out.status = statusIn as TableStatus[];
+      }
+      return { ok: true, message: { t, id, filter: out } };
+    }
     case 'lobby.unsub':
       return { ok: true, message: { t, id } };
+    case 'player.rename': {
+      if (typeof data['name'] !== 'string') return bad('"name" must be a string');
+      return { ok: true, message: { t, id, name: data['name'] } };
+    }
     case 'table.create': {
       if (!isString(data['game'], 128)) return bad('"game" must be a string');
       const out: Extract<ClientRequest, { t: 'table.create' }> = { t, id, game: data['game'] };

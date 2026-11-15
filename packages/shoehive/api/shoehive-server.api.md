@@ -81,6 +81,7 @@ export class MemoryWallet implements Wallet {
     credit(playerId: string, amount: Amount, key: string): Promise<void>;
     // (undocumented)
     release(key: string): Promise<void>;
+    reservation(key: string): WalletReservation | undefined;
     // (undocumented)
     reserve(playerId: string, amount: Amount, key: string): Promise<ReserveResult>;
     set(playerId: string, amount: Amount): void;
@@ -137,6 +138,11 @@ export interface ServerEvents {
     'table:recovery-failed': {
         table: string;
         reason: string;
+    };
+    'wallet:error': {
+        table: string;
+        op: WalletOp;
+        error: unknown;
     };
 }
 
@@ -307,6 +313,30 @@ export interface Wallet {
     release(key: string): Promise<void>;
     // (undocumented)
     reserve(playerId: string, amount: Amount, key: string): Promise<ReserveResult>;
+}
+
+// @public
+export type WalletOp = {
+    op: 'commit';
+    key: string;
+} | {
+    op: 'release';
+    key: string;
+} | {
+    op: 'credit';
+    key: string;
+    player: string;
+    amount: Amount;
+};
+
+// @public
+export interface WalletReservation {
+    // (undocumented)
+    amount: Amount;
+    // (undocumented)
+    playerId: string;
+    // (undocumented)
+    state: 'held' | 'committed' | 'released';
 }
 
 // (No @packageDocumentation comment for this package)

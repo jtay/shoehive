@@ -29,7 +29,9 @@ export function useConnection(): {
 };
 
 // @public
-export function useLobby(): LobbyDocument | null;
+export function useLobby(options?: {
+    filter?: LobbyFilter;
+}): LobbyDocument | null;
 
 // @public
 export function useServerTime(intervalMs?: number): number;
@@ -45,7 +47,7 @@ export interface UseTable<G extends AnyGame> {
     // (undocumented)
     leave: () => Promise<boolean>;
     // (undocumented)
-    meta: TableMeta | null;
+    meta: TypedTableMeta<G> | null;
     // (undocumented)
     mySeat: number | null;
     pending: number;

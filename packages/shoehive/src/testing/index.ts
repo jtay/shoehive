@@ -13,3 +13,4 @@ export {
 } from './test-table';
 export { FakeClock, FAKE_EPOCH } from './fake-clock';
 export { runStoreConformance, type ConformanceRunner } from './store-conformance';
+export { runWalletConformance, type WalletFunds } from './wallet-conformance';

@@ -570,3 +570,76 @@ describe('TableRuntime: rounds without participants (regression)', () => {
     expect(t.runtime.diagnostics()).toEqual([]);
   });
 });
+
+describe('turn and option conveniences', () => {
+  const timed = defineGame({
+    id: 'timed-turns',
+    seats: { min: 2, max: 3 },
+    options: z.object({ turnMs: z.number().default(1000), startAt: z.number().default(1) }),
+    setup: () => ({ timeouts: [] as number[], skipped: 2 }),
+    turns: {
+      timeoutMs: ({ options }) => options.turnMs,
+      onTimeout: 'timeout',
+      first: ({ options, seats }) => seats[options.startAt % seats.length]!,
+      skip: ({ seat, state }) => seat === state.skipped,
+    },
+    actions: {
+      timeout: {
+        internal: true,
+        input: z.object({ seat: z.number() }),
+        run({ state, input, ctx }) {
+          state.timeouts.push(input.seat);
+          ctx.turn.next();
+        },
+      },
+    },
+  });
+
+  it('reads the turn timeout and first seat from options and state', async () => {
+    const t = await createTestTable(timed, { players: 3, options: { turnMs: 500 } });
+    expect(t.meta.turn).toEqual({ seat: 1, deadline: t.clock.now() + 500 });
+    await t.advance(500);
+    // Seat 2 is skipped, so the turn wraps to seat 0.
+    expect(t.state.timeouts).toEqual([1]);
+    expect(t.meta.turn?.seat).toBe(0);
+    await t.verifyReplay();
+  });
+
+  it('accepts omitted options when every field has a default', async () => {
+    const t = await createTestTable(timed, { players: 2 });
+    expect(t.meta.options).toEqual({ turnMs: 1000, startAt: 1 });
+    await expect(TableRuntime.create(timed, { options: { turnMs: 'slow' } })).rejects.toMatchObject(
+      {
+        code: 'INVALID_OPTIONS',
+      },
+    );
+  });
+});
+
+describe('phase entry and skipped seats', () => {
+  it('moves the first turn past a seat onEnter made skippable', async () => {
+    const naturals = defineGame({
+      id: 'naturals',
+      seats: { min: 2, max: 3 },
+      setup: () => ({ done: [false, false, false] }),
+      phases: {
+        play: {
+          turns: { skip: ({ seat, state }) => state.done[seat] === true },
+          onEnter: ({ state }) => {
+            state.done[0] = true; // seat 0 needs no turn
+          },
+          actions: {
+            pass: {
+              run({ ctx }) {
+                ctx.turn.next();
+              },
+            },
+          },
+        },
+      },
+    });
+    const t = await createTestTable(naturals, { players: 2 });
+    expect(t.meta.turn?.seat).toBe(1);
+    expect(t.runtime.engine.turn?.number).toBe(1);
+  });
+});
