@@ -74,10 +74,10 @@ type DevtoolsOption =
 12. **Time travel** builds a new `TableRuntime` by `replay()` from the stored log up to
     the chosen `seq` (ADR 0006), reading entries through `Store.readLog` (ADR 0009). It
     runs in an isolated sandbox: no transport, a fake clock, no store writes, and a
-    fresh `memoryWallet` seeded from recorded balances (ADR 0007). The live table is
+    fresh `MemoryWallet` seeded from recorded balances (ADR 0007). The live table is
     never paused or touched.
 13. **Fork** turns such a copy into a dev table: id prefixed `dev_`, flagged `dev: true`,
-    hidden from the lobby, not persisted, always using a memory wallet. A developer can
+    hidden from the lobby, not persisted, always using a `MemoryWallet`. A developer can
     join it from the normal client and play on from that point. Forks are refused in
     production even when devtools is enabled there.
 14. **Export as fixture** downloads JSON that `shoehive/testing` replays:

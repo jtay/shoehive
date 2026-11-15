@@ -5,6 +5,7 @@
 //   3. the same commands produce the same log (determinism)
 //   4. replaying the log reproduces the state exactly (verifyReplay)
 //   5. applying each viewer's patches in order reproduces that viewer's view
+//   6. no viewer sees a secret (per game: blackjack's shoe and hole card)
 
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
@@ -54,7 +55,16 @@ async function exec(table: TestTable<AnyGame>, cmd: Cmd): Promise<void> {
   }
 }
 
-async function play(game: AnyGame, options: unknown, players: number, cmds: Cmd[]) {
+/** A per-game secrecy check, run on every viewer's view after every command. */
+type SecretCheck = (table: TestTable<AnyGame>, view: Json, viewer: string) => void;
+
+async function play(
+  game: AnyGame,
+  options: unknown,
+  players: number,
+  cmds: Cmd[],
+  check?: SecretCheck,
+) {
   const table: TestTable<AnyGame> = await createTestTable<AnyGame>(game, { players, options });
   const docs = new Map<string, Json>();
   const syncViews = () => {
@@ -71,6 +81,7 @@ async function play(game: AnyGame, options: unknown, players: number, cmds: Cmd[
       const previous = docs.get(key);
       const next = previous === undefined ? view : applyPatch(previous, diff(previous, view));
       expect(jsonEqual(next, view)).toBe(true); // invariant 5
+      check?.(table, view, key); // invariant 6
       docs.set(key, next);
     }
   };
@@ -101,17 +112,39 @@ function property(
   options: unknown,
   players: number,
   cmd: fc.Arbitrary<Cmd>,
-  numRuns = 150,
+  { numRuns = 150, check }: { numRuns?: number; check?: SecretCheck } = {},
 ) {
   return fc.assert(
     fc.asyncProperty(fc.array(cmd, { maxLength: 40 }), async (cmds) => {
-      const a = await play(game, options, players, cmds);
+      const a = await play(game, options, players, cmds, check);
       const b = await play(game, options, players, cmds);
       expect(jsonEqual(a, b)).toBe(true); // invariant 3
     }),
     { numRuns },
   );
 }
+
+/** Every card string in a JSON value (`'KS'`, `'TD'`...), in document order. */
+function cardsIn(value: Json): string[] {
+  if (typeof value === 'string') return /^[2-9TJQKA][SHDC]$/.test(value) ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap(cardsIn);
+  if (value !== null && typeof value === 'object') return Object.values(value).flatMap(cardsIn);
+  return [];
+}
+
+// Blackjack: hands are public, the shoe never leaves the server, and the dealer's
+// second card stays hidden until the dealer plays. So a view holds exactly the cards of
+// every hand plus the dealer's visible cards, and nothing else.
+const blackjackSecrets: SecretCheck = (table, view) => {
+  const state = table.state as {
+    dealer: string[];
+    hands: ({ cards: string[] } | null)[];
+  };
+  const revealed = table.meta.phase === 'dealer';
+  const dealer = revealed ? state.dealer : state.dealer.filter((_, i) => i !== 1);
+  const expected = [...state.hands.flatMap((h) => h?.cards ?? []), ...dealer].sort();
+  expect(cardsIn(view).sort()).toEqual(expected);
+};
 
 const seatCmd = (maxSeat: number) =>
   fc.record({
@@ -170,6 +203,6 @@ describe('engine invariants (property tests)', () => {
       advance(35_000),
       seatCmd(4),
     );
-    await property(blackjack, {}, 3, cmd);
+    await property(blackjack, {}, 3, cmd, { check: blackjackSecrets });
   });
 });
