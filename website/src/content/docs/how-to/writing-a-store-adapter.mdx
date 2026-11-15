@@ -1,11 +1,100 @@
 ---
 title: 'Writing a store adapter'
 description: 'Implement the Store interface for your own database and prove it with the conformance suite.'
-todo: 'The Store interface, runStoreConformance from shoehive/testing, conflicts and StoreConflictError, idempotent retries. Sources: ADR 0009, reference/stores.'
 sidebar:
   order: 8
 ---
 
-{/* TODO: write this page. Delete `todo:` in the frontmatter when it is done. */}
+import Snippet from '../../../components/Snippet.astro';
 
-Implement the Store interface for your own database and prove it with the conformance suite.
+Shoehive ships stores for memory, SQLite, Postgres and Redis. If you use another database,
+you can write an adapter in an afternoon. A store is deliberately thin: it keeps opaque JSON
+strings and append-only logs, and never reads game state.
+
+The interface lives in `packages/shoehive/src/store/types.ts` and is exported from
+`shoehive/server`. Start from the [SQLite adapter](https://github.com/jtay/shoehive/blob/main/packages/shoehive/src/store/sqlite.ts)
+as a model. Then read the contract below and run the conformance suite.
+
+## The interface
+
+| Method                              | What it does                                                           |
+| ----------------------------------- | ---------------------------------------------------------------------- |
+| `appendLog(tableId, entries)`       | Appends log entries, all or nothing.                                   |
+| `saveSnapshot(tableId, snapshot)`   | Replaces the table's snapshot.                                         |
+| `loadTable(tableId)`                | The snapshot and every entry after it, or `null` for an unknown table. |
+| `readLog(tableId, fromSeq, toSeq?)` | Entries from `fromSeq` to `toSeq` inclusive (devtools replay).         |
+| `listOpenTables()`                  | Ids of the tables to recover on startup.                               |
+| `closeTable(tableId, reason)`       | Keeps the table but stops recovering it.                               |
+| `sessions.get / put / delete`       | Guest session records, by player id.                                   |
+| `close()`                           | Releases what the adapter itself opened.                               |
+
+Entries and snapshots carry their payload as a JSON string in `data`. Store it byte for byte
+and hand it back unchanged.
+
+## The contract
+
+- **A log starts at seq 0 and has no gaps.** Each entry must have the seq after the last stored
+  one. Anything else rejects with `StoreConflictError(tableId, expected, got)`. This is how
+  Shoehive catches two servers writing to one table.
+- **Batches are atomic.** If any entry in a batch conflicts, nothing is written.
+- **Exact retries succeed.** A batch whose entries are all already stored with identical
+  `data` resolves without writing. Some drivers resend a command after a lost reply, and that
+  must not fault the table. Any other overlap is a conflict. An empty batch does nothing.
+- **Concurrent writers: exactly one wins.** Two appends of the same seq must not both succeed,
+  even from another process. Use a transaction, a unique key on `(table, seq)` or a script.
+- **Closed tables stay closed.** The engine saves a snapshot as a table ends, after
+  `closeTable`. That snapshot must not bring the table back into `listOpenTables()`.
+- **Return rejected promises.** Make methods `async` so a conflict is a rejection, not a throw.
+- **Durable means durable.** The server acks an action after `appendLog` resolves, so flush to
+  disk before you resolve, or document the trade-off.
+- **Take clients, do not own them.** Accept a pool or client from the caller and leave it open
+  in `close()`, as the Postgres and Redis adapters do. Close only what you opened yourself.
+
+<Snippet
+  file="website/snippets/writing-a-store-adapter/src/map-store.ts"
+  region="store"
+  title="src/map-store.ts"
+/>
+
+## Prove it with the conformance suite
+
+`runStoreConformance` from `shoehive/testing` registers the tests for you. It takes your test
+runner's `describe`, `it` and `expect`, so it works with Vitest, Jest or `node:test`.
+
+Pass a backend with `open` and `destroy`. The suite calls `open()` again after `close()`, and
+the new store must see everything the old one wrote: that is what a restart does.
+
+<Snippet
+  file="website/snippets/writing-a-store-adapter/test/map-store.test.ts"
+  region="conformance"
+  title="test/map-store.test.ts"
+/>
+
+Return fresh, empty storage from each call (a new temp file, schema or key prefix), because
+the suite runs many independent tests. `destroy` removes it afterwards.
+
+The suite checks ordering and conflicts (including the fields of `StoreConflictError`),
+atomic batches, concurrent writers, idempotent retries, snapshots and tails, open and closed
+tables, sessions, 1 MiB payloads, exact round trips of unusual JSON and ids, and data
+surviving close and reopen.
+
+## Use it
+
+```ts
+import type { AnyGame } from 'shoehive';
+import type { Store } from 'shoehive/server';
+declare const games: AnyGame[];
+declare const store: Store; // your adapter
+// ---cut---
+import { createServer } from 'shoehive/server';
+
+const shoehive = createServer({ games, store });
+```
+
+Then try [restart recovery](/how-to/persistence-and-restart-recovery/) end to end against
+your database.
+
+## Related
+
+- [Stores reference](/reference/stores/): the shipped adapters and their settings.
+- [Persistence and restart recovery](/how-to/persistence-and-restart-recovery/).

@@ -1,11 +1,119 @@
 ---
 title: 'Persistence and restart recovery'
 description: 'Keep tables alive across a server restart with a store.'
-todo: 'Choosing a store (memory, SQLite, Postgres, Redis), snapshotEvery, what survives a restart, and testing recovery with close({ graceful: false }). Sources: ADR 0009, reference/stores.'
 sidebar:
   order: 7
 ---
 
-{/* TODO: write this page. Delete `todo:` in the frontmatter when it is done. */}
+import Snippet from '../../../components/Snippet.astro';
 
-Keep tables alive across a server restart with a store.
+Without a store, tables live in process memory and vanish when the server exits. Give
+`createServer` a store and every table survives a restart: players who come back within the
+grace period find their seats as they left them.
+
+## Choose a store
+
+| Adapter                  | Use it for                                                 |
+| ------------------------ | ---------------------------------------------------------- |
+| `memoryStore()`          | Development and tests. The default. Lost on exit.          |
+| `sqliteStore(options)`   | One server with a local disk. The simplest durable choice. |
+| `postgresStore(options)` | A managed database, backups, several apps on one database. |
+| `redisStore(options)`    | An existing Redis that runs with AOF persistence.          |
+
+Install the driver next to `shoehive` (`better-sqlite3`, `pg` or `ioredis`). Each adapter
+loads its driver only when you import its subpath, such as `shoehive/store/sqlite`. Options,
+durability settings and table layouts are on the [Stores reference](/reference/stores/).
+
+<Snippet
+  file="website/snippets/persistence-and-restart-recovery/src/server.ts"
+  region="server"
+  title="src/server.ts"
+/>
+
+For Postgres, build the pool yourself and run `migratePostgres(pool)` from a deploy step if
+the app's role has no rights to create tables. Otherwise the store creates its schema on
+first use. Run **one server process per store namespace**: two writers on one log conflict.
+
+An action is acknowledged only after the store has written it, so an ack means durable.
+How hard the write is flushed depends on the adapter's settings (see the reference).
+
+## What happens on restart
+
+Before the server accepts connections it recovers every open table:
+
+1. It loads the table's latest snapshot and the log entries after it.
+2. It replays those entries with the same code that powers tests, so the state matches the
+   live run exactly. Your wallet and validators are not called.
+3. It re-arms timers from their recorded deadlines. A deadline that passed while the server
+   was down fires right away.
+4. It marks every seated player disconnected and starts a fresh reconnect grace period
+   (`reconnectGraceMs`, 60 seconds by default). Players who reconnect with their resume
+   token in that time are back in their seats.
+5. It re-sends wallet operations that were not confirmed (see
+   [Wallets and real-money safety](/how-to/wallets-and-real-money-safety/)).
+
+`shoehive.ready` resolves when recovery is done. A table that cannot be recovered is not
+opened. The server emits `table:recovery-failed` with a `reason` and carries on with the
+others. The common reasons are `UNKNOWN_GAME` (the game is not in `games`),
+`VERSION_MISMATCH` and `REPLAY_DIVERGED`.
+
+Snapshots are written every `snapshotEvery` log entries (100 by default), on every phase
+change and when a table ends. They bound how much log is replayed after a crash.
+
+## Shut down gracefully
+
+`close()` waits for each table's queue to drain, writes a final snapshot of every table, then
+disconnects clients with close code 1001. After a graceful stop there is nothing to replay.
+
+<Snippet
+  file="website/snippets/persistence-and-restart-recovery/src/server.ts"
+  region="shutdown"
+  title="src/server.ts"
+/>
+
+`close({ graceful: false })` skips the snapshots and drops everything at once, like a crash.
+Use it to test recovery.
+
+## Test recovery
+
+Start a second server over the same store. Pass the same store object, or a new one pointing
+at the same storage.
+
+<Snippet
+  file="website/snippets/persistence-and-restart-recovery/test/restart.test.ts"
+  region="crash"
+  title="test/restart.test.ts"
+/>
+
+## Change a game that has live tables
+
+`defineGame({ version })` is a positive integer (default 1) that snapshots record. Bump it
+when a change could make an old log replay differently, such as a new state shape. A table
+stored under another version is **not** recovered: it reports `VERSION_MISMATCH`, and stays
+in the store untouched, so you can deploy the old version again to finish those games.
+
+Plan deploys around this: drain tables (let games end, or close them) before you bump the
+version.
+
+## When a table is faulted
+
+If the store rejects a write, the server throws away that action's in-memory change, the
+player gets an `INTERNAL` error, and the table rejects further actions with
+`TABLE_UNAVAILABLE`. Fix the cause (a full disk, a lost connection), then reload the table
+from the store:
+
+```ts
+import type { ShoehiveServer } from 'shoehive/server';
+declare const shoehive: ShoehiveServer;
+// ---cut---
+await shoehive.tables.reload('tbl_abc');
+```
+
+`reload` rebuilds the table from its snapshot and log, and sends connected players a fresh
+snapshot. If your adapter reports a `StoreConflictError`, another writer is using the same
+namespace, so stop it before reloading.
+
+## Related
+
+- [Stores reference](/reference/stores/): every option and durability setting.
+- [Writing a store adapter](/how-to/writing-a-store-adapter/): support another database.
