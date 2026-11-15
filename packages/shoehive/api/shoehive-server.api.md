@@ -4,7 +4,9 @@
 
 ```ts
 
+import { IncomingMessage } from 'node:http';
 import { Server } from 'node:http';
+import { ServerResponse } from 'node:http';
 
 // @public
 export type Amount = number;
@@ -30,6 +32,21 @@ export const consoleLogger: Logger;
 
 // @public
 export function createServer(options: ServerOptions): ShoehiveServer;
+
+// @public
+export interface DevtoolsHandle {
+    handleRequest(req: IncomingMessage, res: ServerResponse): boolean;
+    readonly path: string;
+}
+
+// @public
+export type DevtoolsOption = boolean | {
+    enabled: boolean;
+    token?: string;
+    path?: string;
+    allowRemote?: boolean;
+    allowInProduction?: boolean;
+};
 
 // @public
 export interface Logger {
@@ -162,6 +179,7 @@ export interface ServerOptions {
     // (undocumented)
     clock?: Clock;
     dev?: boolean;
+    devtools?: DevtoolsOption;
     // (undocumented)
     games: readonly AnyGame[];
     idleTableMs?: number;
@@ -198,6 +216,7 @@ export interface ShoehiveServer {
         graceful?: boolean;
     }): Promise<void>;
     connect(request?: UpgradeRequest): MemorySocket;
+    readonly devtools?: DevtoolsHandle;
     listen(options?: {
         port?: number;
         host?: string;

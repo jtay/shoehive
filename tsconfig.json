@@ -1,7 +1,13 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    // e2e tests import example games, which import "shoehive": point it at the source so
+    // there is one copy of every type (as in packages/shoehive/tsconfig.json).
+    "paths": {
+      "shoehive": ["./packages/shoehive/src/index.ts"],
+      "shoehive/*": ["./packages/shoehive/src/*/index.ts"]
+    }
   },
-  "include": ["*.ts"]
+  "include": ["*.ts", "e2e/**/*.ts"]
 }

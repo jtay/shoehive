@@ -20,6 +20,7 @@ export {
   type TableInfo,
 } from './server';
 export type { Connection, MemorySocket, UpgradeRequest } from './transport';
+export type { DevtoolsHandle, DevtoolsOption } from '../devtools/server';
 export { consoleLogger, silentLogger, type Logger } from './logger';
 export {
   MemoryWallet,

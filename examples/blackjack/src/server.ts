@@ -23,9 +23,18 @@ const secret =
     ? undefined
     : 'blackjack-dev-secret-not-for-production');
 
+// Devtools in development only (ADR 0011): the inspector URL, with its token, is logged at
+// startup. SHOEHIVE_DEVTOOLS_TOKEN fixes the token (the end-to-end tests use it).
+const devtoolsToken = process.env['SHOEHIVE_DEVTOOLS_TOKEN'];
+const devtools =
+  process.env['NODE_ENV'] === 'production'
+    ? false
+    : { enabled: true, ...(devtoolsToken ? { token: devtoolsToken } : {}) };
+
 const shoehive = createServer({
   games: [blackjack],
   wallet: new MemoryWallet({ startingBalance: 1000 }),
+  devtools,
   ...(secret ? { secret } : {}),
 });
 
