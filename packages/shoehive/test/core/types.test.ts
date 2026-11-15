@@ -203,7 +203,11 @@ describe('literal ids and typed results', () => {
     expectTypeOf<CreateOptions>().toEqualTypeOf<{ target?: number | undefined } | undefined>();
     type Handle = Awaited<ReturnType<typeof client.createAndJoin<'scored'>>>;
     expectTypeOf<Handle['meta']['result']>().toEqualTypeOf<{ winner: number | null } | null>();
-    // @ts-expect-error -- unknown game id
-    void client.createTable('nope');
+    // Type-level only: never called, so no socket is opened.
+    const typeOnly = () => {
+      // @ts-expect-error -- unknown game id
+      void client.createTable('nope');
+    };
+    expectTypeOf(typeOnly).toBeFunction();
   });
 });
