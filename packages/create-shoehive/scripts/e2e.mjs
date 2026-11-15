@@ -22,6 +22,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 
 const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = resolve(PKG_DIR, '../..');
@@ -159,6 +160,9 @@ function freePort() {
     });
   });
 }
+
+/** Removes terminal color codes: CI forces color, so test output has them. */
+const plain = (text) => stripVTControlCharacters(text);
 
 function assert(condition, message) {
   if (!condition) throw new Error(`Assertion failed: ${message}`);
@@ -311,7 +315,7 @@ try {
   );
   await step('tic-tac-toe: npm test', async () => {
     const out = await sh('npm', ['test'], { cwd: game, env: cleanEnv() });
-    assert(/Tests\s+5 passed/.test(out), `5 tests passed:\n${out}`);
+    assert(/Tests\s+5 passed/.test(plain(out)), `5 tests passed:\n${out}`);
   });
   await step('tic-tac-toe: npm run build', async () => {
     await sh('npm', ['run', 'build'], { cwd: game, env: cleanEnv() });
@@ -400,7 +404,7 @@ try {
   );
   await step('blank: npm test', async () => {
     const out = await sh('npm', ['test'], { cwd: blank, env: cleanEnv() });
-    assert(/Tests\s+3 passed/.test(out), `3 tests passed:\n${out}`);
+    assert(/Tests\s+3 passed/.test(plain(out)), `3 tests passed:\n${out}`);
   });
 
   const total = ((Date.now() - started) / 1000).toFixed(1);
