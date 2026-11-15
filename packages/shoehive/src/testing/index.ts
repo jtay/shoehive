@@ -12,5 +12,10 @@ export {
   type TestTableOptions,
 } from './test-table';
 export { FakeClock, FAKE_EPOCH } from './fake-clock';
-export { runStoreConformance, type ConformanceRunner } from './store-conformance';
+export {
+  runStoreConformance,
+  type ConformanceRunner,
+  type StoreBackend,
+  type StoreConformanceTarget,
+} from './store-conformance';
 export { runWalletConformance, type WalletFunds } from './wallet-conformance';
