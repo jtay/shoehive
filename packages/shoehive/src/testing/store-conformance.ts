@@ -324,7 +324,8 @@ export function runStoreConformance(
         expect((await store.sessions.get('p1'))?.name).toBe('Ada');
         // The log continues where it stopped, and still rejects conflicts.
         await store.appendLog('t1', [entry(3)]);
-        const repeat = await conflictOf(store.appendLog('t1', [entry(3)]));
+        await store.appendLog('t1', [entry(3)]); // a retried write is still idempotent
+        const repeat = await conflictOf(store.appendLog('t1', [entry(3, '{"other":true}')]));
         expect(repeat instanceof StoreConflictError).toBe(true);
       }, true),
     );
