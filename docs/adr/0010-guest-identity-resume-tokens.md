@@ -30,7 +30,7 @@ interface ServerIdentityOptions {
   auth?: AuthHook; // replaces guest mode entirely
   secret?: string | string[]; // HMAC keys; first signs, all verify
   resumeTokenTtlMs?: number; // default 7 days, sliding
-  reconnectGraceMs?: number; // default 60_000; a game may override it
+  reconnectGraceMs?: number; // default 60_000; server-wide (see the status note)
 }
 ```
 
@@ -99,6 +99,14 @@ in URLs.
 16. After a restart, all seated players start disconnected with a fresh grace period
     (ADR 0009 step 5). Session records (name, metadata) persist through
     `Store.sessions`.
+
+### Status in v1 (Phase 7 review)
+
+- The grace period is server-wide (`reconnectGraceMs`); there is no per-game override.
+- `createServer` requires a secret of at least 32 bytes when it is not in dev mode and no
+  custom `auth` hook is set (with `auth`, resume tokens are not used). Dev mode defaults to
+  `NODE_ENV !== 'production'`; the wallet-with-guests warning follows the same rule.
+- `player.rename` (an open question above) shipped in Phase 4: protocol section 5.
 
 ## Consequences
 

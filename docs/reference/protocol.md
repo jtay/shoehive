@@ -164,7 +164,7 @@ the game's `onStand` hook runs and the seats become `empty`. A player may hold s
 | `table.join`    | `table`, `as?: 'player' \| 'spectator'` (default `'player'`)  | none (a `table.snapshot` follows)     | `NOT_FOUND`, `TABLE_ENDED`, `FORBIDDEN`                                                                                                                                                                                       |
 | `table.leave`   | `table`                                                       | none                                  | `NOT_JOINED`                                                                                                                                                                                                                  |
 | `table.sync`    | `table`                                                       | none (a `table.snapshot` follows)     | `NOT_JOINED`                                                                                                                                                                                                                  |
-| `seat.take`     | `table`, `seat?: number` (omit for the first free seat)       | `{ seat: number }`                    | `NOT_JOINED`, `SEAT_TAKEN`, `TABLE_FULL`, `ALREADY_SEATED`, game codes from `canSit`                                                                                                                                          |
+| `seat.take`     | `table`, `seat?: number` (omit for the first free seat)       | `{ seat: number }`                    | `NOT_JOINED`, `SEAT_TAKEN`, `TABLE_FULL`, `ALREADY_SEATED`, game codes from `onSit` (a `reject` there refuses the seat)                                                                                                       |
 | `seat.leave`    | `table`, `seat?: number` (omit for all of the player's seats) | none                                  | `NOT_SEATED`                                                                                                                                                                                                                  |
 | `act`           | `table`, `name`, `input?`, `seat?`, `rev?`                    | `{ rev: number, value?: Json }`       | `NOT_SEATED`, `NOT_STARTED`, `ACTION_NOT_ALLOWED`, `INVALID_INPUT`, `ALREADY_SUBMITTED`, `NOT_PARTICIPANT`, `ROUND_CLOSED`, `STALE_REVISION`, `TABLE_ENDED`, `TABLE_UNAVAILABLE`, `WALLET_UNAVAILABLE`, `TIMEOUT`, game codes |
 | `ping`          | `id?`                                                         | answered by `pong`, not `ack`         |                                                                                                                                                                                                                               |
@@ -244,8 +244,8 @@ are part of game state and reach clients only through `view()`.
 { t: 'table.snapshot', table: string, rev: number, doc: TableDocument }
 ```
 
-Sent after `table.join`, after `table.sync`, after a resume, and whenever the server decides a
-patch would be larger than a snapshot. It replaces the client's document entirely.
+Sent after `table.join`, after `table.sync`, after a resume, and to a connection that fell
+behind (backpressure). It replaces the client's document entirely.
 
 ### 6.3 `table.patch`
 
@@ -337,7 +337,7 @@ and must not reuse a built-in code (a type error at `defineGame`). Built-in code
 | `BAD_REQUEST`          | Malformed message, unknown request type, request before `hello`                                                               |                                     |
 | `UNSUPPORTED_PROTOCOL` | `hello.v` not supported                                                                                                       | `{ supported: number[] }`           |
 | `UNAUTHORIZED`         | Session no longer valid (for example token revoked)                                                                           |                                     |
-| `FORBIDDEN`            | A hook such as `canCreate` or `canJoin` refused                                                                               |                                     |
+| `FORBIDDEN`            | Not allowed for this player, for example `player.rename` by an authenticated player                                           |                                     |
 | `NOT_FOUND`            | Unknown game or table                                                                                                         | `{ kind: 'game' \| 'table' }`       |
 | `INVALID_OPTIONS`      | Table options failed the game's options schema                                                                                | `{ issues: StandardSchemaIssue[] }` |
 | `INVALID_INPUT`        | Action input failed its schema                                                                                                | `{ issues: StandardSchemaIssue[] }` |

@@ -5,10 +5,10 @@ import { z } from 'zod';
 export const sealedBids = defineGame({
   id: 'sealed-bids',
   seats: { min: 2, max: 8 },
-  setup: ({ seats }) => ({
-    bids: {} as Record<string, number>,
-    wins: Array<number>(seats).fill(0),
-  }),
+  setup: ({ seats }) => {
+    const bids: Record<string, number> = {}; // seat to bid, hidden until the round closes
+    return { bids, wins: Array<number>(seats).fill(0) };
+  },
 
   rounds: {
     durationMs: 20_000, // the round also closes by itself after 20 seconds

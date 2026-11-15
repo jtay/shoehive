@@ -1,11 +1,134 @@
 ---
 title: 'Security model'
 description: 'What Shoehive protects against, and what it leaves to you.'
-todo: 'Views as the only output, input validation, rate and size limits, origins, resume tokens, devtools in production. Sources: protocol sections 2 and 9, ADR 0010, ADR 0011.'
 sidebar:
   order: 6
 ---
 
-{/* TODO: write this page. Delete `todo:` in the frontmatter when it is done. */}
+Shoehive runs the rules on the server and treats every client as untrusted. This page lists what
+the framework enforces for you, what it leaves to you, and the defaults that matter in
+production. For the steps, see [Deploying](/how-to/deploying/) and
+[Authentication](/how-to/authentication/).
 
-What Shoehive protects against, and what it leaves to you.
+## The rule: trust nothing from clients
+
+A client can send any bytes it likes. It cannot choose its identity, skip validation, act out of
+turn (once your action checks it), see another player's cards, or change state except through
+an action. Concretely:
+
+| Threat                                | What stops it                                                                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Forged or malformed input             | Every action `input` is checked against its schema before your code runs (`INVALID_INPUT`). Table `options` are checked the same way. |
+| Calling an action that is not allowed | Lookup by phase: unknown or out-of-phase actions get `ACTION_NOT_ALLOWED`. Before the start, only `preStart` actions run.             |
+| Acting as someone else                | The seat comes from the server's own record of the connection, never from the message.                                                |
+| Reading hidden information            | Clients receive only `view()` output, never state.                                                                                    |
+| Racing two actions                    | One serial queue per table. See [atomicity](/concepts/actions-drafts-and-atomicity/).                                                 |
+| Half-applied changes                  | Rollback on `reject` or throw.                                                                                                        |
+| Spoofed game errors                   | Errors from your code are tagged `source: 'game'`; unexpected exceptions become a generic `INTERNAL` in production.                   |
+
+There is no client-side validation to rely on. The client library has no schemas at runtime, so
+the server is the only authority.
+
+## Secrets never go in views
+
+The most important rule for you as a game author: **whatever `view()` returns, that viewer can
+read.** Raw state, the deck, other seats' hands and the random seed never leave the server
+unless your view includes them. Patches are computed from views, not from state, so even the
+fact that a hidden value changed does not leak. See [hidden information](/how-to/hidden-information/)
+and [Views and sync](/concepts/views-and-sync/).
+
+Two cases to remember:
+
+- All spectators share one view, so a spectator view must not contain any player's secrets.
+- `meta.round.submitted` lists which seats acted, never what they submitted. Hiding answers until
+  a reveal is your `view()`'s job.
+
+## Identity and resume tokens
+
+By default every connection is a **guest**. The server issues a signed **resume token**: an
+HMAC-SHA256 over the player id, name and expiry, compared in constant time. The client sends it
+in the next `hello` to get the same identity and its seats back.
+
+- Tokens are signed with `secret` (or `SHOEHIVE_SECRET`, at least 32 bytes). **In production
+  there is no default: `createServer` throws if no secret is set.** Elsewhere it generates a
+  random one and warns that tokens will not survive a restart.
+- Tokens expire after `resumeTokenTtlMs` (default 7 days) and the window slides on each
+  connect. Several secrets can be listed: the first signs, all verify, so you can rotate.
+- An invalid or expired token is not an error: the server starts a fresh guest.
+- A token is a **bearer credential**. Anyone who copies it becomes that guest until it
+  expires, and there is no per-token revocation (rotating the secret revokes all). Never put one
+  in a URL. The built-in client keeps it in `localStorage`.
+
+To use your own login, pass an `auth(req)` hook. It runs on the WebSocket upgrade and sees
+cookies, headers and the query string. Returning `null` refuses the upgrade with HTTP 401, and
+identity then always comes from your hook (resume tokens are ignored). See
+[Authentication](/how-to/authentication/) and [Reconnects and sessions](/how-to/reconnects-and-sessions/).
+
+## Limits
+
+Defaults are conservative and all configurable under `limits` in `createServer`.
+
+| Limit                               | Default                                 | When exceeded                                                          |
+| ----------------------------------- | --------------------------------------- | ---------------------------------------------------------------------- |
+| Message size (`maxMessageBytes`)    | 65 536 bytes                            | Connection closed with `1009`                                          |
+| Rate (`messagesPerSecond`, `burst`) | 20 per second, burst 40, per connection | `RATE_LIMITED` with `retryAfterMs`; sustained abuse closes with `4429` |
+| In-flight requests (`maxInFlight`)  | 32 per connection                       | `RATE_LIMITED`                                                         |
+| `hello` timeout (`helloTimeoutMs`)  | 10 seconds                              | Closed with `4000`                                                     |
+| Protocol violations                 | 3 within 60 seconds                     | Closed with `4002`                                                     |
+
+Size, rate and shape checks run before the table queue, so a flood of bad requests cannot
+slow a table down. Dead connections are dropped after two missed heartbeats.
+
+## Origins
+
+Browsers always send an `Origin` header on WebSocket connections. Set `origins` to the list of
+sites allowed to connect, for example `['https://play.example.com']`. Any other origin gets
+HTTP 403 on the upgrade. When the list is set, a request with no `Origin` (not a browser) is
+refused too. The default is to allow any origin, so set it in production. Origin checks stop
+other websites from using your visitors' browsers; they are not authentication.
+
+## Devtools stay off in production
+
+[Devtools](/reference/devtools/) shows raw state, every seat's hand and the random seed, which is
+everything a cheater wants. So:
+
+- It is off by default and mounted nowhere when off (its paths return a plain 404).
+- `devtools: true` is ignored in production, with a warning. Enabling it there needs
+  `{ enabled: true, allowInProduction: true, token }` with a token of at least 32 characters,
+  or `createServer` throws.
+- A token is always required. Locally, one is generated and printed in the URL fragment so it is
+  not sent in requests. Comparison is constant time, and repeated failures lock an address out.
+- It listens on its own path and socket, never on the game socket, and only loopback clients
+  may connect unless you set `allowRemote`.
+- Against live tables it is read-only. Time travel and forks work on copies and are refused in
+  production.
+
+## Money
+
+Shoehive provides bookkeeping, not a licensed gaming system. It does not provide regulatory
+compliance, certified randomness, identity checks, responsible-gambling controls or audited
+payouts. Operators of real-money games are responsible for all of that.
+
+What it does give you is **safe movement of value**:
+
+- Amounts are whole numbers in the smallest unit. No floats.
+- Every operation has a key and is idempotent, so a retry, crash or reconnect cannot charge
+  twice.
+- `reserve` happens during the action. `commit`, `release` and `credit` are deferred until the
+  entry has committed and been stored, so money never moves for a change that did not happen.
+- A rolled-back action releases every reservation it made.
+- Wallet calls time out (5 seconds by default, 10 for a whole action) and roll back with
+  `WALLET_UNAVAILABLE` or `TIMEOUT`.
+- If a deferred operation still fails after retries, the server emits `wallet:error` for you
+  to reconcile by hand.
+
+Guest identities are bearer tokens, so the server warns at startup if you combine a wallet with
+guest mode in production. Use your own `auth` for anything with money. See
+[Wallets and real-money safety](/how-to/wallets-and-real-money-safety/) and
+[ADR 0007](/contributing/adr/0007-wallet-ledger-semantics/).
+
+## Logs and stores
+
+The store holds the random seed and the full log, so protect it like your server secret. Logs
+contain the real cause of `INTERNAL` errors, which clients never see in production. Rejected
+requests are kept only in a small in-memory diagnostics buffer for devtools.

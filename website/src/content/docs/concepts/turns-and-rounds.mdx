@@ -1,11 +1,89 @@
 ---
 title: 'Turns and rounds'
 description: 'The two ways players take part: one at a time, or all at once.'
-todo: 'Turn order, rounds and submissions, closing rules, and how timers interact with both. Sources: ADR 0008.'
 sidebar:
   order: 3
 ---
 
-{/* TODO: write this page. Delete `todo:` in the frontmatter when it is done. */}
+Games differ in who may act when. Chess lets one player move. A quiz lets everyone answer at the
+same time. Shoehive supports both with two optional models, and a game picks one per phase (or
+neither). Nothing forces a turn order on a game that does not have one. The decision record is
+[ADR 0008](/contributing/adr/0008-turns-and-rounds/); to use them, see the
+[turns vs rounds how-to](/how-to/turns-vs-rounds/).
 
-The two ways players take part: one at a time, or all at once.
+| Model      | Who may act                  | Typical games                                | Key helpers                              |
+| ---------- | ---------------------------- | -------------------------------------------- | ---------------------------------------- |
+| **Turns**  | One seat at a time           | Tic-tac-toe, Hold'em betting, blackjack play | `ctx.turn.seat`, `next()`, `set()`       |
+| **Rounds** | Every participant, any order | Quiz, party games, blackjack betting         | `once` actions, `closeWhen`, `ctx.round` |
+| Neither    | Anyone, any time             | Free-form or fully custom games              |                                          |
+
+A game without `phases` sets `turns` or `rounds` at the top level. A game with `phases` sets
+them per phase. A phase cannot have both. A game can mix them: blackjack bets as a round, then
+plays as turns.
+
+## Turns
+
+When a turns phase begins, the engine builds the **order** from the occupied seats (ascending
+for `round-robin`) and gives the first turn to `first` (default: the lowest seat). Your code
+calls `ctx.turn.next()` to move on, or `ctx.turn.set(seat)` to jump.
+
+- `skip` skips seats at each `next()`, for example players who folded.
+- A seat that stands up leaves the order. If it held the turn, the turn passes on.
+- A seat that sits down mid-phase joins the order but does not get the current turn.
+- `timeoutMs` and `onTimeout` give each turn a clock. When it runs out, the internal action
+  named in `onTimeout` runs with `{ seat }`. The deadline reaches clients as
+  `meta.turn.deadline`.
+
+**The engine does not reject off-turn actions for you.** Your action checks
+`ctx.turn.seat !== seat` and calls `reject('NOT_YOUR_TURN')`. This is deliberate: some actions
+(a chat message, a "ready" button) are legal at any time. The first test in the tic-tac-toe
+tutorial is an out-of-turn action that must fail.
+
+## Rounds
+
+A round opens when its phase begins, and again each time game code calls `ctx.round.next()`. The
+**participants** are the seats occupied at that moment. A seat that sits down mid-round waits
+for the next one (its actions get `NOT_PARTICIPANT`).
+
+A **submission** is a call to an action marked `once: true`. The first call from a seat counts.
+A second one is `ALREADY_SUBMITTED`, before your `run` executes. Actions without `once` can be
+called freely and never count toward closing. After the round closes, rounds actions get
+`ROUND_CLOSED`.
+
+How a round closes is `closeWhen`:
+
+| `closeWhen`       | The round closes when...                                                |
+| ----------------- | ----------------------------------------------------------------------- |
+| `'all-submitted'` | every participant submitted, or `durationMs` ran out (if you set one)   |
+| `'timeout'`       | `durationMs` ran out, even if everyone already submitted (a fixed beat) |
+
+Closing runs `onClose` exactly once. It is its own entry in the table's queue, so the last
+player's answer commits and syncs first, and a bug in `onClose` rolls back only the close. A
+round does not reopen on its own: `onClose` calls `ctx.round.next()` or moves to another phase.
+
+Clients see who has submitted but never what: `meta.round.submitted` lists seats, and the
+contents stay in state until your `view()` reveals them.
+
+## Why there is no tick loop
+
+Shoehive has no fixed-rate update callback. Time enters a table in only two ways: **timers**
+(`ctx.timers.after`, the turn clock, the round deadline) and `ctx.now()`. A timer is a
+deadline stored in the table; when it passes, the server fires it as a normal queue entry.
+
+This is a design choice with a reason:
+
+- A tick loop costs CPU on every table, even idle ones. Deadlines cost nothing until they fire.
+- A tick loop is nondeterministic unless every tick is recorded. A timer firing is one log
+  entry, so the table [replays exactly](/concepts/determinism-replay-and-persistence/).
+- Every v1 game (cards, boards, quizzes, casino tables) is covered by turns, rounds and timers.
+
+The consequence is a stated non-goal: physics, continuous movement and other action-game
+loops are out of scope for v1.
+
+## Simultaneous is not racy
+
+Round submissions can arrive in any order, but they go through the table's
+[serial queue](/concepts/actions-drafts-and-atomicity/). Two never run at the same moment, so
+you never need to think about races.
+
+Related: [timers and turn clocks](/how-to/timers-and-turn-clocks/), [phases](/how-to/phases/).

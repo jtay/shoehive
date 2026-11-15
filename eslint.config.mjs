@@ -64,6 +64,12 @@ export default defineConfig(
     extends: [tseslint.configs.disableTypeChecked],
   },
   {
+    // Docs snippets teach: an async method without await (so a throw becomes a rejected
+    // promise) reads more plainly than Promise.resolve() wrappers.
+    files: ['website/snippets/**/*.{ts,tsx}'],
+    rules: { '@typescript-eslint/require-await': 'off' },
+  },
+  {
     files: ['**/*.{js,mjs,cjs}'],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: { globals: globals.node },

@@ -1,11 +1,122 @@
 ---
 title: 'Determinism, replay and persistence'
 description: 'One mechanism for tests, restart recovery and time travel.'
-todo: 'Seeded randomness, the recorded clock, the action log, snapshots, and why replay equals state. Sources: ADR 0006, ADR 0009.'
 sidebar:
   order: 5
 ---
 
-{/* TODO: write this page. Delete `todo:` in the frontmatter when it is done. */}
+import Snippet from '../../../components/Snippet.astro';
 
-One mechanism for tests, restart recovery and time travel.
+A table's state is a pure function of its **log**. Shoehive records everything that could
+influence state: the actions, the random numbers and the clock readings. Given the same log, a
+table rebuilds to exactly the same state. That one property gives you three features, using the
+same code path:
+
+| Use                  | What replays                                 | Where                                        |
+| -------------------- | -------------------------------------------- | -------------------------------------------- |
+| **Testing**          | The test table's log, to check it reproduces | `table.verifyReplay()`                       |
+| **Restart recovery** | Last snapshot plus the log after it          | `createServer` on start                      |
+| **Time travel**      | The stored log up to any entry, on a copy    | [Devtools](/how-to/debugging-with-devtools/) |
+
+The decisions are in [ADR 0006](/contributing/adr/0006-seeded-rng-recorded-clock-replay/) and
+[ADR 0009](/contributing/adr/0009-store-snapshot-log-restart-recovery/).
+
+## What the log holds
+
+Each entry is one thing that happened at the table, in order:
+
+- `create`: the game, its version, the options and the random **seed**.
+- `action`: a validated action (the validator's output, not the raw input) from a seat.
+- `timer`: a timer that fired.
+- `system`: sit, stand, disconnect, reconnect, grace expired, start and round close.
+
+Each entry also carries the time it started (`at`), the random words it consumed (`draws`) and
+the results of any wallet reads (`effects`). Rejected actions are not in the log, because they
+changed nothing.
+
+## Seeded randomness
+
+`ctx.random` (and `random` in `setup`) is a ChaCha20 generator keyed by a 256-bit seed chosen
+when the table is created. It is strong enough for cards and casino games, it never touches
+Node's `crypto`, and it has the usual helpers: `int`, `float`, `shuffle` and `pick`.
+
+The seed is in the `create` entry, and **every draw is recorded**. Replay regenerates the
+stream from the seed and compares word by word; the first mismatch raises a
+`ReplayDivergenceError` that names the entry. A rolled-back action consumes nothing, because the
+generator's position is part of the [transaction](/concepts/actions-drafts-and-atomicity/).
+
+<Snippet
+  file="website/snippets/determinism-replay-and-persistence/src/game.ts"
+  region="game"
+  title="game.ts"
+/>
+
+<Snippet
+  file="website/snippets/determinism-replay-and-persistence/src/game.ts"
+  region="demo"
+  title=""
+/>
+
+In tests the seed is fixed by default, so a shuffle gives the same cards every run. You can pass
+your own with `createTestTable(game, { seed })`.
+
+## The recorded clock
+
+Game code never reads the wall clock. `ctx.now()` returns the time at which the current entry
+started, taken once from an injected clock and recorded in the log. Time does not move inside
+an action, and replay feeds the recorded value back. Timers are deadlines stored in the table
+(`now + ms`), so they survive a restart; a firing is a `timer` entry.
+
+In tests the clock is fake: `table.advance(30_000)` jumps time and fires due timers.
+
+`Math.random`, `Date.now`, `new Date()` and `performance.now` must not appear in game code. Use
+`ctx.random` and `ctx.now()`. In development the engine swaps those globals for stubs that throw
+while your synchronous game code runs, and the replay check catches anything that slipped
+through.
+
+## Snapshots
+
+Replaying a very long log would be slow. A **snapshot** is the table's committed state, engine
+state (phase, turn, round, timers, random position), seats and revision at one log entry. The
+server writes one every 100 entries (`snapshotEvery`), on every phase change, when a table ends
+and on a graceful shutdown. A snapshot never contains views.
+
+## Restart recovery
+
+When the server starts, before it accepts connections, it loads each open table from the store:
+the latest snapshot plus the log entries after it, replayed through the same function the tests
+use. Validators, the wallet and the network are not called during replay. Timers are re-armed
+from their stored deadlines (overdue ones fire at once, in order), seated players are marked
+disconnected with a fresh grace period, and unconfirmed wallet operations are sent again.
+
+A table that cannot be recovered is not opened. The server reports `table:recovery-failed` and
+the others carry on.
+
+Because an `ack` is sent only after the entry is stored, an acknowledged action is never lost. If
+the store fails, the table is marked unavailable (`TABLE_UNAVAILABLE`) until an operator calls
+`shoehive.tables.reload(id)`. Stores are described in [persistence and restart
+recovery](/how-to/persistence-and-restart-recovery/) and the [stores reference](/reference/stores/).
+
+### Game versions
+
+Replay is only exact if the code is the same. Set `version` on your game and bump it whenever a
+change could make an old log play out differently. If a stored table's version differs from the
+running game's, recovery refuses to open it and reports `VERSION_MISMATCH`, rather than guess.
+
+## Time travel and fixtures
+
+[Devtools](/reference/devtools/) can replay a table to any entry on an isolated copy: no
+sockets, a fake clock, no store writes and a throwaway wallet, so the live table is never
+touched. A copy can become a playable dev table, or be exported as a **fixture**, a JSON file
+that `replayFixture` in `shoehive/testing` replays in a test. This turns "the pot was split
+wrong at 2am" into a regression test.
+
+## Two warnings
+
+- **The seed is a secret.** Anyone who can read the store or the `create` entry can predict
+  every future card. Protect the store like the server secret. The seed is never in a view,
+  event or ack, and fixtures exported from production contain it.
+- **Await only `ctx`.** An `async` action may await `ctx` methods (such as the wallet). Awaiting
+  anything else, such as a fetch, makes the result depend on the outside world and breaks replay.
+
+Related: [testing games](/how-to/testing-games/).

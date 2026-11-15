@@ -54,8 +54,9 @@ export const dice = defineGame({
           run({ state, seat, ctx }) {
             if (ctx.turn.seat !== seat) reject('NOT_YOUR_TURN');
             state.rolled[seat] = state.dice[seat]!;
-            ctx.turn.next();
-            if (ctx.turn.seat === null) ctx.phase.go('done');
+            const { turn } = ctx; // read afresh: next() moves the seat
+            turn.next();
+            if (turn.seat === null) ctx.phase.go('done'); // nobody left to roll
           },
         },
       },
