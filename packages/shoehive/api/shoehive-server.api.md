@@ -176,6 +176,9 @@ export interface ServerOptions {
     secret?: string | readonly string[];
     snapshotEvery?: number;
     store?: Store;
+    unknownUpgrades?: 'ignore' | 'refuse' | {
+        refuseAfterMs: number;
+    };
     wallet?: Wallet;
 }
 

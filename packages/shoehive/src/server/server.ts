@@ -38,6 +38,7 @@ import {
   type Connection,
   type ConnectionHandler,
   type MemorySocket,
+  type UnknownUpgradePolicy,
   type UpgradeRequest,
 } from './transport';
 import type { Wallet, WalletOp } from '../core/wallet';
@@ -86,6 +87,16 @@ export interface ServerOptions {
   path?: string;
   /** Allowed `Origin` headers. Default: any. */
   origins?: readonly string[];
+  /**
+   * What `attach()` does with WebSocket upgrades for paths Shoehive does not serve.
+   * `'ignore'` (default) leaves them to the HTTP server's other `upgrade` listeners.
+   * `'refuse'` answers HTTP 404 and closes the socket at once: use it when Shoehive is
+   * the only WebSocket handler on that server. `{ refuseAfterMs }` answers 404 after
+   * that long unless another listener has written to or closed the socket by then, which
+   * keeps other handlers working while still closing sockets nobody takes.
+   * `listen()` owns its HTTP server and always refuses at once.
+   */
+  unknownUpgrades?: 'ignore' | 'refuse' | { refuseAfterMs: number };
   /** How long a seat is held after its player disconnects. Default 60 000 ms. */
   reconnectGraceMs?: number;
   /** Resume token lifetime, renewed on every connect. Default 7 days. */
@@ -125,9 +136,9 @@ export interface ServerEvents {
 export interface ShoehiveServer {
   /** Resolves once stored tables are recovered (connections wait for it automatically). */
   readonly ready: Promise<void>;
-  /** Starts an HTTP server with the WebSocket endpoint. */
+  /** Starts an HTTP server with the WebSocket endpoint. Upgrades to other paths get HTTP 404. */
   listen(options?: { port?: number; host?: string }): Promise<{ port: number; url: string }>;
-  /** Adds the WebSocket endpoint to an existing HTTP server. */
+  /** Adds the WebSocket endpoint to an existing HTTP server. Other paths follow `unknownUpgrades`. */
   attach(server: HttpServer): Promise<void>;
   /** Opens an in-memory connection (tests, same-process clients). */
   connect(request?: UpgradeRequest): MemorySocket;
@@ -266,6 +277,16 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     helloTimeoutMs: options.limits?.helloTimeoutMs ?? 10_000,
     heartbeatMs: options.limits?.heartbeatMs ?? 15_000,
   };
+
+  const unknownUpgrades = options.unknownUpgrades ?? 'ignore';
+  if (
+    typeof unknownUpgrades === 'object' &&
+    !(Number.isFinite(unknownUpgrades.refuseAfterMs) && unknownUpgrades.refuseAfterMs > 0)
+  ) {
+    throw new TypeError(
+      'createServer(): `unknownUpgrades.refuseAfterMs` must be a positive number of milliseconds',
+    );
+  }
 
   const games = new Map<string, AnyGame>();
   for (const game of options.games) {
@@ -1189,7 +1210,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
   // -------------------------------------------------------------------------------
   // Public API
 
-  const attach = async (server: HttpServer): Promise<void> => {
+  const mount = async (server: HttpServer, policy: UnknownUpgradePolicy): Promise<void> => {
     await ready;
     detachers.push(
       attachWebSocket(server, handler, {
@@ -1197,13 +1218,16 @@ export function createServer(options: ServerOptions): ShoehiveServer {
         maxMessageBytes: limits.maxMessageBytes,
         heartbeatMs: limits.heartbeatMs,
         origins: options.origins ?? [],
+        unknownUpgrades: policy,
+        // Devtools (ADR 0011, Phase 6) will add its `/__shoehive/ws` path here.
+        siblingPaths: [],
       }),
     );
   };
 
   return {
     ready,
-    attach,
+    attach: (server) => mount(server, unknownUpgrades),
     async listen({ port = 0, host = '127.0.0.1' } = {}) {
       const server = createHttpServer((_req, res) => {
         res
@@ -1211,7 +1235,8 @@ export function createServer(options: ServerOptions): ShoehiveServer {
           .end('Shoehive: connect with a WebSocket\n');
       });
       httpServers.push(server);
-      await attach(server);
+      // Shoehive owns this server, so no other listener can take an unknown path.
+      await mount(server, 'refuse');
       await new Promise<void>((resolve) => server.listen(port, host, resolve));
       const address = server.address() as AddressInfo;
       return { port: address.port, url: `ws://${host}:${String(address.port)}${path}` };
