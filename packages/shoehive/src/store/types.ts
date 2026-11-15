@@ -26,7 +26,13 @@ export interface SessionRecord {
 }
 
 export interface Store {
-  /** Appends entries in seq order. Rejects with `StoreConflictError` on a seq gap or repeat. */
+  /**
+   * Appends entries in seq order, all or nothing. A table's log starts at seq 0 and each
+   * entry must follow the last stored one; otherwise rejects with `StoreConflictError`.
+   * A batch whose entries are all already stored with identical `data` succeeds without
+   * writing (so a driver may safely retry after a lost reply); any other overlap is a
+   * conflict. An empty batch is a no-op.
+   */
   appendLog(tableId: string, entries: StoredEntry[]): Promise<void>;
   /** Replaces the table's snapshot. */
   saveSnapshot(tableId: string, snapshot: StoredSnapshot): Promise<void>;
@@ -36,7 +42,10 @@ export interface Store {
   readLog(tableId: string, fromSeq: number, toSeq?: number): Promise<StoredEntry[]>;
   /** Tables to recover on startup. */
   listOpenTables(): Promise<string[]>;
-  /** Marks a table closed: it is kept but no longer recovered. */
+  /**
+   * Marks a table closed: it is kept but no longer recovered. A snapshot saved after this
+   * (the engine snapshots a table as it ends) does not reopen it.
+   */
   closeTable(tableId: string, reason: string): Promise<void>;
   sessions: {
     get(playerId: string): Promise<SessionRecord | null>;

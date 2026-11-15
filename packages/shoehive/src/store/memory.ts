@@ -39,6 +39,15 @@ export function memoryStore(): Store {
   return {
     appendLog(tableId, entries) {
       const data = table(tableId);
+      // An exact repeat of stored entries is a retried write: succeed without writing.
+      if (
+        entries.length > 0 &&
+        entries.every(
+          (e) => data.entries[e.seq]?.seq === e.seq && data.entries[e.seq]?.data === e.data,
+        )
+      ) {
+        return Promise.resolve();
+      }
       let last = data.entries.at(-1)?.seq ?? -1;
       for (const entry of entries) {
         if (entry.seq !== last + 1)

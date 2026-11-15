@@ -114,9 +114,24 @@ export function runStoreConformance(
         expect(gap instanceof StoreConflictError).toBe(true);
         expect((gap as StoreConflictError).expected).toBe(1);
         expect((gap as StoreConflictError).got).toBe(2);
-        const repeat = await conflictOf(store.appendLog('t1', [entry(0)]));
+        const repeat = await conflictOf(store.appendLog('t1', [entry(0, '{"other":true}')]));
         expect(repeat instanceof StoreConflictError).toBe(true);
-        expect(await store.readLog('t1', 0)).toHaveLength(1);
+        expect(await store.readLog('t1', 0)).toEqual([entry(0)]);
+      }),
+    );
+
+    it(
+      'treats an exact repeat of stored entries as success (a retried write)',
+      withStore(async ({ store }) => {
+        await store.appendLog('t1', [entry(0), entry(1)]);
+        // A driver that re-sends a command after a lost reply must not fault the table.
+        await store.appendLog('t1', [entry(1)]);
+        await store.appendLog('t1', [entry(0), entry(1)]);
+        expect(await store.readLog('t1', 0)).toEqual([entry(0), entry(1)]);
+        // A batch that is partly stored and partly new is a conflict, not a merge.
+        const mixed = await conflictOf(store.appendLog('t1', [entry(1), entry(2)]));
+        expect(mixed instanceof StoreConflictError).toBe(true);
+        expect(await store.readLog('t1', 0)).toHaveLength(2);
       }),
     );
 
@@ -182,6 +197,41 @@ export function runStoreConformance(
         expect(await store.listOpenTables()).toEqual(['b']);
         expect((await store.loadTable('a'))?.snapshot.seq).toBe(0); // closed tables are kept
         expect(await store.readLog('a', 0)).toHaveLength(1);
+        // The engine snapshots a table as it ends, after closing it: it stays closed.
+        await store.saveSnapshot('a', snapshot(0, '{"final":true}'));
+        expect(await store.listOpenTables()).toEqual(['b']);
+        expect((await store.loadTable('a'))?.snapshot.data).toBe('{"final":true}');
+      }),
+    );
+
+    it(
+      'never lists a table closed before its first snapshot',
+      withStore(async ({ store }) => {
+        await store.appendLog('t1', [entry(0)]);
+        await store.closeTable('t1', 'abandoned');
+        await store.saveSnapshot('t1', snapshot(0));
+        expect(await store.listOpenTables()).toEqual([]);
+      }),
+    );
+
+    it(
+      'reports the table and seqs in StoreConflictError, including a gap inside a batch',
+      withStore(async ({ store }) => {
+        await store.appendLog('t9', [entry(0)]);
+        const error = await conflictOf(store.appendLog('t9', [entry(1), entry(3)]));
+        expect(error instanceof StoreConflictError).toBe(true);
+        const conflict = error as StoreConflictError;
+        expect([conflict.tableId, conflict.expected, conflict.got]).toEqual(['t9', 2, 3]);
+      }),
+    );
+
+    it(
+      'accepts an empty batch as a no-op',
+      withStore(async ({ store }) => {
+        await store.appendLog('t1', []);
+        await store.appendLog('t1', [entry(0)]);
+        await store.appendLog('t1', []);
+        expect((await store.readLog('t1', 0)).map((e) => e.seq)).toEqual([0]);
       }),
     );
 
@@ -283,9 +333,10 @@ export function runStoreConformance(
       'can be opened twice over existing storage (schema setup is idempotent)',
       withStore(async (ctx) => {
         await ctx.store.appendLog('t1', [entry(0)]);
-        const again = await ctx.reopen();
+        await ctx.reopen();
         const third = await ctx.reopen();
-        expect(again === third || (await third.readLog('t1', 0)).length === 1).toBe(true);
+        expect((await third.readLog('t1', 0)).map((e) => e.seq)).toEqual([0]);
+        await third.appendLog('t1', [entry(1)]);
       }, true),
     );
   });
