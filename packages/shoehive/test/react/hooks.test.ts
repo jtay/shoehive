@@ -1,5 +1,12 @@
 // @vitest-environment happy-dom
-import { act as reactAct, render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
+import {
+  act as reactAct,
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  cleanup,
+} from '@testing-library/react';
 import { createElement as h, StrictMode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ticTacToe } from '../../../../examples/tic-tac-toe/src/game';
@@ -20,21 +27,38 @@ afterEach(async () => {
 function makeClient(): ShoehiveClient {
   server ??= createServer({ games: [ticTacToe], secret: SECRET, logger: silentLogger });
   const s = server;
-  const client = createClient({ url: 'memory://', storage: false, connect: () => s.connect() as unknown as WebSocketLike });
+  const client = createClient({
+    url: 'memory://',
+    storage: false,
+    connect: () => s.connect() as unknown as WebSocketLike,
+  });
   clients.push(client);
   return client;
 }
 
 function Board({ tableId }: { tableId: string }) {
-  const { status, view, mySeat, meta, act, pending, actionError } = useTable<typeof ticTacToe>(tableId);
+  const { status, view, mySeat, meta, act, pending, actionError } =
+    useTable<typeof ticTacToe>(tableId);
   if (status !== 'ready' || !view) return h('p', null, `status: ${status}`);
   return h(
     'div',
     null,
-    h('p', { 'data-testid': 'info' }, `seat ${String(mySeat)} turn ${String(meta?.turn?.seat)} pending ${String(pending)}`),
+    h(
+      'p',
+      { 'data-testid': 'info' },
+      `seat ${String(mySeat)} turn ${String(meta?.turn?.seat)} pending ${String(pending)}`,
+    ),
     actionError ? h('p', { role: 'alert' }, actionError.message) : null,
     ...view.board.map((cell, i) =>
-      h('button', { key: i, 'aria-label': `cell ${String(i)}`, onClick: () => void act('place', { cell: i }).catch(() => undefined) }, cell ?? '.'),
+      h(
+        'button',
+        {
+          key: i,
+          'aria-label': `cell ${String(i)}`,
+          onClick: () => void act('place', { cell: i }).catch(() => undefined),
+        },
+        cell ?? '.',
+      ),
     ),
   );
 }
@@ -46,7 +70,11 @@ function Status() {
 
 function Lobby() {
   const lobby = useLobby();
-  return h('p', { 'data-testid': 'lobby' }, lobby ? `${String(lobby.tables.length)} tables` : 'loading');
+  return h(
+    'p',
+    { 'data-testid': 'lobby' },
+    lobby ? `${String(lobby.tables.length)} tables` : 'loading',
+  );
 }
 
 describe('shoehive/react', () => {
@@ -103,7 +131,16 @@ describe('shoehive/react', () => {
     server = createServer({ games: [ticTacToe], secret: SECRET, logger: silentLogger });
     const s = server;
     const view = render(
-      h(ShoehiveProvider, { url: 'memory://', storage: false, name: 'Cleo', connect: () => s.connect() as unknown as WebSocketLike }, h(Status)),
+      h(
+        ShoehiveProvider,
+        {
+          url: 'memory://',
+          storage: false,
+          name: 'Cleo',
+          connect: () => s.connect() as unknown as WebSocketLike,
+        },
+        h(Status),
+      ),
     );
     await waitFor(() => {
       expect(screen.getByTestId('status').textContent).toBe('open Cleo');

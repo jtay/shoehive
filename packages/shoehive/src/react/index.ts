@@ -42,8 +42,7 @@ import type { LobbyDocument, TableDocument, Welcome } from '../protocol/messages
 const ClientContext = createContext<ShoehiveClient | null>(null);
 
 export type ShoehiveProviderProps = { children?: ReactNode } & (
-  | { client: ShoehiveClient; url?: never }
-  | ({ client?: never } & ClientOptions)
+  { client: ShoehiveClient; url?: never } | ({ client?: never } & ClientOptions)
 );
 
 /**
@@ -64,10 +63,12 @@ export function ShoehiveProvider(props: ShoehiveProviderProps): ReactNode {
 }
 
 /** The client from the nearest `ShoehiveProvider`. */
-export function useClient<Games extends readonly AnyGame[] = readonly AnyGame[]>(): ShoehiveClient<Games> {
+export function useClient<
+  Games extends readonly AnyGame[] = readonly AnyGame[],
+>(): ShoehiveClient<Games> {
   const client = useContext(ClientContext);
   if (!client) throw new Error('useClient(): wrap your app in <ShoehiveProvider>');
-  return client as unknown as ShoehiveClient<Games>;
+  return client;
 }
 
 /** Connection status and the current player. Re-renders on changes. */
@@ -116,7 +117,10 @@ export interface UseTable<G extends AnyGame> {
   pending: number;
   /** The last action error (cleared by the next successful action). */
   actionError: Error | null;
-  act: <K extends keyof GameActions<G> & string>(name: K, ...input: ActArgs<G, K>) => Promise<ActResult>;
+  act: <K extends keyof GameActions<G> & string>(
+    name: K,
+    ...input: ActArgs<G, K>
+  ) => Promise<ActResult>;
   sit: (seat?: number) => Promise<number>;
   stand: (seat?: number) => Promise<void>;
   leave: () => Promise<void>;
@@ -180,7 +184,10 @@ export function useTable<G extends AnyGame = AnyGame>(
   };
 
   const act = useCallback(
-    async <K extends keyof GameActions<G> & string>(name: K, ...input: ActArgs<G, K>): Promise<ActResult> => {
+    async <K extends keyof GameActions<G> & string>(
+      name: K,
+      ...input: ActArgs<G, K>
+    ): Promise<ActResult> => {
       setPending((n) => n + 1);
       try {
         const result = await requireTable().act(name, ...input);

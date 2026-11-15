@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, expectTypeOf, it } from 'vitest';
 import { quiz } from '../../../../examples/quiz/src/game';
 import { ticTacToe } from '../../../../examples/tic-tac-toe/src/game';
-import { createClient, ShoehiveError, type ShoehiveClient, type TokenStorage, type WebSocketLike } from '../../src/client/index';
+import {
+  createClient,
+  ShoehiveError,
+  type ShoehiveClient,
+  type TokenStorage,
+  type WebSocketLike,
+} from '../../src/client/index';
 import { createServer, silentLogger, type ShoehiveServer } from '../../src/server/index';
 import { SECRET } from '../server/client';
 
@@ -30,7 +36,12 @@ const memoryStorage = (): TokenStorage => {
 };
 
 async function setup(transport: 'memory' | 'ws') {
-  const server = createServer({ games: [ticTacToe, quiz], secret: SECRET, logger: silentLogger, reconnectGraceMs: 30_000 });
+  const server = createServer({
+    games: [ticTacToe, quiz],
+    secret: SECRET,
+    logger: silentLogger,
+    reconnectGraceMs: 30_000,
+  });
   servers.push(server);
   const url = transport === 'ws' ? (await server.listen()).url : 'memory://';
   const sockets: WebSocketLike[] = [];
@@ -77,7 +88,10 @@ describe.each(['memory', 'ws'] as const)('shoehive/client over %s', (transport) 
     await until(() => bobTable.rev === result.rev, 'bob patch');
     expect(bobTable.view).toEqual(table.view);
 
-    await expect(table.act('place', { cell: 0 })).rejects.toMatchObject({ code: 'NOT_YOUR_TURN', source: 'game' });
+    await expect(table.act('place', { cell: 0 })).rejects.toMatchObject({
+      code: 'NOT_YOUR_TURN',
+      source: 'game',
+    });
     const error = await table.act('place', { cell: 0 }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ShoehiveError);
   });

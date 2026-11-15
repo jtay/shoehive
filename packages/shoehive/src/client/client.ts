@@ -124,7 +124,10 @@ export class TableHandle<G extends AnyGame = AnyGame> {
   doc: TableDocument | null = null;
   rev = -1;
   private readonly listeners = new Set<Listener<TableDocument>>();
-  private readonly eventListeners = new Map<string, Set<Listener<{ payload: Json; rev: number }>>>();
+  private readonly eventListeners = new Map<
+    string,
+    Set<Listener<{ payload: Json; rev: number }>>
+  >();
   private firstSnapshot: Promise<void>;
   private resolveFirst!: () => void;
   /** Set when the server closed the table. */
@@ -185,7 +188,10 @@ export class TableHandle<G extends AnyGame = AnyGame> {
   }
 
   /** Runs an action. Resolves after the server applied it (your document already shows it). */
-  async act<K extends keyof GameActions<G> & string>(name: K, ...input: ActArgs<G, K>): Promise<ActResult> {
+  async act<K extends keyof GameActions<G> & string>(
+    name: K,
+    ...input: ActArgs<G, K>
+  ): Promise<ActResult> {
     const fields: Record<string, unknown> = { table: this.id, name };
     if (input[0] !== undefined) fields['input'] = input[0];
     return (await this.client.request('act', fields)) as unknown as ActResult;
@@ -193,7 +199,10 @@ export class TableHandle<G extends AnyGame = AnyGame> {
 
   /** Takes a seat (the lowest free one by default). Resolves with the seat number. */
   async sit(seat?: number): Promise<number> {
-    const result = (await this.client.request('seat.take', seat === undefined ? { table: this.id } : { table: this.id, seat })) as {
+    const result = (await this.client.request(
+      'seat.take',
+      seat === undefined ? { table: this.id } : { table: this.id, seat },
+    )) as {
       seat: number;
     };
     return result.seat;
@@ -201,7 +210,10 @@ export class TableHandle<G extends AnyGame = AnyGame> {
 
   /** Gives up a seat (all of yours by default). */
   async stand(seat?: number): Promise<void> {
-    await this.client.request('seat.leave', seat === undefined ? { table: this.id } : { table: this.id, seat });
+    await this.client.request(
+      'seat.leave',
+      seat === undefined ? { table: this.id } : { table: this.id, seat },
+    );
   }
 
   /** Leaves the table. Seated players stand up. */
@@ -328,7 +340,8 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
 
   constructor(options: ClientOptions) {
     this.options = options;
-    this.storage = options.storage === false ? null : (options.storage ?? defaultStorage(options.url));
+    this.storage =
+      options.storage === false ? null : (options.storage ?? defaultStorage(options.url));
     if (options.autoConnect !== false) void this.connect().catch(() => undefined);
   }
 
@@ -372,7 +385,10 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
 
   /** Creates a table and returns its id. Does not join it. */
   async createTable(game: Games[number]['id'], options?: Json): Promise<string> {
-    const result = (await this.request('table.create', options === undefined ? { game } : { game, options })) as {
+    const result = (await this.request(
+      'table.create',
+      options === undefined ? { game } : { game, options },
+    )) as {
       table: string;
     };
     return result.table;
@@ -385,8 +401,8 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
   ): Promise<TableHandle<G>> {
     let handle = this.tables.get(tableId) as TableHandle<G> | undefined;
     if (!handle) {
-      handle = new TableHandle<G>(tableId, this as unknown as ShoehiveClient, options.as ?? 'player');
-      this.tables.set(tableId, handle as unknown as TableHandle);
+      handle = new TableHandle<G>(tableId, this, options.as ?? 'player');
+      this.tables.set(tableId, handle);
     }
     try {
       await this.request('table.join', { table: tableId, as: options.as ?? 'player' });
@@ -457,7 +473,8 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
       else if (this.status === 'open') send();
       else {
         this.queue.push(send);
-        if (this.status === 'idle' || this.status === 'closed') void this.connect().catch(() => undefined);
+        if (this.status === 'idle' || this.status === 'closed')
+          void this.connect().catch(() => undefined);
       }
     });
   }
@@ -499,7 +516,10 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
     return new Promise<Welcome>((resolve, reject) => {
       const connect =
         this.options.connect ??
-        ((url: string) => new (globalThis as unknown as { WebSocket: new (u: string, p: string) => WebSocketLike }).WebSocket(url, 'shoehive.v1'));
+        ((url: string) =>
+          new (
+            globalThis as unknown as { WebSocket: new (u: string, p: string) => WebSocketLike }
+          ).WebSocket(url, 'shoehive.v1'));
       let socket: WebSocketLike;
       try {
         socket = connect(this.options.url);
@@ -539,9 +559,16 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
       socket.onclose = (event) => {
         if (this.socket !== socket) return;
         this.socket = null;
-        this.failPending(clientError('CONNECTION_LOST', `Connection closed (${String(event.code)})`));
-        if (!welcomed) reject(clientError('CONNECTION_LOST', `Could not connect (${String(event.code)})`));
-        if (this.closedByUser || FINAL_CLOSE_CODES.has(event.code) || this.options.reconnect === false) {
+        this.failPending(
+          clientError('CONNECTION_LOST', `Connection closed (${String(event.code)})`),
+        );
+        if (!welcomed)
+          reject(clientError('CONNECTION_LOST', `Could not connect (${String(event.code)})`));
+        if (
+          this.closedByUser ||
+          FINAL_CLOSE_CODES.has(event.code) ||
+          this.options.reconnect === false
+        ) {
           this.setStatus('closed');
           return;
         }
@@ -566,8 +593,9 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
       return;
     }
     this.setStatus('reconnecting');
-    const initial = (this.options.reconnect && this.options.reconnect.initialDelayMs) ?? 500;
-    const max = (this.options.reconnect && this.options.reconnect.maxDelayMs) ?? 10_000;
+    const settings = this.options.reconnect ?? {}; // false was handled above
+    const initial = settings.initialDelayMs ?? 500;
+    const max = settings.maxDelayMs ?? 10_000;
     const delay = Math.min(max, initial * 2 ** this.attempts) * (0.5 + Math.random() / 2);
     this.attempts += 1;
     this.reconnectTimer = setTimeout(() => {
