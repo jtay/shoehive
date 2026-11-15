@@ -23,7 +23,15 @@ const secret =
     ? undefined
     : 'tic-tac-toe-dev-secret-not-for-production');
 
-const shoehive = createServer({ games: [ticTacToe], ...(secret ? { secret } : {}) });
+// Devtools in development only (ADR 0011): the inspector URL, with its token, is logged at
+// startup. SHOEHIVE_DEVTOOLS_TOKEN fixes the token (the end-to-end tests use it).
+const devtoolsToken = process.env['SHOEHIVE_DEVTOOLS_TOKEN'];
+const devtools =
+  process.env['NODE_ENV'] === 'production'
+    ? false
+    : { enabled: true, ...(devtoolsToken ? { token: devtoolsToken } : {}) };
+
+const shoehive = createServer({ games: [ticTacToe], devtools, ...(secret ? { secret } : {}) });
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',

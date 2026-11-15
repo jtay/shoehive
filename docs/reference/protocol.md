@@ -52,6 +52,9 @@ one spec.
   closed the socket first. With `'ignore'`, an upgrade that no listener takes stays open until
   the client closes it, so pick one of the others when no other WebSocket handler shares the
   server.
+- The devtools socket (`<devtools path>/ws`, ADR 0011) is never refused by the game transport
+  while devtools is enabled: devtools answers it. With devtools disabled it gets the same 404 as
+  any other unknown path in `listen()` mode.
 
 ---
 

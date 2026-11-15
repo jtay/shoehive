@@ -12,6 +12,7 @@ export {
   type TestTableOptions,
 } from './test-table';
 export { FakeClock, FAKE_EPOCH } from './fake-clock';
+export { fixtureStateHash, replayFixture, type Fixture } from './fixture';
 export {
   runStoreConformance,
   type ConformanceRunner,

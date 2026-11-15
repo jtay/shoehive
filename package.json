@@ -16,7 +16,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm -r run typecheck",
+    "typecheck": "tsc -p tsconfig.json --noEmit && pnpm -r run typecheck",
     "check:package": "pnpm -r --filter ./packages/** run check:package",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:package",
     "changeset": "changeset",

@@ -913,6 +913,7 @@ export class TableRuntime {
         from?: Snapshot;
         until?: number;
         live?: boolean;
+        resendWalletOps?: boolean;
     }): Promise<TableRuntime>;
     // (undocumented)
     get rev(): number;

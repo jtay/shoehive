@@ -154,6 +154,30 @@ async function gameClientConnects(url: string): Promise<void> {
   expect(client.welcome?.player.id).toBeTruthy();
 }
 
+const DEVTOOLS_TOKEN = 'devtools-test-token-that-is-long-enough-0123';
+
+/** Opens the devtools socket at `url` and resolves once its token is accepted. */
+async function devtoolsAuthenticates(url: string): Promise<void> {
+  const ws = new WebSocket(url);
+  cleanups.push(() => {
+    ws.terminate();
+  });
+  await new Promise<void>((resolve, reject) => {
+    ws.on('open', resolve);
+    ws.on('error', reject);
+  });
+  const first = new Promise<{ t: string }>((resolve) => {
+    ws.once('message', (data: Buffer) => {
+      resolve(JSON.parse(data.toString('utf8')) as { t: string });
+    });
+  });
+  ws.send(JSON.stringify({ t: 'auth', token: DEVTOOLS_TOKEN }));
+  expect((await first).t).toBe('auth.ok');
+  // Nothing in the game transport refuses the socket after devtools took it.
+  await delay(50);
+  expect(ws.readyState).toBe(WebSocket.OPEN);
+}
+
 describe('listen() mode', () => {
   it('refuses an upgrade to an unknown path with 404 and closes the socket', async () => {
     const server = shoehive();
@@ -172,6 +196,16 @@ describe('listen() mode', () => {
     const raw = rawUpgrade(port, '/shoehive'); // no Origin header: 403
     await raw.closed;
     expect(raw.response()).toMatch(/^HTTP\/1\.1 403 Forbidden\r\n/);
+  });
+
+  it('leaves the devtools socket to devtools when it is enabled', async () => {
+    const server = shoehive({ devtools: { enabled: true, token: DEVTOOLS_TOKEN } });
+    const { port, url } = await server.listen();
+    await devtoolsAuthenticates(`ws://127.0.0.1:${String(port)}/__shoehive/ws`);
+    const raw = rawUpgrade(port, '/nope');
+    await raw.closed;
+    expect(raw.response()).toMatch(/^HTTP\/1\.1 404 Not Found\r\n/);
+    await gameClientConnects(url);
   });
 });
 
@@ -199,6 +233,18 @@ describe('attach() mode', () => {
     await raw.closed;
     expect(raw.response()).toMatch(/^HTTP\/1\.1 404 Not Found\r\n/);
     await gameClientConnects(`ws://127.0.0.1:${String(port)}/shoehive`);
+  });
+
+  it("leaves the devtools socket to devtools with unknownUpgrades: 'refuse'", async () => {
+    const { server, port } = await httpServer();
+    await shoehive({
+      unknownUpgrades: 'refuse',
+      devtools: { enabled: true, token: DEVTOOLS_TOKEN },
+    }).attach(server);
+    await devtoolsAuthenticates(`ws://127.0.0.1:${String(port)}/__shoehive/ws`);
+    const raw = rawUpgrade(port, '/__shoehive/other');
+    await raw.closed;
+    expect(raw.response()).toMatch(/^HTTP\/1\.1 404 Not Found\r\n/);
   });
 
   it('refuses only unclaimed sockets with unknownUpgrades: { refuseAfterMs }', async () => {
