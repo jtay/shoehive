@@ -5,6 +5,7 @@ import type {
   AnyGame,
   GameActions,
   GameOptions,
+  GameOptionsInput,
   GameResult,
   GameView,
   SeatInfo,
@@ -128,7 +129,11 @@ export type GameById<Games extends readonly AnyGame[], K> =
     : Extract<Games[number], { id: K }>;
 
 /** The table metadata with `result` typed by the game's `result` schema. */
-export type TypedTableMeta<G> = Omit<TableMeta, 'result'> & { result: GameResult<G> | null };
+export type TypedTableMeta<G> = Omit<TableMeta, 'result' | 'options'> & {
+  /** The table's options, as validated (the schema's output). */
+  options: GameOptions<G>;
+  result: GameResult<G> | null;
+};
 
 export interface ActResult {
   rev: number;
@@ -459,7 +464,7 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
    */
   async createTable<K extends Games[number]['id']>(
     game: K,
-    options?: GameOptions<GameById<Games, K>>,
+    options?: GameOptionsInput<GameById<Games, K>>,
   ): Promise<string> {
     const result = (await this.request(
       'table.create',
@@ -500,10 +505,10 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
   /** Creates a table, joins it and takes a seat. The handle is typed by the game id. */
   async createAndJoin<K extends Games[number]['id'], G extends AnyGame = GameById<Games, K>>(
     game: K,
-    options?: GameOptions<G>,
+    options?: GameOptionsInput<G>,
     { sit = true }: { sit?: boolean } = {},
   ): Promise<TableHandle<G>> {
-    const id = await this.createTable(game, options as GameOptions<GameById<Games, K>>);
+    const id = await this.createTable(game, options as GameOptionsInput<GameById<Games, K>>);
     const table = await this.join<G>(id);
     if (sit) await table.sit();
     return table;

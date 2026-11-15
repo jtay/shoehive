@@ -109,7 +109,7 @@ export const blackjack = defineGame({
     play: {
       turns: {
         skip: ({ seat, state }) => {
-          const hand = (state as { hands: (Hand | null)[] }).hands[seat];
+          const hand = state.hands[seat];
           return !hand || hand.done;
         },
         timeoutMs: TURN_MS,
@@ -127,7 +127,9 @@ export const blackjack = defineGame({
           if (hand && blackjackValue(hand.cards).blackjack) hand.done = true;
         }
         ctx.emit('dealt', { hand: state.handNumber });
-        if (ctx.turn.seat === null) ctx.phase.go('dealer'); // everyone has blackjack
+        // The engine moves the first turn past naturals after onEnter; with every hand
+        // done (all naturals) there is no turn to play.
+        if (state.hands.every((h) => !h || h.done)) ctx.phase.go('dealer');
       },
       actions: {
         hit: {

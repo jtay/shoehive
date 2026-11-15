@@ -74,7 +74,6 @@ describe('server wallet (ADR 0007)', () => {
     expect(await wallet.balance(player)).toBe(600);
     await server.tables.close(table);
     expect(await wallet.balance(player)).toBe(1000);
-    expect(wallet.reservation(`${table}:b`)?.state).toBe('released');
   });
 
   it('keeps reservations across a restart and settles them after', async () => {
@@ -91,7 +90,8 @@ describe('server wallet (ADR 0007)', () => {
     await second.tables.runtime(table)!.act({ player, name: 'settle' });
     await second.tables.runtime(table)!.idle();
     expect(await wallet.balance(player)).toBe(700);
-    expect(wallet.reservation(`${table}:b`)?.state).toBe('committed');
+    const key = second.tables.runtime(table)!.log.flatMap((e) => e.effects ?? [])[0];
+    expect(key?.op === 'reserve' && wallet.reservation(key.key)?.state).toBe('committed');
     // Nothing is left to release on close.
     await second.tables.close(table);
     expect(await wallet.balance(player)).toBe(700);

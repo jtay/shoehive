@@ -6,6 +6,7 @@ const CI = Boolean(process.env['CI']);
 const examples = [
   { name: 'tic-tac-toe', port: 3101 },
   { name: 'quiz', port: 3102 },
+  { name: 'blackjack', port: 3103 },
 ] as const;
 
 export default defineConfig({

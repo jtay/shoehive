@@ -118,7 +118,11 @@ function property(
     fc.asyncProperty(fc.array(cmd, { maxLength: 40 }), async (cmds) => {
       const a = await play(game, options, players, cmds, check);
       const b = await play(game, options, players, cmds);
-      expect(jsonEqual(a, b)).toBe(true); // invariant 3
+      // Wallet reserve keys end in a random per-attempt id (ADR 0007): the one input
+      // that is recorded rather than derived.
+      const normalize = (log: unknown) =>
+        JSON.parse(JSON.stringify(log).replace(/(:[^":]+):[0-9a-f]{12}"/g, '$1:#"')) as Json;
+      expect(jsonEqual(normalize(a), normalize(b))).toBe(true); // invariant 3
     }),
     { numRuns },
   );

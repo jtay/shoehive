@@ -136,7 +136,7 @@ export const holdem = defineGame({
     betting: {
       turns: {
         order: 'round-robin',
-        skip: ({ seat, state }) => (state as HoldemState).seats[seat]!.folded,
+        skip: ({ seat, state }) => state.seats[seat]!.folded,
         timeoutMs: TURN_MS,
         onTimeout: 'timeout',
       },

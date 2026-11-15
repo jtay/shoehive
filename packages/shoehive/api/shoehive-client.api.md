@@ -94,10 +94,10 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
     clockOffset: number;
     close(): void;
     connect(): Promise<Welcome>;
-    createAndJoin<K extends Games[number]['id'], G extends AnyGame = GameById<Games, K>>(game: K, options?: GameOptions<G>, input?: {
+    createAndJoin<K extends Games[number]['id'], G extends AnyGame = GameById<Games, K>>(game: K, options?: GameOptionsInput<G>, input?: {
         sit?: boolean;
     }): Promise<TableHandle<G>>;
-    createTable<K extends Games[number]['id']>(game: K, options?: GameOptions<GameById<Games, K>>): Promise<string>;
+    createTable<K extends Games[number]['id']>(game: K, options?: GameOptionsInput<GameById<Games, K>>): Promise<string>;
     // @internal (undocumented)
     dropLobby(): void;
     // @internal (undocumented)
@@ -206,7 +206,8 @@ export interface TokenStorage {
 }
 
 // @public
-export type TypedTableMeta<G> = Omit<TableMeta, 'result'> & {
+export type TypedTableMeta<G> = Omit<TableMeta, 'result' | 'options'> & {
+    options: GameOptions<G>;
     result: GameResult<G> | null;
 };
 

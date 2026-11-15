@@ -54,6 +54,16 @@ const bets = defineGame({
   view: ({ state }) => state,
 });
 
+/** The backend key the engine used for the game's reserve key `k` (from the log). */
+function backendKey(t: { runtime: TableRuntime }, k: string): string {
+  for (const entry of t.runtime.log) {
+    for (const effect of entry.effects ?? []) {
+      if (effect.op === 'reserve' && effect.key.startsWith(`test-table:${k}:`)) return effect.key;
+    }
+  }
+  throw new Error(`no reserve recorded for "${k}"`);
+}
+
 describe('ctx.wallet (ADR 0007)', () => {
   it('reserves now and commits and credits after the entry commits', async () => {
     const t = await createTestTable(bets, { players: 1 });
@@ -63,7 +73,7 @@ describe('ctx.wallet (ADR 0007)', () => {
     expect(t.state.balance).toBe(700);
     await t.act(0, 'settle');
     expect(await t.wallet.balance('p0')).toBe(1300);
-    expect((t.wallet as MemoryWallet).reservation('test-table:b1')?.state).toBe('committed');
+    expect((t.wallet as MemoryWallet).reservation(backendKey(t, 'b1'))?.state).toBe('committed');
     expect(t.walletErrors).toEqual([]);
     await t.verifyReplay();
   });
@@ -83,7 +93,26 @@ describe('ctx.wallet (ADR 0007)', () => {
     });
     await t.runtime.idle();
     expect(await t.wallet.balance('p0')).toBe(1000);
-    expect((t.wallet as MemoryWallet).reservation('test-table:x')?.state).toBe('released');
+    expect(t.runtime.log.some((e) => e.effects)).toBe(false); // the entry rolled back
+    expect(await t.wallet.balance('p0')).toBe(1000);
+  });
+
+  it('lets a game reuse a key after its entry rolled back', async () => {
+    const t = await createTestTable(bets, { players: 1 });
+    await expect(t.act(0, 'betThenFail', { amount: 400, key: 'again' })).rejects.toMatchObject({
+      code: 'NOPE',
+    });
+    await t.act(0, 'bet', { amount: 400, key: 'again' });
+    expect(await t.wallet.balance('p0')).toBe(600);
+    expect(t.state.bets).toEqual([{ seat: 0, key: 'again', amount: 400 }]);
+  });
+
+  it('refuses to reserve an open key twice, or settle an unknown one', async () => {
+    const t = await createTestTable(bets, { players: 1 });
+    await t.act(0, 'bet', { amount: 10, key: 'k' });
+    await expect(t.act(0, 'bet', { amount: 10, key: 'k' })).rejects.toThrow(/already reserved/);
+    await t.act(0, 'settle');
+    await expect(t.act(0, 'settle')).resolves.toBeUndefined(); // no bets left: nothing to do
   });
 
   it('drops deferred ops of a rolled-back entry', async () => {
@@ -100,15 +129,18 @@ describe('ctx.wallet (ADR 0007)', () => {
     await t.act(1, 'peek');
     await t.act(0, 'refund');
     const entries = t.runtime.log.filter((e) => e.effects ?? e.wallet);
+    const a = backendKey(t, 'a');
+    const b = backendKey(t, 'b');
+    expect(a).toMatch(/^test-table:a:[0-9a-f]{12}$/);
     expect(entries.map((e) => [e.effects, e.wallet])).toEqual([
-      [[{ op: 'reserve', key: 'test-table:a', ok: true }], undefined],
-      [[{ op: 'reserve', key: 'test-table:b', ok: true }], undefined],
+      [[{ op: 'reserve', key: a, ok: true }], undefined],
+      [[{ op: 'reserve', key: b, ok: true }], undefined],
       [[{ op: 'balance', seat: 1, amount: 800 }], undefined],
       [
         undefined,
         [
-          { op: 'release', key: 'test-table:a' },
-          { op: 'release', key: 'test-table:b' },
+          { op: 'release', key: a },
+          { op: 'release', key: b },
         ],
       ],
     ]);
@@ -134,7 +166,8 @@ describe('ctx.wallet (ADR 0007)', () => {
     const t = await createTestTable(bets, { players: 1, wallet });
     await t.act(0, 'bet', { amount: 100, key: 'a' });
     const snap = t.runtime.snapshot();
-    expect(snap.wallet).toEqual({ pending: [], open: ['test-table:a'] });
+    expect(snap.wallet).toEqual({ pending: [], open: [backendKey(t, 'a')] });
+    expect(snap.root.engine.reservations).toEqual({ a: backendKey(t, 'a') });
     await t.act(0, 'settle');
     // Simulate a crash before the commit and credit were confirmed: a fresh wallet
     // replay re-sends them, and keys make the repeat harmless on the original wallet.
@@ -185,7 +218,7 @@ describe('ctx.wallet (ADR 0007)', () => {
     await t.act(0, 'settle');
     await t.runtime.idle();
     expect(t.walletErrors).toHaveLength(1);
-    expect(t.walletErrors[0]!.op).toEqual({ op: 'commit', key: 'test-table:a' });
+    expect(t.walletErrors[0]!.op).toEqual({ op: 'commit', key: backendKey(t, 'a') });
     // The credit after it still went through.
     expect(await memory.balance('p0')).toBe(1100);
   });
@@ -210,5 +243,25 @@ describe('MemoryWallet', () => {
     expect(() => {
       w.set('a', 1.5);
     }).toThrow(RangeError);
+  });
+});
+
+describe('ctx.wallet in onStand', () => {
+  it('can still pay the departing player (the seat is already empty)', async () => {
+    const cashier = defineGame({
+      id: 'cashier',
+      seats: { min: 1, max: 2 },
+      setup: () => ({ stacks: [250, 250] }),
+      onStand: ({ state, seat, ctx }) => {
+        ctx.wallet.credit(seat!, state.stacks[seat!]!, `cashout:${String(seat)}`);
+        state.stacks[seat!] = 0;
+      },
+    });
+    const t = await createTestTable(cashier, { players: 1 });
+    await t.stand(0);
+    await t.runtime.idle();
+    expect(t.runtime.seats()[0]?.status).toBe('empty');
+    expect(await t.wallet.balance('p0')).toBe(1250);
+    await t.verifyReplay();
   });
 });

@@ -23,6 +23,7 @@ import type {
   SeatInfo,
   TableStatus,
   TurnInfo,
+  TurnArgs,
   TurnsConfig,
   Viewer,
 } from './define';
@@ -31,7 +32,7 @@ import { guarded } from './guard';
 import { findNonJson, jsonEqual, type Json } from './json';
 import { createRandom, normalizeSeed, randomSeed, WordStream, type Random } from './random';
 import type { StandardSchemaV1 } from './standard-schema';
-import type { CtxWallet, Wallet, WalletOp } from './wallet';
+import type { CtxWallet, ReserveResult, Wallet, WalletOp } from './wallet';
 
 // ---------------------------------------------------------------------------------
 // Log and engine state
@@ -114,6 +115,11 @@ export interface EngineState {
   seats: EngineSeat[];
   options: Json;
   result: Json;
+  /**
+   * Open wallet reservations: the game's key to the backend key (ADR 0007). Each reserve
+   * attempt gets its own backend key, so a key whose entry rolled back can be reused.
+   */
+  reservations: Record<string, string>;
 }
 
 interface Root {
@@ -148,7 +154,13 @@ export interface TableMeta {
   status: TableStatus;
   phase: string | null;
   turn: { seat: number | null; deadline: number | null } | null;
-  round: { number: number; deadline: number | null; submitted: number[] } | null;
+  round: {
+    number: number;
+    deadline: number | null;
+    /** Seats taking part in this round (occupied when it opened). */
+    participants: number[];
+    submitted: number[];
+  } | null;
   options: Json;
   result: Json;
   /** Deadlines (epoch ms) of timers scheduled with `{ visible: true }`, by name. */
@@ -224,6 +236,31 @@ function normalizeIssues(issues: readonly StandardSchemaV1.Issue[]): Issue[] {
   }));
 }
 
+/** A random id for one wallet reserve attempt (not from the table RNG: it is recorded). */
+function attemptId(): string {
+  const bytes = new Uint8Array(6);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Validates table options. Omitted options are tried as `undefined` and, if the schema
+ * rejects that, as `{}`, so an object schema whose fields all have defaults needs no
+ * options at all.
+ */
+async function validateOptions(schema: StandardSchemaV1, value: unknown): Promise<Json> {
+  if (value !== undefined) return runSchema(schema, value, 'INVALID_OPTIONS', 'table options');
+  try {
+    return await runSchema(schema, undefined, 'INVALID_OPTIONS', 'table options');
+  } catch (error) {
+    try {
+      return await runSchema(schema, {}, 'INVALID_OPTIONS', 'table options');
+    } catch {
+      throw error;
+    }
+  }
+}
+
 async function runSchema(
   schema: StandardSchemaV1,
   value: unknown,
@@ -280,6 +317,8 @@ interface Tx {
   reserved: string[];
   /** Set once the entry finished or was abandoned: later ctx.wallet calls throw. */
   closed: boolean;
+  /** Seats emptied in this entry and who held them, so `onStand` can still pay out. */
+  departed: Map<number, string>;
 }
 
 // ---------------------------------------------------------------------------------
@@ -352,7 +391,7 @@ export class TableRuntime {
     const options =
       game.options === undefined
         ? rejectUnexpectedOptions(args.options)
-        : await runSchema(game.options, args.options, 'INVALID_OPTIONS', 'table options');
+        : await validateOptions(game.options, args.options);
     const seed = normalizeSeed(args.seed ?? randomSeed());
     const clock = args.clock ?? systemClock;
     // Never derive the id from the seed: ids are public, the seed is secret (ADR 0006).
@@ -396,6 +435,7 @@ export class TableRuntime {
       })),
       options: entry.options,
       result: null,
+      reservations: {},
     };
     const runtime = new TableRuntime(game, { state: null, engine }, options, live);
     const draws: number[] = [];
@@ -591,11 +631,21 @@ export class TableRuntime {
 
   private makeWallet(tx: Tx): CtxWallet {
     const key = (k: string): string => `${this.root.engine.table}:${k}`;
+    const reservations = (): Record<string, string> => tx.draft.engine.reservations;
+    const take = (op: 'commit' | 'release', k: string): string => {
+      const full = reservations()[k];
+      if (full === undefined) {
+        throw new TypeError(`ctx.wallet.${op}(): no open reservation with key "${k}"`);
+      }
+      delete reservations()[k];
+      return full;
+    };
     const open = (): void => {
       if (tx.closed) throw new TypeError('ctx.wallet was used after its entry finished');
     };
     const playerAt = (seat: number): string => {
-      const player = tx.draft.engine.seats[seat]?.player?.id;
+      // A seat emptied in this entry still resolves to its player (onStand cash-outs).
+      const player = tx.draft.engine.seats[seat]?.player?.id ?? tx.departed.get(seat);
       if (!player) throw new TypeError(`ctx.wallet: seat ${String(seat)} is empty`);
       return player;
     };
@@ -623,18 +673,35 @@ export class TableRuntime {
     return {
       reserve: async (seat, amount, k) => {
         open();
-        const full = key(k);
+        if (k in reservations()) {
+          throw new TypeError(
+            `ctx.wallet.reserve(): key "${k}" is already reserved; commit or release it first`,
+          );
+        }
         const recorded = replayed('reserve');
         if (recorded) {
           tx.effects.push(recorded);
+          if (recorded.ok) reservations()[k] = recorded.key;
           return recorded.ok;
         }
         const player = playerAt(seat);
         const wallet = backend();
+        // A fresh backend key per attempt (recorded, so replay reuses it): a key the
+        // game reuses after a rolled-back entry must not hit that attempt's tombstone.
+        const full = `${key(k)}:${attemptId()}`;
         tx.reserved.push(full);
-        const result = await this.walletCall(() => wallet.reserve(player, amount, full));
+        let result: ReserveResult;
+        try {
+          result = await this.walletCall(() => wallet.reserve(player, amount, full));
+        } catch (error) {
+          // It may still have succeeded at the backend: release it even if the game
+          // catches this error and the entry commits.
+          if (!tx.closed) tx.deferred.push({ op: 'release', key: full });
+          throw error;
+        }
         open();
         tx.effects.push({ op: 'reserve', key: full, ok: result.ok });
+        if (result.ok) reservations()[k] = full;
         return result.ok;
       },
       balance: async (seat) => {
@@ -653,11 +720,11 @@ export class TableRuntime {
       },
       commit: (k) => {
         open();
-        tx.deferred.push({ op: 'commit', key: key(k) });
+        tx.deferred.push({ op: 'commit', key: take('commit', k) });
       },
       release: (k) => {
         open();
-        tx.deferred.push({ op: 'release', key: key(k) });
+        tx.deferred.push({ op: 'release', key: take('release', k) });
       },
       credit: (seat, amount, k) => {
         open();
@@ -720,7 +787,12 @@ export class TableRuntime {
       phase: e.phase,
       turn: e.turn ? { seat: e.turn.seat, deadline: e.timers['turn']?.deadline ?? null } : null,
       round: e.round
-        ? { number: e.round.number, deadline: e.round.deadline, submitted: [...e.round.submitted] }
+        ? {
+            number: e.round.number,
+            deadline: e.round.deadline,
+            participants: [...e.round.participants],
+            submitted: [...e.round.submitted],
+          }
         : null,
       options: e.options,
       result: e.result,
@@ -991,6 +1063,7 @@ export class TableRuntime {
       deferred: [],
       reserved: [],
       closed: false,
+      departed: new Map(),
     };
     const ctx = this.makeCtx(tx);
     let result: unknown;
@@ -1175,6 +1248,7 @@ export class TableRuntime {
         if (!s || s.status === 'empty')
           throw shoehiveError('NOT_SEATED', `Seat ${String(seat)} is empty`);
         const playerId = s.player?.id ?? null;
+        if (playerId !== null) tx.departed.set(seat, playerId);
         e.seats[seat] = { status: 'empty', player: null, connected: false };
         if (e.turn) {
           const wasCurrent = e.turn.seat === seat;
@@ -1246,6 +1320,18 @@ export class TableRuntime {
     if (def.turns) this.initTurns(tx, def.turns);
     if (def.rounds) this.openRound(tx, ctx, def.rounds, 1);
     await this.callHook(def.onEnter, tx, ctx, null, null);
+    // The first turn was chosen before onEnter ran. If onEnter made that seat skippable
+    // (for example a blackjack natural), move the turn on rather than leave it stuck.
+    // (TypeScript narrowed e.turn to null above; initTurns and onEnter set it.)
+    const turn = e.turn as EngineState['turn'];
+    const seat = turn?.seat;
+    if (turn && e.phase === name && def.turns?.skip && seat != null && e.status === 'active') {
+      if (def.turns.skip({ seat, state: tx.draft.state })) {
+        const number = turn.number;
+        this.advanceTurn(tx, seat);
+        turn.number = number; // still the phase's first turn
+      }
+    }
   }
 
   private async goPhase(tx: Tx, ctx: LooseCtx, name: string): Promise<void> {
@@ -1283,13 +1369,19 @@ export class TableRuntime {
     return phase === null ? this.game.turns : this.phaseDef(phase)?.turns;
   }
 
+  private turnArgs(tx: Tx): TurnArgs<unknown, unknown> {
+    const e = tx.draft.engine;
+    return { seats: this.occupiedOf(e), state: tx.draft.state, options: e.options };
+  }
+
   private initTurns(tx: Tx, config: TurnsConfig): void {
     const e = tx.draft.engine;
-    const seats = this.occupiedOf(e);
-    const order = typeof config.order === 'function' ? [...config.order({ seats })] : seats;
+    const args = this.turnArgs(tx);
+    const seats = args.seats;
+    const order = typeof config.order === 'function' ? [...config.order(args)] : [...seats];
     e.turn = { order, seat: null, number: 0 };
     if (order.length === 0) return;
-    const first = typeof config.first === 'function' ? config.first({ seats }) : order[0]!;
+    const first = typeof config.first === 'function' ? config.first(args) : order[0]!;
     this.advanceTurn(tx, first);
   }
 
@@ -1314,9 +1406,16 @@ export class TableRuntime {
   private armTurnTimer(tx: Tx): void {
     const e = tx.draft.engine;
     const config = this.turnsConfig(e.phase);
-    if (config?.timeoutMs && config.onTimeout && e.turn?.seat != null && e.status === 'active') {
+    const ms =
+      typeof config?.timeoutMs === 'function'
+        ? config.timeoutMs(this.turnArgs(tx))
+        : config?.timeoutMs;
+    if (ms && config?.onTimeout && e.turn?.seat != null && e.status === 'active') {
+      if (!(ms > 0) || !Number.isFinite(ms)) {
+        throw new RangeError(`turns.timeoutMs must return a positive number, got ${String(ms)}`);
+      }
       e.timers['turn'] = {
-        deadline: tx.at + config.timeoutMs,
+        deadline: tx.at + ms,
         action: config.onTimeout,
         input: { seat: e.turn.seat },
       };

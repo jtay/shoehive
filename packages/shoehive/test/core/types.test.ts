@@ -199,7 +199,8 @@ describe('literal ids and typed results', () => {
       autoConnect: false,
     });
     type CreateOptions = Parameters<typeof client.createTable<'types'>>[1];
-    expectTypeOf<CreateOptions>().toEqualTypeOf<{ target: number } | undefined>();
+    // The schema input: `target` has a default, so it may be omitted.
+    expectTypeOf<CreateOptions>().toEqualTypeOf<{ target?: number | undefined } | undefined>();
     type Handle = Awaited<ReturnType<typeof client.createAndJoin<'scored'>>>;
     expectTypeOf<Handle['meta']['result']>().toEqualTypeOf<{ winner: number | null } | null>();
     // @ts-expect-error -- unknown game id

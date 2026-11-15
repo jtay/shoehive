@@ -65,7 +65,7 @@ export type Amount = number;
 
 // @public
 export type AnyGame = GameConfig<any, any, any, any, any, any, any, any, any> & {
-    readonly [gameBrand]: GameTypes<any, any, any, any, any, any, any>;
+    readonly [gameBrand]: GameTypes<any, any, any, any, any, any, any, any>;
 };
 
 // @public
@@ -213,9 +213,10 @@ export interface CtxWallet {
 export { current }
 
 // @public
-export function defineGame<S, O = undefined, PN extends string = string, AN extends string = never, A = unknown, PAN extends string = never, P = unknown, V = S, R = Json, const ID extends string = string>(config: GameConfig<S, O, PN, AN, A, PAN, P, V, R> & {
+export function defineGame<S, O = undefined, PN extends string = string, AN extends string = never, A = unknown, PAN extends string = never, P = unknown, V = S, R = Json, const ID extends string = string, OI = O>(config: GameConfig<S, O, PN, AN, A, PAN, P, V, R> & {
     id: ID;
-}): Game<S, O, PN, AN, A, PAN, P, V, R, ID>;
+    options?: StandardSchemaV1<OI, O>;
+}): Game<S, O, PN, AN, A, PAN, P, V, R, ID, OI>;
 
 // @public (undocumented)
 export interface Diagnostic {
@@ -270,6 +271,7 @@ export interface EngineState {
     options: Json;
     // (undocumented)
     phase: string | null;
+    reservations: Record<string, string>;
     // (undocumented)
     result: Json;
     // (undocumented)
@@ -306,11 +308,11 @@ export interface EngineState {
 export type EventAudience = 'all' | 'spectators' | readonly number[];
 
 // @public
-export type Game<S = unknown, O = unknown, PN extends string = string, AN extends string = string, A = unknown, PAN extends string = string, P = unknown, V = unknown, R = Json, ID extends string = string> = GameConfig<S, O, PN, AN, A, PAN, P, V, R> & {
+export type Game<S = unknown, O = unknown, PN extends string = string, AN extends string = string, A = unknown, PAN extends string = string, P = unknown, V = unknown, R = Json, ID extends string = string, OI = O> = GameConfig<S, O, PN, AN, A, PAN, P, V, R> & {
     readonly id: ID;
     readonly [gameBrand]: GameTypes<S, O, PN, {
         [K in AN | PAN]: K extends AN ? InputOf<A, K> : InputOf<PhaseInputs<P>, K>;
-    }, V, R, ID>;
+    }, V, R, ID, OI>;
 };
 
 // @public
@@ -360,7 +362,7 @@ export interface GameConfig<S, O, PN extends string, AN extends string, A, PAN e
         random: Random;
         seats: number;
     }): S;
-    turns?: TurnsConfig;
+    turns?: TurnsConfig<S, O>;
     version?: number;
     view?(args: ViewArgs<S, O>): V;
 }
@@ -379,6 +381,11 @@ export type GameOptions<G> = TypesOf<G> extends {
 } ? O : never;
 
 // @public
+export type GameOptionsInput<G> = TypesOf<G> extends {
+    optionsInput: infer OI;
+} ? OI : never;
+
+// @public
 export type GamePhases<G> = TypesOf<G> extends {
     phases: infer PN;
 } ? PN : never;
@@ -394,12 +401,13 @@ export type GameState<G> = TypesOf<G> extends {
 } ? S : never;
 
 // @public
-export interface GameTypes<S, O, PN extends string, Actions, V, R = Json, ID extends string = string> {
+export interface GameTypes<S, O, PN extends string, Actions, V, R = Json, ID extends string = string, OI = O> {
     actions: Actions;
     // (undocumented)
     id: ID;
     // (undocumented)
     options: O;
+    optionsInput: OI;
     // (undocumented)
     phases: PN;
     result: R;
@@ -586,7 +594,7 @@ export interface PhaseDef<S, O, PN extends string, N extends string, A, R = Json
     // (undocumented)
     rounds?: RoundsConfig<S, O, PN, R>;
     // (undocumented)
-    turns?: TurnsConfig;
+    turns?: TurnsConfig<S, O>;
 }
 
 // @public
@@ -845,6 +853,7 @@ export interface TableMeta {
     round: {
         number: number;
         deadline: number | null;
+        participants: number[];
         submitted: number[];
     } | null;
     // (undocumented)
@@ -954,6 +963,14 @@ export interface TimerState {
 }
 
 // @public
+export interface TurnArgs<S, O> {
+    // (undocumented)
+    options: O;
+    seats: readonly number[];
+    state: S;
+}
+
+// @public
 export interface TurnInfo {
     readonly number: number;
     // (undocumented)
@@ -962,19 +979,15 @@ export interface TurnInfo {
 }
 
 // @public (undocumented)
-export interface TurnsConfig {
-    first?: 'lowest' | ((args: {
-        seats: readonly number[];
-    }) => number);
+export interface TurnsConfig<S = unknown, O = unknown> {
+    first?: 'lowest' | ((args: TurnArgs<S, O>) => number);
     onTimeout?: string;
-    order?: 'round-robin' | ((args: {
-        seats: readonly number[];
-    }) => number[]);
+    order?: 'round-robin' | ((args: TurnArgs<S, O>) => number[]);
     skip?: (args: {
         seat: number;
-        state: unknown;
+        state: S;
     }) => boolean;
-    timeoutMs?: number;
+    timeoutMs?: number | ((args: TurnArgs<S, O>) => number);
 }
 
 // @public (undocumented)

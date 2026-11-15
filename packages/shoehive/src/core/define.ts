@@ -171,15 +171,30 @@ export interface ActionDef<S, I, O, PN extends string, R = Json> {
   run(args: ActionArgs<S, I, O, PN, R>): void | Json | Promise<void | Json>;
 }
 
-export interface TurnsConfig {
+/** What `turns.order`, `first` and `timeoutMs` functions receive. */
+export interface TurnArgs<S, O> {
+  /** Occupied seats, ascending. */
+  seats: readonly number[];
+  /** The state (read it; do not change it here). */
+  state: S;
+  options: O;
+}
+
+export interface TurnsConfig<S = unknown, O = unknown> {
   /** `'round-robin'` (ascending seats) or a function returning the order. */
-  order?: 'round-robin' | ((args: { seats: readonly number[] }) => number[]);
+  order?: 'round-robin' | ((args: TurnArgs<S, O>) => number[]);
   /** Seats to skip when advancing (for example folded players). */
-  skip?: (args: { seat: number; state: unknown }) => boolean;
-  /** Who starts: the lowest seat in the order (default) or a function. */
-  first?: 'lowest' | ((args: { seats: readonly number[] }) => number);
-  /** Arms a `turn` timer on every turn change. Requires `onTimeout`. */
-  timeoutMs?: number;
+  skip?: (args: { seat: number; state: S }) => boolean;
+  /**
+   * Who starts: the lowest seat in the order (default) or a function (for example
+   * "left of the big blind"). A skipped seat passes to the next eligible one.
+   */
+  first?: 'lowest' | ((args: TurnArgs<S, O>) => number);
+  /**
+   * Arms a `turn` timer on every turn change. Requires `onTimeout`. A function can read
+   * the table options (`({ options }) => options.turnMs`).
+   */
+  timeoutMs?: number | ((args: TurnArgs<S, O>) => number);
   /** Internal action run when the turn timer fires. Receives `{ seat }` as input. */
   onTimeout?: string;
 }
@@ -214,7 +229,7 @@ type InputSchemas<A> = { [K in keyof A]: { input?: StandardSchemaV1<unknown, A[K
 export interface PhaseDef<S, O, PN extends string, N extends string, A, R = Json> {
   /** Actions available only in this phase (in addition to top-level actions). */
   actions?: Partial<ActionDefs<S, O, PN, N, A, R>>;
-  turns?: TurnsConfig;
+  turns?: TurnsConfig<S, O>;
   rounds?: RoundsConfig<S, O, PN, R>;
   onEnter?: Hook<S, O, PN, R>;
   onExit?: Hook<S, O, PN, R>;
@@ -274,7 +289,7 @@ export interface GameConfig<
     [K in keyof P]: { actions?: InputSchemas<P[K]> };
   };
   /** Turns for games without phases. */
-  turns?: TurnsConfig;
+  turns?: TurnsConfig<S, O>;
   /** Rounds for games without phases. */
   rounds?: RoundsConfig<S, O, PN, R>;
   /** What each viewer may see. Defaults to the full state for everyone. */
@@ -310,10 +325,13 @@ export interface GameTypes<
   V,
   R = Json,
   ID extends string = string,
+  OI = O,
 > {
   id: ID;
   state: S;
   options: O;
+  /** What `createTable` accepts: the options schema's input (defaults may be omitted). */
+  optionsInput: OI;
   phases: PN;
   /** Every action name (top-level and in any phase) mapped to its input type. */
   actions: Actions;
@@ -334,6 +352,7 @@ export type Game<
   V = unknown,
   R = Json,
   ID extends string = string,
+  OI = O,
 > = GameConfig<S, O, PN, AN, A, PAN, P, V, R> & {
   readonly id: ID;
   readonly [gameBrand]: GameTypes<
@@ -343,22 +362,25 @@ export type Game<
     { [K in AN | PAN]: K extends AN ? InputOf<A, K> : InputOf<PhaseInputs<P>, K> },
     V,
     R,
-    ID
+    ID,
+    OI
   >;
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- `any` is required to match games of every type */
 /** Any game, for APIs that accept games of any type. */
 export type AnyGame = GameConfig<any, any, any, any, any, any, any, any, any> & {
-  readonly [gameBrand]: GameTypes<any, any, any, any, any, any, any>;
+  readonly [gameBrand]: GameTypes<any, any, any, any, any, any, any, any>;
 };
 type TypesOf<G> = G extends { readonly [gameBrand]: infer T } ? T : never;
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 /** The state type of a game. */
 export type GameState<G> = TypesOf<G> extends { state: infer S } ? S : never;
-/** The options type of a game. */
+/** The options type of a game: its options schema's output, as `ctx.options` sees it. */
 export type GameOptions<G> = TypesOf<G> extends { options: infer O } ? O : never;
+/** What creating a table accepts: the options schema's input (fields with defaults optional). */
+export type GameOptionsInput<G> = TypesOf<G> extends { optionsInput: infer OI } ? OI : never;
 /** The view type a client receives. */
 export type GameView<G> = TypesOf<G> extends { view: infer V } ? V : never;
 /** Map of every action name (top-level and in any phase) to its input type. */
@@ -400,11 +422,15 @@ export function defineGame<
   V = S,
   R = Json,
   const ID extends string = string,
+  OI = O,
 >(
-  config: GameConfig<S, O, PN, AN, A, PAN, P, V, R> & { id: ID },
-): Game<S, O, PN, AN, A, PAN, P, V, R, ID> {
+  config: GameConfig<S, O, PN, AN, A, PAN, P, V, R> & {
+    id: ID;
+    options?: StandardSchemaV1<OI, O>;
+  },
+): Game<S, O, PN, AN, A, PAN, P, V, R, ID, OI> {
   validateConfig(config as unknown as LooseConfig);
-  return Object.freeze(config) as unknown as Game<S, O, PN, AN, A, PAN, P, V, R, ID>;
+  return Object.freeze(config) as unknown as Game<S, O, PN, AN, A, PAN, P, V, R, ID, OI>;
 }
 
 type LooseConfig = GameConfig<unknown, unknown, string, string, unknown, string, unknown, unknown>;
@@ -457,7 +483,8 @@ function validateConfig(config: LooseConfig): void {
   ): void => {
     if (turns && rounds) fail(`${where}: declare turns or rounds, not both`);
     if (turns?.timeoutMs !== undefined) {
-      if (!(turns.timeoutMs > 0)) fail(`${where}.turns.timeoutMs must be positive`);
+      if (typeof turns.timeoutMs !== 'function' && !(turns.timeoutMs > 0))
+        fail(`${where}.turns.timeoutMs must be positive`);
       if (!turns.onTimeout) fail(`${where}.turns.timeoutMs needs turns.onTimeout`);
     }
     if (turns?.onTimeout && !allActions.has(turns.onTimeout)) {
