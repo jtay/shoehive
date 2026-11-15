@@ -337,6 +337,19 @@ and must not reuse a built-in code (a type error at `defineGame`). Built-in code
 
 ---
 
+### 7.1 Codes raised by the client
+
+`shoehive/client` raises three more codes locally. Servers never send them.
+
+| Code              | When                                                        |
+| ----------------- | ----------------------------------------------------------- |
+| `CONNECTION_LOST` | The socket closed while the request was waiting for its ack |
+| `REQUEST_TIMEOUT` | No ack within `requestTimeoutMs` (default 15 000)           |
+| `CLIENT_CLOSED`   | `client.close()` was called while the request was waiting   |
+
+A request that failed with `CONNECTION_LOST` may or may not have been applied: read the table
+document after the reconnect instead of retrying blindly.
+
 ## 8. Close codes
 
 The server sends `bye { code, reason }` immediately before closing, when it can.

@@ -150,8 +150,8 @@
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json",
     "check:package": "publint --strict && attw --pack . --profile node16 && node scripts/check-exports.mjs && pnpm api:check",
-    "api:update": "api-extractor run --local -c api-extractor.json && api-extractor run --local -c api-extractor.testing.json && api-extractor run --local -c api-extractor.server.json && api-extractor run --local -c api-extractor.store-memory.json",
-    "api:check": "api-extractor run -c api-extractor.json && api-extractor run -c api-extractor.testing.json && api-extractor run -c api-extractor.server.json && api-extractor run -c api-extractor.store-memory.json"
+    "api:update": "api-extractor run --local -c api-extractor.json && api-extractor run --local -c api-extractor.testing.json && api-extractor run --local -c api-extractor.server.json && api-extractor run --local -c api-extractor.store-memory.json && api-extractor run --local -c api-extractor.client.json && api-extractor run --local -c api-extractor.react.json",
+    "api:check": "api-extractor run -c api-extractor.json && api-extractor run -c api-extractor.testing.json && api-extractor run -c api-extractor.server.json && api-extractor run -c api-extractor.store-memory.json && api-extractor run -c api-extractor.client.json && api-extractor run -c api-extractor.react.json"
   },
   "publishConfig": {
     "access": "public",
@@ -163,9 +163,23 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.60.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.18.2",
     "fast-check": "^4.10.2",
+    "happy-dom": "^21.0.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "valibot": "^1.5.0",
     "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   }
 }

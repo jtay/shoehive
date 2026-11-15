@@ -15,7 +15,17 @@ const isomorphicFiles = [
 ];
 
 export default defineConfig(
-  { ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/bench/.out/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/dist-web/**',
+      '**/node_modules/**',
+      '**/coverage/**',
+      '**/bench/.out/**',
+      'test-results/**',
+      'playwright-report/**',
+    ],
+  },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,

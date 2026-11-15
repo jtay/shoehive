@@ -266,16 +266,17 @@ table.view; // typed as ReturnType<typeof ticTacToe.view>
 import { ShoehiveProvider, useTable, useLobby, useConnection } from 'shoehive/react';
 
 function Board({ tableId }: { tableId: string }) {
-  const { view, mySeat, act, pending } = useTable<typeof ticTacToe>(tableId);
+  const { view, act, pending } = useTable<typeof ticTacToe>(tableId);
+  if (!view) return <p>Joining...</p>; // null until the first snapshot
   return view.board.map((cell, i) => (
-    <button key={i} disabled={!!cell || pending} onClick={() => act('place', { cell: i })}>
+    <button key={i} disabled={!!cell || pending > 0} onClick={() => act('place', { cell: i })}>
       {cell}
     </button>
   ));
 }
 ```
 
-The client handles reconnects on its own: it stores a resume token, backs off with jitter, re-subscribes to tables and resyncs from its last revision.
+The client handles reconnects on its own: it stores a resume token, backs off with jitter, re-subscribes to tables and resyncs from its last revision. (Implemented in Phase 3: on resume the server restores joined tables and sends fresh snapshots; if the session could not be resumed, the client re-joins its tables itself.)
 
 ### 5.5 Testing a game (no sockets)
 
