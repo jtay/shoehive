@@ -84,7 +84,8 @@ in URLs.
 11. A seated player is **disconnected from a table** when none of their open
     connections has joined it. Then the engine records a `disconnect` system entry
     (ADR 0006), runs `onDisconnect`, and marks the seat `reserved` with
-    `graceDeadline = now + reconnectGraceMs`, stored in engine state.
+    `graceDeadline = now + reconnectGraceMs`. (Implementation note, Phase 2: the deadline is held by
+    the server's session, not in engine state. A restart starts a fresh grace period anyway, step 16.)
 12. If a connection of that player joins the table before the deadline, a `reconnect`
     entry runs `onReconnect` and the seat is `occupied` again. Joining from a second tab
     while one is still open produces no entries at all.

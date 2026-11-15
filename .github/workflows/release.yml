@@ -34,10 +34,11 @@ jobs:
         run: pnpm check
       - uses: changesets/action@v2
         with:
-          version: pnpm exec changeset version
-          publish: pnpm release
-          title: 'chore: version packages'
-          commit: 'chore: version packages'
+          # changesets/action v2 input names (v1 used version/publish/title/commit).
+          version-script: pnpm exec changeset version
+          publish-script: pnpm release
+          pr-title: 'chore: version packages'
+          commit-message: 'chore: version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Not needed once npm trusted publishing is configured for this repo.

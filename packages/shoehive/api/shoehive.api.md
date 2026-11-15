@@ -7,6 +7,19 @@
 import { current } from 'mutative';
 
 // @public (undocumented)
+export type Ack = {
+    t: 'ack';
+    id: string;
+    ok: true;
+    result?: Json;
+} | {
+    t: 'ack';
+    id: string;
+    ok: false;
+    error: WireError;
+};
+
+// @public (undocumented)
 export interface ActionArgs<S, I, O, PN extends string> {
     // (undocumented)
     ctx: ActionCtx<O, PN>;
@@ -60,6 +73,70 @@ export const BUILTIN_ERROR_CODES: readonly ["BAD_REQUEST", "UNSUPPORTED_PROTOCOL
 // @public (undocumented)
 export type BuiltinErrorCode = (typeof BUILTIN_ERROR_CODES)[number];
 
+// @public (undocumented)
+export type ClientMessage = ClientRequest | ClientPing;
+
+// @public (undocumented)
+export type ClientPing = {
+    t: 'ping';
+    id?: string;
+};
+
+// @public (undocumented)
+export type ClientRequest = {
+    t: 'hello';
+    id: string;
+    v: number;
+    resume?: string;
+    name?: string;
+    client?: {
+        name: string;
+        version: string;
+    };
+} | {
+    t: 'lobby.sub';
+    id: string;
+} | {
+    t: 'lobby.unsub';
+    id: string;
+} | {
+    t: 'table.create';
+    id: string;
+    game: string;
+    options?: Json;
+} | {
+    t: 'table.join';
+    id: string;
+    table: string;
+    as?: 'player' | 'spectator';
+} | {
+    t: 'table.leave';
+    id: string;
+    table: string;
+} | {
+    t: 'table.sync';
+    id: string;
+    table: string;
+} | {
+    t: 'seat.take';
+    id: string;
+    table: string;
+    seat?: number;
+} | {
+    t: 'seat.leave';
+    id: string;
+    table: string;
+    seat?: number;
+} | {
+    t: 'act';
+    id: string;
+    table: string;
+    name: string;
+    input?: Json;
+    seat?: number;
+    rev?: number;
+};
+
 // @public
 export interface Clock {
     // (undocumented)
@@ -67,6 +144,19 @@ export interface Clock {
     now(): number;
     setTimer(atMs: number, fn: () => void): TimerHandle;
 }
+
+// @public
+export const CLOSE: {
+    readonly NORMAL: 1000;
+    readonly GOING_AWAY: 1001;
+    readonly TOO_BIG: 1009;
+    readonly HELLO_TIMEOUT: 4000;
+    readonly UNSUPPORTED_PROTOCOL: 4001;
+    readonly PROTOCOL_VIOLATION: 4002;
+    readonly UNAUTHORIZED: 4401;
+    readonly KICKED: 4409;
+    readonly RATE_LIMIT_ABUSE: 4429;
+};
 
 // @public (undocumented)
 export interface Commit {
@@ -324,6 +414,43 @@ export type JsonPatchOp = {
 };
 
 // @public (undocumented)
+export interface LobbyDocument {
+    // (undocumented)
+    games: {
+        id: string;
+        name: string;
+        description: string | null;
+        seats: {
+            min: number;
+            max: number;
+        };
+    }[];
+    // (undocumented)
+    tables: LobbyTable[];
+}
+
+// @public (undocumented)
+export interface LobbyTable {
+    // (undocumented)
+    createdAt: number;
+    // (undocumented)
+    game: string;
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    listed: Json;
+    // (undocumented)
+    seats: {
+        taken: number;
+        total: number;
+    };
+    // (undocumented)
+    spectators: number;
+    // (undocumented)
+    status: TableStatus;
+}
+
+// @public (undocumented)
 export type LogEntry = LogEntryBase & ({
     kind: 'create';
     table: string;
@@ -368,6 +495,19 @@ export interface LogEntryBase {
     draws: number[];
     seq: number;
 }
+
+// @public
+export function parseClientMessage(raw: string): ParseResult;
+
+// @public (undocumented)
+export type ParseResult = {
+    ok: true;
+    message: ClientMessage;
+} | {
+    ok: false;
+    id: string | null;
+    message: string;
+};
 
 // @public (undocumented)
 export interface PhaseDef<S, O, PN extends string, N extends string, A> {
@@ -422,6 +562,9 @@ export class ReplayDivergenceError extends Error {
     readonly seq: number;
 }
 
+// @public (undocumented)
+export type RequestType = ClientRequest['t'];
+
 // @public
 export interface RoundInfo {
     readonly deadline: number | null;
@@ -450,6 +593,7 @@ export interface RuntimeOptions {
     // (undocumented)
     clock?: Clock;
     dev?: boolean;
+    persist?: (entry: LogEntry) => Promise<void> | void;
 }
 
 // @public
@@ -464,6 +608,47 @@ export interface SeatInfo {
     // (undocumented)
     readonly status: 'empty' | 'occupied' | 'reserved';
 }
+
+// @public (undocumented)
+export type ServerMessage = Ack | {
+    t: 'pong';
+    id?: string;
+    now: number;
+} | {
+    t: 'table.snapshot';
+    table: string;
+    rev: number;
+    doc: TableDocument;
+} | {
+    t: 'table.patch';
+    table: string;
+    from: number;
+    rev: number;
+    ops: JsonPatchOp[];
+} | {
+    t: 'table.event';
+    table: string;
+    rev: number;
+    name: string;
+    payload: Json;
+} | {
+    t: 'table.closed';
+    table: string;
+    reason: 'ended' | 'closed' | 'game-removed' | 'expired';
+} | {
+    t: 'lobby.snapshot';
+    rev: number;
+    doc: LobbyDocument;
+} | {
+    t: 'lobby.patch';
+    from: number;
+    rev: number;
+    ops: JsonPatchOp[];
+} | {
+    t: 'bye';
+    code: number;
+    reason: string;
+};
 
 // @public
 export class ShoehiveError extends Error {
@@ -543,6 +728,24 @@ export namespace StandardSchemaV1 {
 export const systemClock: Clock;
 
 // @public
+export interface TableDocument {
+    // (undocumented)
+    meta: TableMeta;
+    // (undocumented)
+    seats: SeatInfo[];
+    // (undocumented)
+    spectators: number;
+    // (undocumented)
+    view: Json;
+    // (undocumented)
+    you: {
+        player: string;
+        seats: number[];
+        role: 'player' | 'spectator';
+    };
+}
+
+// @public
 export interface TableMeta {
     // (undocumented)
     game: string;
@@ -592,6 +795,7 @@ export class TableRuntime {
     }): Promise<void>;
     dispose(): void;
     get engine(): Readonly<EngineState>;
+    get faulted(): boolean;
     // (undocumented)
     readonly game: AnyGame;
     // (undocumented)
@@ -613,6 +817,8 @@ export class TableRuntime {
     get rev(): number;
     // (undocumented)
     seats(): SeatInfo[];
+    seatsHeldBy(playerId: string): number[];
+    setPersist(persist: RuntimeOptions['persist']): void;
     sit(args: {
         player: {
             id: string;
@@ -642,7 +848,7 @@ export class TableRuntime {
 export type TableStatus = 'waiting' | 'active' | 'ended';
 
 // @public
-export type TimerHandle = unknown;
+export type TimerHandle = object | number;
 
 // @public (undocumented)
 export interface TimerState {
@@ -700,6 +906,41 @@ export type Viewer = {
     readonly seats: readonly number[];
     readonly playerId: null;
 };
+
+// @public (undocumented)
+export interface Welcome {
+    // (undocumented)
+    player: {
+        id: string;
+        name: string;
+        guest: boolean;
+    };
+    // (undocumented)
+    resumed: boolean;
+    // (undocumented)
+    resumeExpiresAt: number;
+    // (undocumented)
+    resumeToken: string;
+    // (undocumented)
+    server: {
+        protocol: 1;
+        now: number;
+        heartbeatMs: number;
+        maxMessageBytes: number;
+    };
+}
+
+// @public (undocumented)
+export interface WireError {
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    details?: Json;
+    // (undocumented)
+    message: string;
+    // (undocumented)
+    source: 'shoehive' | 'game';
+}
 
 // (No @packageDocumentation comment for this package)
 

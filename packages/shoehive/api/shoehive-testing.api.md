@@ -4,6 +4,16 @@
 
 ```ts
 
+// @public (undocumented)
+export interface ConformanceRunner {
+    // (undocumented)
+    describe: (name: string, fn: () => void) => void;
+    // (undocumented)
+    expect: (value: unknown) => Expectation;
+    // (undocumented)
+    it: (name: string, fn: () => Promise<void>) => void;
+}
+
 // @public
 export function createTestTable<G extends AnyGame>(game: G, options?: TestTableOptions): Promise<TestTable<G>>;
 
@@ -28,6 +38,9 @@ export interface RecordedEvent extends EmittedEvent {
     // (undocumented)
     rev: number;
 }
+
+// @public
+export function runStoreConformance(createStore: () => Store | Promise<Store>, input: ConformanceRunner): void;
 
 // @public
 export const TEST_SEED = "shoehive-test";
