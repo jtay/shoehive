@@ -1,0 +1,67 @@
+{
+  "shoehiveFixture": 1,
+  "game": "tic-tac-toe",
+  "version": 1,
+  "entries": [
+    {
+      "seq": 0,
+      "at": 1767225600000,
+      "draws": [],
+      "kind": "create",
+      "table": "test-table",
+      "game": "tic-tac-toe",
+      "version": 1,
+      "seed": "709efbf80d8f3f1b7cfa1e590dcce605842dcd6d72cda776368c4d33de2b82c4",
+      "options": null
+    },
+    {
+      "kind": "system",
+      "event": "sit",
+      "seat": 0,
+      "player": {
+        "id": "p0",
+        "name": "Player 1"
+      },
+      "seq": 1,
+      "at": 1767225600000,
+      "draws": []
+    },
+    {
+      "kind": "system",
+      "event": "sit",
+      "seat": 1,
+      "player": {
+        "id": "p1",
+        "name": "Player 2"
+      },
+      "seq": 2,
+      "at": 1767225600000,
+      "draws": []
+    },
+    {
+      "kind": "system",
+      "event": "start",
+      "seat": null,
+      "player": null,
+      "seq": 3,
+      "at": 1767225600000,
+      "draws": []
+    },
+    {
+      "kind": "action",
+      "name": "place",
+      "seat": 0,
+      "player": "p0",
+      "input": {
+        "cell": 4
+      },
+      "seq": 4,
+      "at": 1767225600000,
+      "draws": []
+    }
+  ],
+  "expect": {
+    "rev": 4,
+    "stateHash": "01fd6764bb866411f9c4eeaf61b903ff53b5b5716d0eed05d0d0170c07a28c9f"
+  }
+}

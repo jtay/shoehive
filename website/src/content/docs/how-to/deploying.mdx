@@ -1,11 +1,142 @@
 ---
 title: 'Deploying (single node, Docker, behind a proxy)'
 description: 'Run a Shoehive server in production.'
-todo: 'NODE_ENV=production, secrets, a store, a Dockerfile, WebSocket upgrades through nginx or a load balancer, origins, health and graceful shutdown on SIGTERM.'
 sidebar:
   order: 13
 ---
 
-{/* TODO: write this page. Delete `todo:` in the frontmatter when it is done. */}
+import Snippet from '../../../components/Snippet.astro';
 
-Run a Shoehive server in production.
+In v1 a Shoehive server is **one Node.js process** (Node 22 or newer) that holds every live
+table in memory and writes each action to a store. This page takes that process to
+production: configuration, a durable store, shutdown, a proxy, Docker and health checks.
+
+## Production mode
+
+Set `NODE_ENV=production`. It turns off the development checks in table runtimes (frozen
+state and the nondeterminism guard), ignores `devtools: true`, and makes the server strict
+about secrets.
+
+Resume tokens are signed with a secret. Set it in the environment as `SHOEHIVE_SECRET` (or
+pass `secret`). Without one the server throws on startup in production, unless you supply an
+`auth` hook, and it would otherwise invent a random secret that changes on every restart.
+
+```sh
+export NODE_ENV=production
+export SHOEHIVE_SECRET="$(openssl rand -hex 32)"
+```
+
+To rotate it, pass an array to `secret`: the first signs new tokens and all of them verify old
+ones. Guest identities are bearer tokens and are not suitable for real money, so use an
+`auth` hook when you run a [wallet](/how-to/wallets-and-real-money-safety/). See
+[authentication](/how-to/authentication/).
+
+## Pick a store
+
+The default store keeps everything in memory, so a restart ends every table. Choose a durable
+one before you go live: `sqliteStore` for one server with a disk, `postgresStore` or
+`redisStore` if you already run them. The adapters, their durability settings and their
+tables are on the [stores reference](/reference/stores/), and
+[persistence and restart recovery](/how-to/persistence-and-restart-recovery/) explains what
+players see after a restart.
+
+## The server
+
+You can let Shoehive own the HTTP server with `await shoehive.listen({ port, host })`, or
+`attach` the WebSocket endpoint to one you already have, which is what most apps do (the
+[examples](https://github.com/jtay/shoehive/tree/main/examples) serve their web app this
+way). `listen` binds to `127.0.0.1` unless you pass `host: '0.0.0.0'`, which a container
+needs, and it answers every plain HTTP request with `426`, so use `attach` when a load
+balancer needs an HTTP health check.
+
+<Snippet file="website/snippets/deploying/src/server.ts" region="server" />
+
+`GET /healthz` answers `503` until stored tables have been recovered (`shoehive.ready`) and
+`200` after, so a rolling deploy only sends traffic to a process that is ready.
+
+## Shut down gracefully
+
+When the platform stops the process it sends `SIGTERM`. Call `shoehive.close()`: it waits for
+each table's queue to drain, writes a final snapshot, and closes connections with code 1001,
+which clients treat as a reason to reconnect with backoff and resume. Then close your HTTP
+server and the store, because `close()` leaves a store you created open.
+
+<Snippet file="website/snippets/deploying/src/server.ts" region="shutdown" />
+
+`close({ graceful: false })` drops everything at once, like a crash. It is useful in a test
+of your recovery, not in a deploy.
+
+## Behind a reverse proxy
+
+The proxy must pass the WebSocket upgrade through. For nginx:
+
+```nginx
+location /shoehive {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_read_timeout 1h;
+}
+```
+
+Raise the proxy's idle timeout above its default (60 seconds in nginx). The server pings every
+15 seconds (`limits.heartbeatMs`), which keeps a healthy connection busy, but a long timeout
+stops the proxy cutting a quiet one. A cloud load balancer needs the same: WebSocket support
+on, and an idle timeout of a minute or more.
+
+Set `origins` to the sites that host your client, for example
+`['https://play.example.com']`. A browser upgrade from any other origin is refused with
+HTTP 403. The default allows any origin, so set it in production. The socket path is
+`/shoehive` unless you pass `path`.
+
+## Docker
+
+```dockerfile
+FROM node:22-slim AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:22-slim
+ENV NODE_ENV=production \
+    DB_FILE=/data/shoehive.db
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY --from=build /app/dist ./dist
+RUN mkdir /data && chown node:node /data
+VOLUME /data
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+CMD ["node", "dist/server.js"]
+```
+
+Run it with the secret from outside the image, and keep the volume so tables survive a
+redeploy:
+
+```sh
+docker run -p 3000:3000 -v shoehive-data:/data \
+  -e SHOEHIVE_SECRET -e ORIGINS=https://play.example.com my-game
+```
+
+Run the container directly as the main process, as above, so `SIGTERM` reaches Node. With
+Postgres or Redis there is no volume to keep, and you end the pool or client in `shutdown`.
+
+## Scaling
+
+v1 targets a single node. Players, tables and timers live in that process, so you scale it up
+(more CPU and memory), not out. Do not run two server processes against the same store
+namespace: the second writer gets a `StoreConflictError` and the table is faulted until you
+reload it. A restart is a short pause, not data loss: with a durable store the next process
+recovers every open table and players resume. See the
+[benchmarks](/reference/benchmarks/) for what one process handles.
+
+Devtools stays off in production. If you must use it for a short session, follow the
+[devtools reference](/reference/devtools/#in-production).

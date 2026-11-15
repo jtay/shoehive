@@ -1,11 +1,108 @@
 ---
 title: 'Debugging with devtools and time travel'
 description: 'Inspect live tables, step through the action log and fork a table from any point.'
-todo: 'Turning devtools on safely, reading state and views side by side, time travel, forks and exporting a fixture for a test. Sources: reference/devtools, ADR 0011.'
 sidebar:
   order: 12
 ---
 
-{/* TODO: write this page. Delete `todo:` in the frontmatter when it is done. */}
+import Snippet from '../../../components/Snippet.astro';
 
-Inspect live tables, step through the action log and fork a table from any point.
+A player says the pot was split wrong, or that they could see a card they should not. This page
+walks through finding that table, looking at it from every seat, stepping back to the moment it
+went wrong, trying a fix on a fork, and keeping the bug as a failing test.
+
+The inspector is read-only against live tables, so it is safe to poke around. For every option,
+the security model and running it in production, see the [devtools reference](/reference/devtools/).
+
+## 1. Turn it on
+
+Enable devtools in development only. The examples read `NODE_ENV` so it never ships by accident:
+
+```ts
+import type { AnyGame } from 'shoehive';
+declare const games: AnyGame[];
+// ---cut---
+import { createServer } from 'shoehive/server';
+
+const shoehive = createServer({
+  games,
+  devtools: process.env.NODE_ENV !== 'production',
+});
+await shoehive.listen({ port: 3000 });
+```
+
+On startup the server logs a warning with the inspector URL and a fresh token:
+
+```txt
+[shoehive] Devtools inspector: http://localhost:3000/__shoehive/#token=4f1c...
+```
+
+Open that exact URL. If you attach to your own HTTP server, `attach()` routes the devtools
+paths for you. In a container the inspector only answers loopback clients unless you allow
+remote ones (see the [reference](/reference/devtools/)).
+
+## 2. Find the table
+
+The first page lists every table the server holds. Type in the filter box to narrow it by id,
+game or status. Open the one you want. The **Overview** tab shows its status, phase, revision,
+whose turn it is, running timers, the result, and recent rejected actions under
+**Diagnostics**.
+
+Rejected actions are the quickest clue to a client sending something the game refuses. Each
+one lists the error code, so you can tell a game rule (`CELL_TAKEN`) from a validation or
+permission problem.
+
+## 3. Compare what each seat sees
+
+Open **Views**. Every seated player and the spectator appear side by side, produced by the same
+`view()` call that feeds the clients. Changes since the previous revision are highlighted, and
+you can compare against the spectator instead. This is where a leak shows up: a hidden card
+that is not `null` in someone else's column.
+
+The **State** tab shows the raw state and the engine state (including the RNG seed). Both
+include every secret, which is why devtools never runs in production by default.
+
+## 4. Scrub the log
+
+Use the time travel bar above the tabs. Drag the slider, or use **Step back one entry** and
+**Step forward one entry**, to see the table at any revision. The **Log** tab lists every entry
+with its time: actions, timers, and seat changes such as sits and disconnects.
+
+Each step replays the stored log into a copy. Nothing is written to the store and the live
+table keeps running. A banner says **Replay, not live** while you are looking at the past. Step
+back until the state is right, then forward one entry: the entry that breaks it is the
+culprit. Diagnostics are not available on a replayed copy, because they come from the live
+table.
+
+## 5. Fork to try a fix
+
+At the revision just before the bug, press **Fork from seq N**. The server makes a dev table
+(`dev_...`) from that point. It is not saved, not listed in the lobby, and uses an in-memory
+wallet.
+
+Edit the game, let the server restart, and join the fork by id from your normal client
+(`client.join(id)`). Replay the move that went wrong and see whether your change holds. Press
+**Inspect the fork** to watch it in devtools. Forks are refused in production.
+
+## 6. Export a fixture and write the failing test
+
+Step to the moment the table is wrong and press **Export fixture to seq N**. Read the warning
+in the dialog, then download the JSON. Player ids become `p0`, `p1`... and names are removed,
+but the seed stays, because the fixture cannot replay without it. Save the file next to your
+tests, for example `test/fixtures/centre-bug.json`, and replay it:
+
+<Snippet file="website/snippets/testing-games/test/fixture.test.ts" region="fixture" />
+
+Write the assertion for the behaviour you expect, run it and watch it fail. The test table is
+live, so you can also act on it and `advance` the fake clock. See
+[testing games](/how-to/testing-games/) for everything a test table can do.
+
+## 7. Fix and keep the test
+
+Change the rules until the test passes. `replayFixture` checks the game id, its `version`
+and a hash of the exported state, so if a fix changes how the earlier entries replay, it
+throws rather than replaying something different. Bump the game's `version` and export again,
+or keep the old fixture as a record. Commit the test and the fixture.
+
+Treat a fixture from a real table as a secret until you have checked it: it reveals that
+table's cards through the seed.

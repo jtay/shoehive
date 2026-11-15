@@ -1,11 +1,147 @@
 ---
 title: 'Testing games'
 description: 'Test your rules with createTestTable, a fake clock and replay checks.'
-todo: 'createTestTable, act and viewOf, FakeClock for timers, verifyReplay, seeds, and fixtures exported from devtools. Sources: examples/*/test, ADR 0006.'
 sidebar:
   order: 11
 ---
 
-{/* TODO: write this page. Delete `todo:` in the frontmatter when it is done. */}
+import Snippet from '../../../components/Snippet.astro';
 
-Test your rules with createTestTable, a fake clock and replay checks.
+`shoehive/testing` drives a game without sockets, a server or real time. A test table runs
+your rules exactly as the server does, with the checks that catch mistakes always on: frozen
+state, JSON validation and the nondeterminism guard. Tests are fast and reproducible because
+randomness is seeded and time is fake ([ADR 0006](/contributing/adr/0006-seeded-rng-recorded-clock-replay/)).
+
+The examples use [Vitest](https://vitest.dev/), but any runner works.
+
+## Create a table and play
+
+`createTestTable(game, options)` seats the players, waits for the table to settle and returns
+a `TestTable`. `t.act(seat, name, input)` runs an action as the player in that seat.
+
+<Snippet file="examples/tic-tac-toe/test/game.test.ts" region="out-of-turn" />
+
+A rejected action makes `act` reject with a `ShoehiveError`. Check `code` for your own
+`reject('NOT_YOUR_TURN')` codes, and `source` to tell game rejections from built-in ones
+(see [error codes](/reference/error-codes/)). A rejected action changes nothing.
+
+<Snippet file="examples/tic-tac-toe/test/game.test.ts" region="win" />
+
+`t.state` is the raw committed state, `t.meta` the table status, phase, turn and result, and
+`t.rev` the revision. End every test with `await t.verifyReplay()`: it replays the log from
+scratch and throws unless the result matches the live table exactly.
+
+## Options
+
+<Snippet file="website/snippets/testing-games/test/table.test.ts" region="options" />
+
+| Option    | Default                           | Meaning                                             |
+| --------- | --------------------------------- | --------------------------------------------------- |
+| `players` | the game's `seats.min`            | a count (`p0`, `p1`...) or a list of player ids     |
+| `seed`    | `'shoehive-test'`                 | the RNG seed: same seed, same deal                  |
+| `options` | none                              | table options, checked by the game's options schema |
+| `wallet`  | a `MemoryWallet` giving 1000 each | the money backend behind `ctx.wallet`               |
+| `startAt` | 2026-01-01T00:00:00Z              | the fake clock's start time, in epoch milliseconds  |
+
+## Seat changes
+
+`t.sit(seat, playerId?, name?)`, `t.stand(seat)`, `t.disconnect(seat)` and `t.reconnect(seat)`
+are the same events the server raises. Each waits for the table to settle. Use `t.start()` for
+a game with `autoStart: false`.
+
+<Snippet file="website/snippets/testing-games/test/table.test.ts" region="seats" />
+
+## What a player sees
+
+`t.viewOf(seat)` and `t.viewOf('spectator')` call your `view()` for that viewer, so you can
+assert that nobody sees a card they should not.
+
+<Snippet file="examples/quiz/test/game.test.ts" region="hidden" />
+
+`t.events` lists the ephemeral events your game emitted, in order, each with its `name`,
+`payload`, `to` and the `rev` that carried it.
+
+## Time
+
+The table runs on a fake clock, so a turn timeout or a round deadline costs nothing to test.
+`t.advance(ms)` moves time forward, fires every timer that falls due in order, and waits
+for what they trigger. `t.clock.now()` is the current fake time, and `t.clock.pendingTimers`
+counts the timers still waiting.
+
+<Snippet file="examples/quiz/test/game.test.ts" region="clock" />
+
+## Seeds and reproducible deals
+
+The same seed always gives the same shuffle, so a test that depends on a deal is stable. To
+get a particular deal, search for a seed once and then pin it in the test:
+
+<Snippet file="website/snippets/testing-games/test/table.test.ts" region="seed" />
+
+Do not use `Math.random()` or `Date.now()` in game code: use `ctx.random` and `ctx.now()`.
+In tests the nondeterminism guard turns such a call into an error.
+
+## Money
+
+`t.wallet` is the wallet behind `ctx.wallet`. Read balances from it, or pass your own
+`MemoryWallet` to start players with different funds. `t.walletErrors` collects deferred
+wallet operations that still failed after retries, which points to a bug in the game such as
+a reused key. Assert that it is empty at the end of any test that moves money.
+
+<Snippet file="examples/blackjack/test/game.test.ts" region="play-test" />
+
+See [wallets and real-money safety](/how-to/wallets-and-real-money-safety/) for the rules
+a game must follow.
+
+## Type tests
+
+`act` is typed from your game, so a wrong action name or input is a compile error. Keep a few
+of these in your tests, with `@ts-expect-error`, to prove the types stay strict.
+
+<Snippet file="website/snippets/testing-games/test/table.test.ts" region="types" />
+
+## Property tests
+
+Rules that hold for every sequence of commands are best checked with random ones. The
+engine's own invariants are tested this way with [fast-check](https://fast-check.dev/) in
+[`packages/shoehive/test/properties/invariants.test.ts`](https://github.com/jtay/shoehive/blob/main/packages/shoehive/test/properties/invariants.test.ts):
+generate commands (actions with wild inputs, seat changes, time jumps), run them against
+a test table, and after each one check what must always be true. The core of it:
+
+```ts nocheck
+import fc from 'fast-check';
+
+await fc.assert(
+  fc.asyncProperty(commands, async (cmds) => {
+    const t = await createTestTable(game, { players: 2 });
+    for (const cmd of cmds) {
+      const before = { state: t.runtime.state, log: t.log.length };
+      try {
+        await run(t, cmd);
+      } catch (error) {
+        expect(isShoehiveError(error)).toBe(true); // never a crash
+        expect(t.runtime.state).toBe(before.state); // a rejection leaves no trace
+        expect(t.log.length).toBe(before.log);
+      }
+    }
+    await t.verifyReplay(); // and the log always replays to the same state
+  }),
+);
+```
+
+Add your game's own rule, for example "chips are conserved" or "no view shows the deck".
+When fast-check finds a failure it shrinks it to a short command list you can paste into
+a normal test. It needs `fast-check` as a dev dependency.
+
+## Replay an exported fixture
+
+A bug seen in [devtools](/how-to/debugging-with-devtools/) can become a test. Export the table
+as a fixture, save it as JSON, and replay it. `replayFixture(game, fixture)` checks the game
+and its version, replays every entry exactly, compares the state with the exported hash, and
+returns a live test table at the last entry.
+
+<Snippet file="website/snippets/testing-games/test/fixture.test.ts" region="fixture" />
+
+If your rules changed since the export, `replayFixture` throws instead of quietly replaying
+something different. Bump the game's `version` and export again, or keep the old fixture as a
+record of the old behaviour. A fixture keeps the RNG seed, so treat one from a production
+table as a secret.
