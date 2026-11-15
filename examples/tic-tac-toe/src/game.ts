@@ -22,6 +22,7 @@ export function winnerOf(board: readonly (Mark | null)[]): Mark | 'draw' | null 
   return board.every((cell) => cell !== null) ? 'draw' : null;
 }
 
+// #region game
 export const ticTacToe = defineGame({
   id: 'tic-tac-toe',
   name: 'Tic Tac Toe',
@@ -48,3 +49,4 @@ export const ticTacToe = defineGame({
     },
   },
 });
+// #endregion game

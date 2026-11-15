@@ -1,0 +1,64 @@
+---
+// The "What you'll build" box at the top of every tutorial (house style, RFC 0001 section 9).
+//
+//   <WhatYoullBuild time="20 minutes" example="tic-tac-toe">
+//     - A two-player game with turns and win detection
+//     - Tests that run without a server
+//   </WhatYoullBuild>
+//
+// `example` names the folder under examples/ that holds the finished code.
+interface Props {
+  /** Rough time to complete, for example "20 minutes". */
+  time?: string;
+  /** Folder name under examples/ with the finished code. */
+  example?: string;
+}
+
+const { time, example } = Astro.props;
+const exampleUrl = example
+  ? `https://github.com/jtay/shoehive/tree/main/examples/${example}`
+  : undefined;
+---
+
+<section class="wyb" aria-labelledby="wyb-title">
+  <p class="wyb-title" id="wyb-title">What you'll build</p>
+  <div class="wyb-body"><slot /></div>
+  {
+    (time || exampleUrl) && (
+      <p class="wyb-meta">
+        {time && <span>Time: {time}</span>}
+        {exampleUrl && (
+          <span>
+            Finished code: <a href={exampleUrl}>examples/{example}</a>
+          </span>
+        )}
+      </p>
+    )
+  }
+</section>
+
+<style>
+  .wyb {
+    border: 1px solid var(--sl-color-accent);
+    border-inline-start-width: 4px;
+    border-radius: 0.5rem;
+    background: var(--sl-color-accent-low);
+    padding: 1rem 1.25rem;
+  }
+  .wyb-title {
+    font-weight: 600;
+    color: var(--sl-color-white);
+    margin: 0;
+  }
+  .wyb-body :global(ul) {
+    margin-top: 0.5rem;
+  }
+  .wyb-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.5rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-2);
+    margin-top: 0.75rem;
+  }
+</style>

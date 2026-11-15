@@ -1,0 +1,73 @@
+---
+title: The six concepts
+description: Game, Table, Seat, Player, Action and View. Learn these six nouns and the rest of Shoehive is plumbing.
+---
+
+import Snippet from '../../../components/Snippet.astro';
+
+Shoehive has exactly six nouns. The rest of the docs use them in this order, and everything
+else (lobby, session, transport, store, wallet, clock) is plumbing around them.
+
+The examples on this page come from one small game: two players take turns guessing a secret
+number from 1 to 100, and each guess gets a hint.
+
+## 1. Game
+
+A **Game** is a definition made by `defineGame`. It is plain data plus functions, with no I/O:
+the starting state, the turn order, the actions and the view. The same Game can run on a
+server, in a test and in the devtools.
+
+<Snippet file="website/snippets/concepts/six-concepts.ts" region="game" title="game.ts" />
+
+## 2. Table
+
+A **Table** is one running instance of a Game. It owns its state, its seats, its action log,
+its random number generator and its timers. A server runs many tables of many games at once.
+In a test, `createTestTable` gives you a table without a server:
+
+<Snippet file="website/snippets/concepts/six-concepts.ts" region="table" title="" />
+
+## 3. Seat
+
+A **Seat** is a numbered slot at a Table, from `0`. The game above has exactly two
+(`seats: { min: 2, max: 2 }`). A seat is empty, occupied, or reserved while its player
+reconnects. Game code only ever talks about seats, never about players: `ctx.turn.seat` is
+whose turn it is, and an action receives the `seat` that sent it.
+
+## 4. Player
+
+A **Player** is an identity: an id, a display name and optional metadata. By default every
+visitor is a guest with a resume token; you can plug in your own authentication. A Player is
+not a socket: one player can have several tabs open, sit at one table and watch others as a
+spectator.
+
+## 5. Action
+
+An **Action** is a named input from a seat, checked against its schema before your code runs.
+It is the only way the state changes from outside. Your `run` function changes a draft of the
+state; if it calls `reject()` or throws, the draft is thrown away and nothing changes.
+
+<Snippet file="website/snippets/concepts/six-concepts.ts" region="action" title="game.ts" />
+
+## 6. View
+
+A **View** is what one viewer, a seat or a spectator, is allowed to see. Your `view()` function
+computes it from the state. Clients only ever receive views, never the raw state, so the
+secret number above cannot reach a browser before the game ends.
+
+<Snippet file="website/snippets/concepts/six-concepts.ts" region="view" title="game.ts" />
+
+When the state changes, Shoehive computes each viewer's new view, compares it with the one
+they already have, and sends only the difference.
+
+## What Shoehive guarantees
+
+- State only changes inside an action, a lifecycle hook or a timer, one at a time per table.
+- A failed action rolls back completely.
+- Clients receive only `view()` output.
+- Every view a client holds has a revision number, and applying the patches in order gives
+  exactly the server's view.
+- The same seed and the same action log always replay to the same state.
+
+Next: build a full game in the [tic-tac-toe tutorial](/tutorials/tic-tac-toe/), or read how
+each concept works in depth under Concepts.

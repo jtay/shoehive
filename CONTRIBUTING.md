@@ -26,6 +26,9 @@ Useful scripts:
 | `pnpm typecheck`                | `tsc` with strict settings                                                      |
 | `pnpm build`                    | Build the package with tsup                                                     |
 | `pnpm check:package`            | publint, Are The Types Wrong, and an import/require smoke test of every subpath |
+| `pnpm docs:dev`                 | The docs site (`website/`) with live reload                                     |
+| `pnpm docs:check`               | Docs: every TypeScript snippet compiles, no em-dashes, generated pages agree    |
+| `pnpm docs:build`               | Build the docs site, including the TypeDoc API reference                        |
 
 ## How we work
 
@@ -43,4 +46,9 @@ Useful scripts:
 
 ## Writing style for docs and comments
 
-Plain, direct English. Short pages, one idea each. Every code sample must compile.
+Plain, direct English. Short pages, one idea each. Every code sample must compile. No em-dashes.
+
+The docs site is `website/` (Astro Starlight, published at https://shoehive.jtay.co.uk). Read
+[Writing docs](website/src/content/docs/contributing/writing-docs.mdx) before adding a page: it
+explains how to import code from the examples so snippets cannot drift, and which pages are
+generated from `docs/` and the source.

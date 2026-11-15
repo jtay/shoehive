@@ -49,7 +49,7 @@ one spec.
 
 Every message is a JSON object with a string field `t` (type).
 
-```ts
+```ts nocheck
 // Client to server
 interface Request {
   t: string; // request type, for example "act"
@@ -93,7 +93,7 @@ client                                   server
 
 ### 4.1 `hello`
 
-```ts
+```ts nocheck
 { t: 'hello', id, v: 1, resume?: string, name?: string, client?: { name: string; version: string } }
 ```
 
@@ -137,7 +137,7 @@ the lobby, and a `table.snapshot` for every table the session had joined.
 - Browsers cannot observe ping frames, so clients may send the application-level `ping` to measure
   round-trip time and the server clock offset (needed to render countdowns from `deadline` values):
 
-```ts
+```ts nocheck
 { t: 'ping', id? }                          // client
 { t: 'pong', id?, now: number }             // server, echoes id
 ```
@@ -240,7 +240,7 @@ are part of game state and reach clients only through `view()`.
 
 ### 6.2 `table.snapshot`
 
-```ts
+```ts nocheck
 { t: 'table.snapshot', table: string, rev: number, doc: TableDocument }
 ```
 
@@ -249,7 +249,7 @@ patch would be larger than a snapshot. It replaces the client's document entirel
 
 ### 6.3 `table.patch`
 
-```ts
+```ts nocheck
 { t: 'table.patch', table: string, from: number, rev: number, ops: JsonPatchOp[] }
 ```
 
@@ -270,7 +270,7 @@ patch would be larger than a snapshot. It replaces the client's document entirel
 
 ### 6.4 `table.event`
 
-```ts
+```ts nocheck
 { t: 'table.event', table: string, rev: number, name: string, payload: unknown }
 ```
 
@@ -281,7 +281,7 @@ never sent to viewers outside it.
 
 ### 6.5 `table.closed`
 
-```ts
+```ts nocheck
 { t: 'table.closed', table: string, reason: 'ended' | 'closed' | 'game-removed' | 'expired' }
 ```
 
@@ -292,7 +292,7 @@ they are closed, so players can see the final result.
 
 Lobby subscribers hold one document, synced the same way:
 
-```ts
+```ts nocheck
 interface LobbyDocument {
   games: Array<{ id: string; name: string; description: string | null; seats: { min: number; max: number } }>;
   tables: Array<{

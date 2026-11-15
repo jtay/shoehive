@@ -1,0 +1,67 @@
+---
+title: Architecture tour
+description: A short walk through the shoehive package, from the engine to the server, client and devtools.
+---
+
+Shoehive is one npm package, `shoehive`, with subpath exports
+([ADR 0002](/contributing/adr/0002-single-package-subpath-exports/)), plus the
+`create-shoehive` scaffolder. Everything lives in a pnpm monorepo.
+
+## The repository
+
+| Path                       | What                                                         |
+| -------------------------- | ------------------------------------------------------------ |
+| `packages/shoehive/src`    | The package, one folder per subpath (below)                  |
+| `packages/shoehive/test`   | Unit, property, conformance and integration tests            |
+| `packages/shoehive/api`    | API Extractor reports: the public API, reviewed in every PR  |
+| `packages/create-shoehive` | `npm create shoehive`, with its project templates            |
+| `examples/`                | Tic-tac-toe, quiz, blackjack and Hold'em, each with a web UI |
+| `e2e/`, `examples/*/e2e`   | Playwright tests that play the examples in real browsers     |
+| `docs/`                    | ADRs, RFCs and the reference specs (synced into this site)   |
+| `website/`                 | This site                                                    |
+
+## The layers
+
+```txt
+            shoehive (core: isomorphic, depends only on mutative)
+            defineGame, engine, views, diff, rng, protocol types, errors
+                 ^                    ^                    ^
+ shoehive/server |   shoehive/client  |   shoehive/testing |   shoehive/cards
+ sessions, lobby,|   connection,      |   createTestTable, |   decks, shoes, hands,
+ transport (ws), |   resume, patches, |   fake clock,      |   visibility, pots
+ store, wallet,  |   typed act()      |   conformance      |
+ limits          |        ^           |                    |
+                 |   shoehive/react   |                    |
+```
+
+- **Core** (`src/core`, exported as `shoehive`) is pure: no I/O and no Node built-ins, so it
+  runs in browsers too. `define.ts` holds `defineGame` and its types. `runtime.ts` holds
+  `TableRuntime`, one per table: a serial queue that validates input, checks the phase, runs
+  the action on a Mutative draft, commits, computes each viewer's view, diffs it against the
+  last one sent (`diff.ts`) and emits patches. `random.ts` and `clock.ts` make it
+  deterministic.
+- **Protocol** (`src/protocol`) holds the wire message types and parser for the
+  [wire protocol](/reference/protocol/).
+- **Server** (`src/server`) adds sessions and resume tokens (`tokens.ts`), the lobby, seats,
+  the WebSocket and in-memory transports (`transport.ts`) and limits, around many
+  `TableRuntime`s in one Node process.
+- **Stores** (`src/store`) persist each table as a snapshot plus an action log. Restart
+  recovery is the same code path as replay
+  ([ADR 0009](/contributing/adr/0009-store-snapshot-log-restart-recovery/)).
+- **Client and React** (`src/client`, `src/react`) speak the protocol, apply patches and
+  expose typed handles and hooks. They are isomorphic.
+- **Testing** (`src/testing`) runs games without sockets and holds the store and wallet
+  conformance suites.
+- **Devtools** (`src/devtools`) is an inspector served by the server, loaded only when
+  enabled ([ADR 0011](/contributing/adr/0011-devtools-security-model/)). Its UI source is in
+  `src/devtools/ui` and is bundled into `ui-assets.generated.ts`.
+
+## Rules that keep it honest
+
+- Isomorphic entry points (`shoehive`, `/client`, `/react`, `/cards`) must not import Node
+  built-ins. ESLint enforces it.
+- Public API changes show up in the API Extractor reports, and need a changeset.
+- Engine invariants (rollback, replay equals state, views never leak) are property-tested.
+- Integration tests use real sockets, never a mocked `ws`.
+
+For the reasoning behind each choice, read the [ADRs](/contributing/adr/).

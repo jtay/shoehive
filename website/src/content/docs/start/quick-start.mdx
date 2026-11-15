@@ -1,0 +1,128 @@
+---
+title: Quick start
+description: Create a Shoehive game with one command, play it in two browser windows, then change a rule and test it.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import Snippet from '../../../components/Snippet.astro';
+
+In five minutes you will have a two-player tic-tac-toe game running on your machine, and you
+will have changed one of its rules. You need [Node.js](https://nodejs.org/) 22 or newer.
+
+## Create a project
+
+The scaffolder copies the tic-tac-toe template into `my-game/` and installs its dependencies.
+
+<Tabs syncKey="pkg">
+<TabItem label="npm">
+
+```sh
+npm create shoehive@latest my-game
+```
+
+</TabItem>
+<TabItem label="pnpm">
+
+```sh
+pnpm create shoehive my-game
+```
+
+</TabItem>
+<TabItem label="yarn">
+
+```sh
+yarn create shoehive my-game
+```
+
+</TabItem>
+<TabItem label="bun">
+
+```sh
+bun create shoehive my-game
+```
+
+</TabItem>
+</Tabs>
+
+## Play it
+
+Run the commands the scaffolder prints at the end:
+
+```sh
+cd my-game
+npm run dev
+```
+
+This runs the web app with hot reload and the game server, which restarts whenever you change
+the game.
+
+Open http://localhost:5173 in two browser windows, and make one of them private, so that each
+window is a different guest player. Create a table in one window and take a seat, then take
+the other seat in the second window. Play.
+
+## What is in the project
+
+| File                | What it is                                                    |
+| ------------------- | ------------------------------------------------------------- |
+| `src/game.ts`       | The rules: state, actions, turns and when the game ends       |
+| `test/game.test.ts` | Tests for the rules, run without a server or a browser        |
+| `src/server.ts`     | The game server: the WebSocket endpoint and the built app     |
+| `web/App.tsx`       | The React app: lobby, seats and board, using `shoehive/react` |
+
+The whole game is one `defineGame` call in `src/game.ts`. It has a starting state (`setup`),
+a turn order, and one action, `place`.
+
+## Change a rule
+
+Make the first move unable to take the centre cell. In `src/game.ts`, add two lines to the
+`place` action:
+
+<Snippet
+  file="website/snippets/quick-start/src/game.ts"
+  region="place"
+  title="src/game.ts"
+  ins={{ range: '6-7' }}
+/>
+
+`reject()` stops the action. Nothing it changed is kept, and the player gets the error code.
+Save the file: the game server restarts by itself. Start a new table and try the centre.
+
+## Test it
+
+Add a test to `test/game.test.ts`. It plays the game in memory, with no server and no
+browser:
+
+<Snippet
+  file="website/snippets/quick-start/test/game.test.ts"
+  region="centre"
+  title="test/game.test.ts"
+/>
+
+Run the tests:
+
+```sh
+npm test
+```
+
+## Look inside
+
+When the game server starts, it prints a devtools link. Open it to see every table's state,
+what each seat's view contains, and the action log, including your rejected centre move.
+
+## Scripts
+
+| Command             | What it does                                                      |
+| ------------------- | ----------------------------------------------------------------- |
+| `npm run dev`       | Web app with hot reload, plus the game server in watch mode       |
+| `npm test`          | Runs the tests with Vitest                                        |
+| `npm run typecheck` | Type-checks everything                                            |
+| `npm run build`     | Builds the web app for production                                 |
+| `npm start`         | Serves the built app and the game server on http://localhost:3000 |
+
+## Next steps
+
+- [The six concepts](/start/six-concepts/): the ideas behind what you just changed.
+- [Tutorial: tic-tac-toe in 20 minutes](/tutorials/tic-tac-toe/): build this game from an
+  empty file, including the React UI.
+- `npm create shoehive@latest my-game -- --template blank` starts from a minimal one-action
+  game instead.

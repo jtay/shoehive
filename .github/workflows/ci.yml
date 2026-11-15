@@ -51,6 +51,11 @@ jobs:
         run: pnpm lint
       - name: Typecheck
         run: pnpm typecheck
+      # RFC 0001 phase 7: every TypeScript snippet on the docs site compiles. Also checks for
+      # em-dashes and that generated reference pages agree with the source. The full site
+      # build runs in docs.yml.
+      - name: Docs snippets and style
+        run: pnpm docs:check
       - name: Test
         run: pnpm test
         env:
@@ -76,3 +81,23 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: End-to-end tests
         run: pnpm e2e
+
+  scaffolder-e2e:
+    name: Scaffolder end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          # The oldest supported Node, the one a new developer is most likely to hit problems on.
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      # Packs shoehive, scaffolds both templates with the built create-shoehive, installs them
+      # with npm from the registry, runs their typecheck, test and build scripts, then plays a
+      # full game against `npm start` and `npm run dev` (packages/create-shoehive/scripts/e2e.mjs).
+      - name: Scaffold, install, test, build and play a generated project
+        run: pnpm --filter create-shoehive e2e

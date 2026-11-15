@@ -1,0 +1,27 @@
+---
+// Starlight's Banner, plus a notice on stub pages (frontmatter `todo:`).
+import Default from '@astrojs/starlight/components/Banner.astro';
+
+const { todo } = Astro.locals.starlightRoute.entry.data as { todo?: string };
+---
+
+{
+  todo ? (
+    <div class="todo-banner" data-pagefind-ignore>
+      This page is not written yet. It will cover: {todo}
+    </div>
+  ) : (
+    <Default />
+  )
+}
+
+<style>
+  .todo-banner {
+    padding: var(--sl-nav-pad-y) var(--sl-nav-pad-x);
+    background-color: var(--sl-color-accent-low);
+    color: var(--sl-color-white);
+    border-bottom: 1px solid var(--sl-color-accent);
+    text-align: center;
+    text-wrap: balance;
+  }
+</style>

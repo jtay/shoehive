@@ -1,0 +1,38 @@
+/* Shoehive brand: honey accents on Starlight's neutral grays, in dark and light themes. */
+
+:root {
+  --sl-color-accent-low: #3b2a05;
+  --sl-color-accent: #d99a0b;
+  --sl-color-accent-high: #fde7a8;
+  --sl-content-width: 50rem;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #fdf1cf;
+  --sl-color-accent: #9a6400;
+  --sl-color-accent-high: #4a3200;
+}
+
+.site-title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.site-title img {
+  height: 1.75rem;
+  width: auto;
+}
+
+/* Splash page: keep the hero compact so the code sample is visible without scrolling. */
+.hero {
+  padding-block: 2.5rem 1rem;
+}
+
+.hero .tagline {
+  max-width: 38rem;
+}
+
+/* Reference tables have four columns: a slightly smaller font keeps them readable. */
+.sl-markdown-content table {
+  font-size: var(--sl-text-sm);
+}

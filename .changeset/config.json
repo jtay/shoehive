@@ -4,5 +4,6 @@
   "access": "public",
   "changelog": "@changesets/cli/changelog",
   "commit": false,
+  "fixed": [["shoehive", "create-shoehive"]],
   "privatePackages": { "version": false, "tag": false }
 }

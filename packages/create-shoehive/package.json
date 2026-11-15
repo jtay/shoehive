@@ -1,0 +1,56 @@
+{
+  "name": "create-shoehive",
+  "version": "0.10.0",
+  "description": "Create a new Shoehive multiplayer game: npm create shoehive@latest",
+  "keywords": [
+    "shoehive",
+    "create",
+    "scaffold",
+    "template",
+    "multiplayer",
+    "game"
+  ],
+  "homepage": "https://shoehive.jtay.co.uk",
+  "bugs": "https://github.com/jtay/shoehive/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jtay/shoehive.git",
+    "directory": "packages/create-shoehive"
+  },
+  "license": "MIT",
+  "author": "Jaydon Taylor",
+  "type": "module",
+  "bin": {
+    "create-shoehive": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "!templates/tsconfig.json"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json && tsc -p templates/tsconfig.json",
+    "check:package": "publint --strict && node scripts/check-package.mjs",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tsx": "^4.23.15",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0",
+    "zod": "^4.6.7"
+  }
+}

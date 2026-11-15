@@ -13,7 +13,12 @@ export default defineConfig({
     ],
   },
   test: {
-    include: ['packages/*/test/**/*.test.ts', 'examples/*/test/**/*.test.ts'],
+    include: [
+      'packages/*/test/**/*.test.ts',
+      'examples/*/test/**/*.test.ts',
+      // The game tests that create-shoehive ships in each template.
+      'packages/create-shoehive/templates/*/test/**/*.test.ts',
+    ],
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**/*.ts'],

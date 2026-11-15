@@ -1,0 +1,49 @@
+---
+title: Release process
+description: How changes become releases of shoehive and create-shoehive, with Changesets and the Release workflow.
+---
+
+Releases are automated with [Changesets](https://github.com/changesets/changesets). Nobody bumps
+versions or publishes by hand.
+
+## In your pull request
+
+If your PR changes a published package (`shoehive` or `create-shoehive`), add a changeset:
+
+```sh
+pnpm changeset
+```
+
+Pick the packages and the bump, then write one or two sentences for the changelog. Commit the
+new file in `.changeset/` with your PR. Docs-only, CI-only and example-only PRs do not need
+one.
+
+A PR that changes the public API also updates the API Extractor report
+(`pnpm --filter shoehive api:update`) so reviewers see the change in
+`packages/shoehive/api/*.api.md`.
+
+## What happens on main
+
+The [Release workflow](https://github.com/jtay/shoehive/blob/main/.github/workflows/release.yml)
+runs on every push to `main`:
+
+1. It runs the full `pnpm check` (format, lint, typecheck, tests, build, package checks). A red
+   check stops the release.
+2. While unreleased changesets exist, it opens or updates a **Version Packages** PR. That PR
+   bumps versions and writes each package's `CHANGELOG.md` from the changesets.
+3. Merging the Version Packages PR publishes to npm with provenance.
+
+The pending changesets are listed on the [changelog](/reference/changelog/) page until they
+are released.
+
+## Prereleases
+
+Until 1.0.0, the repository is in Changesets pre mode (`.changeset/pre.json`): releases are
+`1.0.0-next.x` on the `next` dist-tag, so `npm install shoehive@next` gets the latest one. To
+leave pre mode for the final release, run `pnpm changeset pre exit` in a PR.
+
+## The docs site
+
+This site deploys to GitHub Pages from `main` with the
+[Docs workflow](https://github.com/jtay/shoehive/blob/main/.github/workflows/docs.yml), on
+every push. It does not follow npm releases: it documents `main`.
