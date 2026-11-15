@@ -56,6 +56,16 @@ export class TestTable<G extends AnyGame> {
     });
   }
 
+  /** @internal A table around an existing runtime (fixture replays). */
+  static fromRuntime<G extends AnyGame>(
+    runtime: TableRuntime,
+    clock: FakeClock,
+    wallet: Wallet,
+    walletErrors: { op: WalletOp; error: unknown }[] = [],
+  ): TestTable<G> {
+    return new TestTable<G>(runtime, clock, wallet, walletErrors);
+  }
+
   /** @internal */
   static async create<G extends AnyGame>(
     game: G,

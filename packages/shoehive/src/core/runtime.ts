@@ -471,7 +471,18 @@ export class TableRuntime {
   static async replay(
     game: AnyGame,
     log: readonly LogEntry[],
-    args: RuntimeOptions & { from?: Snapshot; until?: number; live?: boolean } = {},
+    args: RuntimeOptions & {
+      from?: Snapshot;
+      until?: number;
+      live?: boolean;
+      /**
+       * With `live`, re-send the wallet ops of the snapshot and the replayed entries
+       * (ADR 0007 rule 8). Default `true`, for restart recovery against the real wallet.
+       * Pass `false` when replaying into a fresh wallet (fixtures, devtools copies), which
+       * has never seen those reservations.
+       */
+      resendWalletOps?: boolean;
+    } = {},
   ): Promise<TableRuntime> {
     let runtime: TableRuntime;
     let rest: readonly LogEntry[];
@@ -526,10 +537,12 @@ export class TableRuntime {
       // ADR 0007 rule 8: re-send wallet ops that may not have been confirmed: those the
       // snapshot recorded as pending, and those of every replayed entry. Keys make
       // duplicates harmless.
-      for (const op of args.from?.wallet?.pending ?? []) runtime.sendWallet(op);
-      for (const entry of rest) {
-        if (args.until !== undefined && entry.seq > args.until) break;
-        for (const op of entry.wallet ?? []) runtime.sendWallet(op);
+      if (args.resendWalletOps !== false) {
+        for (const op of args.from?.wallet?.pending ?? []) runtime.sendWallet(op);
+        for (const entry of rest) {
+          if (args.until !== undefined && entry.seq > args.until) break;
+          for (const op of entry.wallet ?? []) runtime.sendWallet(op);
+        }
       }
       runtime.syncTimers();
       runtime.scheduleFollowUps();
