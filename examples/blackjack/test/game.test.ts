@@ -26,6 +26,7 @@ describe('blackjack', () => {
     expect(await wallet.balance('p0')).toBe(30);
   });
 
+  // #region hidden-test
   it('reserves bets, deals, and hides the hole card from every viewer', async () => {
     const t = await createTestTable(blackjack, { players: 2, options: {} });
     await t.act(0, 'bet', { amount: 100 });
@@ -44,7 +45,9 @@ describe('blackjack', () => {
     expect(t.state.bankroll.slice(0, 2)).toEqual([900, 950]);
     expect(t.events.map((e) => e.name)).toContain('dealt');
   });
+  // #endregion hidden-test
 
+  // #region play-test
   it('plays a full hand: turns, timeout auto-stand, dealer play and wallet payouts', async () => {
     const t = await createTestTable(blackjack, { players: 2, options: {} });
     await t.act(0, 'bet', { amount: 100 });
@@ -70,6 +73,7 @@ describe('blackjack', () => {
     expect(t.state.handNumber).toBe(2);
     await t.verifyReplay();
   });
+  // #endregion play-test
 
   it('doubles by reserving a second stake', async () => {
     // Find a seed where the player gets a turn (no natural), so there is something to double.
@@ -94,6 +98,7 @@ describe('blackjack', () => {
     await t.verifyReplay();
   });
 
+  // #region leave-test
   it('returns the bet to a player who leaves before the deal', async () => {
     const t = await createTestTable(blackjack, { players: 2, options: {} });
     await t.act(0, 'bet', { amount: 100 });
@@ -102,6 +107,7 @@ describe('blackjack', () => {
     await t.runtime.idle();
     expect(await t.wallet.balance('p0')).toBe(START);
   });
+  // #endregion leave-test
 
   it('rejects actions out of turn', async () => {
     const t = await createTestTable(blackjack, { players: 2, options: {}, seed: 'no-naturals' });

@@ -26,11 +26,13 @@ interface Hand {
   outcome: Outcome | null;
 }
 
+// #region keys
 const betKey = (hand: number, seat: number) => `bet:${String(hand)}:${String(seat)}`;
 const doubleKey = (hand: number, seat: number) => `double:${String(hand)}:${String(seat)}`;
 const payKey = (hand: number, seat: number) => `pay:${String(hand)}:${String(seat)}`;
 
 const PAYOUT: Record<Outcome, number> = { blackjack: 2.5, win: 2, push: 1, lose: 0, bust: 0 };
+// #endregion keys
 
 export const blackjack = defineGame({
   id: 'blackjack',
@@ -50,6 +52,7 @@ export const blackjack = defineGame({
     handNumber: 0,
   }),
 
+  // #region leave
   onSit: async ({ state, seat, ctx }) => {
     state.bankroll[seat!] = await ctx.wallet.balance(seat!);
   },
@@ -67,8 +70,10 @@ export const blackjack = defineGame({
     state.bankroll[seat!] = 0;
     state.hands[seat!] = null;
   },
+  // #endregion leave
 
   phases: {
+    // #region betting
     betting: {
       rounds: {
         durationMs: BET_MS,
@@ -105,8 +110,10 @@ export const blackjack = defineGame({
         },
       },
     },
+    // #endregion betting
 
     play: {
+      // #region turns
       turns: {
         skip: ({ seat, state }) => {
           const hand = state.hands[seat];
@@ -115,6 +122,8 @@ export const blackjack = defineGame({
         timeoutMs: TURN_MS,
         onTimeout: 'autoStand',
       },
+      // #endregion turns
+      // #region deal
       onEnter: ({ state, ctx }) => {
         // Reshuffle when the shoe runs low.
         if (state.shoe.length < 52) state.shoe = ctx.random.shuffle(shoe(ctx.options.decks));
@@ -131,6 +140,7 @@ export const blackjack = defineGame({
         // done (all naturals) there is no turn to play.
         if (state.hands.every((h) => !h || h.done)) ctx.phase.go('dealer');
       },
+      // #endregion deal
       actions: {
         hit: {
           run({ state, seat, ctx }) {
@@ -157,6 +167,7 @@ export const blackjack = defineGame({
             finishHand(hand, ctx);
           },
         },
+        // #region autostand
         autoStand: {
           internal: true,
           input: z.object({ seat: z.number().int() }),
@@ -165,10 +176,12 @@ export const blackjack = defineGame({
             if (hand && !hand.done) finishHand(hand, ctx);
           },
         },
+        // #endregion autostand
       },
     },
 
     dealer: {
+      // #region dealer
       onEnter: ({ state, ctx }) => {
         const anyLive = state.hands.some((h) => {
           const value = h && blackjackValue(h.cards);
@@ -197,6 +210,7 @@ export const blackjack = defineGame({
         });
         ctx.timers.after('nextHand', NEXT_HAND_MS, 'nextHand');
       },
+      // #endregion dealer
       actions: {
         nextHand: {
           internal: true,
@@ -208,6 +222,7 @@ export const blackjack = defineGame({
     },
   },
 
+  // #region view
   view: ({ state, ctx }) => {
     const revealDealer = ctx.phase === 'dealer';
     return {
@@ -222,6 +237,7 @@ export const blackjack = defineGame({
       shoe: { remaining: state.shoe.length },
     };
   },
+  // #endregion view
 });
 
 function myTurn(hands: (Hand | null)[], seat: number, turn: number | null): Hand {
