@@ -53,7 +53,14 @@ interface CtxWallet {
 
 1. **Keys.** Game code passes a key unique within the table (`bet:h12:s3`). The engine
    prefixes it with the table id (`tbl_abc:bet:h12:s3`) before calling the backend, so
-   keys are unique per server. Backends must treat each key as a small state machine:
+   keys are unique per server. For `reserve`, the engine also appends a random id per
+   attempt (`tbl_abc:bet:h12:s3:9f3a0c51e2b4`), recorded in the entry's `effects` and
+   mapped from the game key in engine state, so `commit` and `release` take the game key.
+   This lets a game reuse a key after its entry rolled back (the rolled-back attempt's
+   release leaves a tombstone on its own backend key only). A key stays open from a
+   successful `reserve` until `commit` or `release`; reserving an open key again, or
+   settling a key that is not open, throws. `credit` keys are used as given, so they must
+   be unique for good (a counter in state works). Backends must treat each key as a small state machine:
    `reserved`, then exactly one of `committed` or `released`. Repeating the same call
    with the same arguments is a no-op that returns the original result. A conflicting
    call (`commit` after `release`, or `reserve` with a different amount) throws.
@@ -108,6 +115,10 @@ Two details differ from the first draft, without changing any rule above:
   to `Snapshot.wallet`. Recovery re-sends the snapshot's pending ops plus every
   replayed entry's ops, and rebuilds open reservations from the snapshot and the
   replayed `effects` and ops.
+- **Per-attempt reserve keys** (rule 1). Found while building Hold'em and blackjack: with
+  plain keys, a bet refused after its reserve (or any rollback) burned the key for good.
+- **`onStand` cash-outs.** The seat is empty by the time `onStand` runs, but `ctx.wallet`
+  still resolves it to the player who left in that entry, so games can pay out stacks.
 - **Replay divergence.** A replayed entry that makes a different sequence of wallet
   calls than it recorded (or fewer) throws `ReplayDivergenceError`, like a different
   sequence of random draws.

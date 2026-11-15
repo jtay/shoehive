@@ -21,11 +21,12 @@ top-level `turns` or `rounds`; a game with `phases` must declare them per phase 
 top-level one is a type error). Declaring both in one phase is a type error.
 
 ```ts
-interface TurnsConfig {
-  order: 'round-robin' | ((args: { seats: number[]; ctx: ReadCtx }) => number[]);
-  skip?: (args: { seat: number; state: unknown }) => boolean; // e.g. folded players
-  first?: 'lowest' | ((args: { seats: number[]; ctx: ReadCtx }) => number); // default 'lowest'
-  timeoutMs?: number; // arms a 'turn' timer on every turn change
+// TurnArgs = { seats: number[]; state: S; options: O }  (seats: occupied, ascending)
+interface TurnsConfig<S, O> {
+  order?: 'round-robin' | ((args: TurnArgs) => number[]);
+  skip?: (args: { seat: number; state: S }) => boolean; // e.g. folded players
+  first?: 'lowest' | ((args: TurnArgs) => number); // default 'lowest'
+  timeoutMs?: number | ((args: TurnArgs) => number); // arms a 'turn' timer on every turn change
   onTimeout?: string; // internal action to run, receives { seat }
 }
 
@@ -59,14 +60,21 @@ interface CtxRound {
 ### Turns
 
 1. On entering a turns phase, the engine computes `order` from occupied seats (ascending
-   for `round-robin`) and sets `seat` from `first`. `skip` is evaluated at each `next()`.
+   for `round-robin`) and sets `seat` from `first`, then runs `onEnter`. If `onEnter` made
+   that seat skippable (a blackjack natural), the turn moves to the next eligible seat,
+   still as turn 1. `skip` is evaluated at each `next()`. Because `first` runs before
+   `onEnter`, state it depends on (the button, blinds) is set up in the entry that changes
+   phase, before `ctx.phase.go()`.
 2. Seats that stand up are removed from the order. A seat that sits down mid-phase joins
    the order at its seat number position but is not given the current turn.
 3. The engine does **not** reject off-turn actions on its own. Games check
    `ctx.turn.seat !== seat` and `reject('NOT_YOUR_TURN')`, as in RFC 0001 section 5.1 (see ADR 0001
    Open questions).
 4. `timeoutMs` is sugar over `ctx.timers.after('turn', timeoutMs, onTimeout, { seat })`,
-   re-armed on every turn change and cancelled when the phase exits. Authors can use the
+   re-armed on every turn change and cancelled when the phase exits. As a function it can
+   read the table options (`({ options }) => options.turnMs`). Clients see its deadline as
+   `meta.turn.deadline` (it is not listed in `meta.timers`, which holds only timers the
+   game marked `{ visible: true }`). Authors can use the
    timer API directly for anything more complex (time banks).
 
 ### Rounds

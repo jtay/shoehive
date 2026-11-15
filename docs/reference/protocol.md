@@ -208,6 +208,7 @@ interface TableDocument {
       // round-based phases
       number: number;
       deadline: number | null; // epoch ms
+      participants: number[]; // seats taking part (occupied when the round opened)
       submitted: number[]; // seats that have acted this round
     } | null;
     options: unknown; // table options as validated by the game
@@ -227,6 +228,9 @@ interface TableDocument {
 `meta.timers` lists only timers scheduled with `ctx.timers.after(..., { visible: true })`: their
 name and deadline, never the action or input they run. Use it for countdowns such as "next hand
 in 5 s". The turn timer is already in `turn.deadline` (added in Phase 4, additive).
+
+`round.participants` lets a client tell a player who sat after a round opened that they take
+part from the next round (an action from them gets `NOT_PARTICIPANT`). Added in Phase 4.
 
 `meta.result` is checked against the game's `result` schema when it declares one, so clients can
 rely on its shape.
