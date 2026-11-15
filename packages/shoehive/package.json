@@ -151,7 +151,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "devtools:ui": "node scripts/build-devtools-ui.mjs",
     "devtools:ui:check": "node scripts/build-devtools-ui.mjs --check",
-    "check:package": "publint --strict && attw --pack . --profile node16 && node scripts/check-exports.mjs && pnpm api:check",
+    "check:package": "pnpm devtools:ui:check && publint --strict && attw --pack . --profile node16 && node scripts/check-exports.mjs && pnpm api:check",
     "api:update": "api-extractor run --local -c api-extractor.json && api-extractor run --local -c api-extractor.testing.json && api-extractor run --local -c api-extractor.server.json && api-extractor run --local -c api-extractor.store-memory.json && api-extractor run --local -c api-extractor.client.json && api-extractor run --local -c api-extractor.react.json && api-extractor run --local -c api-extractor.cards.json && api-extractor run --local -c api-extractor.store-sqlite.json && api-extractor run --local -c api-extractor.store-postgres.json && api-extractor run --local -c api-extractor.store-redis.json && api-extractor run --local -c api-extractor.devtools.json",
     "api:check": "api-extractor run -c api-extractor.json && api-extractor run -c api-extractor.testing.json && api-extractor run -c api-extractor.server.json && api-extractor run -c api-extractor.store-memory.json && api-extractor run -c api-extractor.client.json && api-extractor run -c api-extractor.react.json && api-extractor run -c api-extractor.cards.json && api-extractor run -c api-extractor.store-sqlite.json && api-extractor run -c api-extractor.store-postgres.json && api-extractor run -c api-extractor.store-redis.json && api-extractor run -c api-extractor.devtools.json"
   },

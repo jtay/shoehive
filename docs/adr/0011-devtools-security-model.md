@@ -98,6 +98,30 @@ const t = replayFixture(blackjack, fixture); // a test table at the last entry
     seed is kept, because without it the fixture cannot replay. The download dialog
     states that a fixture from a production table reveals that table's cards.
 
+### Implementation notes (Phase 6)
+
+- `shoehive.devtools.handleRequest(req, res)` routes devtools paths for apps whose HTTP
+  stack cannot be wrapped; `attach()` otherwise wraps the app's `request` listeners and
+  restores them on close.
+- A cross-site browser `Origin` is refused before authentication, so a web page can
+  neither guess the token nor trigger the lockout. Same-host origins, and those in the
+  server's `origins` option, are allowed.
+- The CSP is `default-src 'self'` with `connect-src` also listing the page's own `ws:`
+  and `wss:` origin, `img-src` allowing `data:`, and `base-uri`, `form-action`,
+  `frame-ancestors` and `object-src` set to `'none'`. Responses also send `nosniff`,
+  COOP and CORP headers.
+- The UI removes the token from the address bar after reading it and keeps it in the
+  tab's `history.state`, so a reload of the same tab reconnects; it never goes to a query
+  string or to storage.
+- Copies (time travel and forks) replay with `resendWalletOps: false`. A fork's
+  `MemoryWallet` starts from each player's last recorded balance and pre-holds the
+  reservations open at the fork point at amount 0, so later commits succeed; the money
+  those reservations held is not modelled.
+- Export maps player ids to `p0`, `p1`... in order of first appearance across entries,
+  wallet ops and reservation keys, and each distinct name to `p0`, `p0 (2)`...; `expect`
+  comes from replaying the anonymized log, and `replayFixture` in `shoehive/testing`
+  checks it. The Playwright suite exports a fixture from every example and replays it.
+
 ## Consequences
 
 ### Positive
