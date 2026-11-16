@@ -25,6 +25,7 @@ export interface Connection {
     onMessage(listener: (text: string) => void): void;
     // (undocumented)
     send(text: string): void;
+    terminate?(): void;
 }
 
 // @public
@@ -168,8 +169,11 @@ export interface ServerLimits {
     burst?: number;
     heartbeatMs?: number;
     helloTimeoutMs?: number;
+    maxBufferedBytes?: number;
     maxInFlight?: number;
     maxMessageBytes?: number;
+    maxTables?: number;
+    maxTablesPerPlayer?: number;
     messagesPerSecond?: number;
 }
 

@@ -42,6 +42,12 @@ one spec.
   query-string tokens are the usual choice.
 - If an origin allowlist is configured and the `Origin` header is not on it, the upgrade is
   answered with HTTP 403.
+- Browsers attach cookies to cross-site WebSocket upgrades, and the same-origin policy does not
+  cover WebSockets. A server whose `auth` hook reads cookies must therefore configure the origin
+  allowlist, or any web page can open a connection as its visitor (cross-site WebSocket
+  hijacking). `shoehive/server` logs a warning at startup when `auth` is set and `origins` is
+  empty. Guest mode is not affected: the resume token travels in `hello`, which another site
+  cannot read.
 - An upgrade the server refuses (401, 403, 404, 500) gets the HTTP response and then the TCP
   socket is closed, even if the client keeps its side open.
 - Upgrades to other paths: when Shoehive starts its own HTTP server (`listen()`), they are
@@ -118,10 +124,12 @@ client                                   server
   - **Custom auth**: identity always comes from `auth(req)`. A valid token for _the same player_
     restores their session (joined tables, held seats, lobby subscription). A token for a different
     player is ignored.
-- `name` is the display name for a new guest (1 to 32 characters after trimming, no control
-  characters). It is ignored under custom auth and when a guest session is resumed. Without it the
-  server picks `Guest ` plus 4 random characters (ADR 0010).
-- Any other request sent before `hello` is acked with `BAD_REQUEST`.
+- `name` is the display name for a new guest (1 to 32 characters after trimming, with no
+  control characters, line or paragraph separators, or bidirectional overrides and isolates,
+  U+202A to U+202E and U+2066 to U+2069). It is ignored under custom auth and when a guest
+  session is resumed. Without it the server picks `Guest ` plus 4 random characters (ADR 0010).
+- Any other request sent before `hello` is acked with `BAD_REQUEST`, and so is a second `hello`
+  on the same connection, even while the first is still being handled.
 
 Result:
 
@@ -172,8 +180,8 @@ the game's `onStand` hook runs and the seats become `empty`. A player may hold s
 | `hello`         | `v`, `resume?`, `name?`, `client?`                            | `Welcome`                             | `UNSUPPORTED_PROTOCOL`                                                                                                                                                                                                        |
 | `lobby.sub`     | `filter?: { games?: string[], status?: TableStatus[] }`       | none (a `lobby.snapshot` follows)     | `BAD_REQUEST`                                                                                                                                                                                                                 |
 | `lobby.unsub`   |                                                               | none                                  |                                                                                                                                                                                                                               |
-| `player.rename` | `name`                                                        | `{ name: string }` (the trimmed name) | `BAD_REQUEST` (empty, over 32 characters, control characters), `FORBIDDEN` (authenticated players)                                                                                                                            |
-| `table.create`  | `game`, `options?`                                            | `{ table: string }`                   | `NOT_FOUND`, `INVALID_OPTIONS`, `FORBIDDEN`                                                                                                                                                                                   |
+| `player.rename` | `name`                                                        | `{ name: string }` (the trimmed name) | `BAD_REQUEST` (empty, over 32 characters, unsafe characters as for `hello.name`), `FORBIDDEN` (authenticated players)                                                                                                         |
+| `table.create`  | `game`, `options?`                                            | `{ table: string }`                   | `NOT_FOUND`, `INVALID_OPTIONS`, `FORBIDDEN` (table limits, section 9)                                                                                                                                                         |
 | `table.join`    | `table`, `as?: 'player' \| 'spectator'` (default `'player'`)  | none (a `table.snapshot` follows)     | `NOT_FOUND`, `TABLE_ENDED`, `FORBIDDEN`                                                                                                                                                                                       |
 | `table.leave`   | `table`                                                       | none                                  | `NOT_JOINED`                                                                                                                                                                                                                  |
 | `table.sync`    | `table`                                                       | none (a `table.snapshot` follows)     | `NOT_JOINED`                                                                                                                                                                                                                  |
@@ -191,7 +199,16 @@ Notes:
 - `player.rename` changes a guest's display name: in the session, the stored session (so it
   survives resume) and on every seat the player holds, which reaches other viewers as an ordinary
   `table.patch` of `seats`. Names of authenticated players come from the `auth` hook. Added in
-  Phase 4.
+  Phase 4. Since the 1.0 security review the result also carries `resumeToken` and
+  `resumeExpiresAt` (as in `Welcome`): a fresh token with the new name, which the client should
+  store in place of the old one. A guest's session record is deleted when the session expires
+  (ADR 0010), so the token is what keeps the name.
+- `table.create` is refused with `FORBIDDEN` (`details: { limit: number }`) when the player
+  already has `maxTablesPerPlayer` open tables that they created, or when the server holds
+  `maxTables` tables (section 9). Added in the 1.0 security review.
+- `act.input` and `table.create.options` must be JSON a client could have produced: numbers
+  must be finite (`1e400` parses to `Infinity`) and nesting is limited to 32 levels. Anything
+  else is a malformed body (`BAD_REQUEST`, section 3). Added in the 1.0 security review.
 - `act.seat` is required only when the player holds more than one seat at that table.
 - The `act` result's `value` is the JSON the action's `run` returned, when it returned one.
 - `act.rev`, when present, must equal the table's current revision or the action is rejected with
@@ -279,7 +296,10 @@ behind (backpressure). It replaces the client's document entirely.
 - Applying all received patches in order must yield exactly the document the server holds for that
   viewer (an engine invariant, property-tested).
 - **Backpressure.** If a connection's send buffer passes 1 MiB, the server stops sending it patches.
-  When the buffer drains it receives one `table.snapshot` (ADR 0003).
+  When the buffer drains it receives one `table.snapshot` (ADR 0003). Lobby patches follow the
+  same rule with one `lobby.snapshot`. A connection whose buffer passes `maxBufferedBytes`
+  (default 8 MiB: it has stopped reading) is dropped without a closing handshake; the client
+  sees close code 1006 and reconnects with `resume`.
 
 ### 6.4 `table.event`
 
@@ -350,7 +370,7 @@ and must not reuse a built-in code (a type error at `defineGame`). Built-in code
 | `BAD_REQUEST`          | Malformed message, unknown request type, request before `hello`                                                               |                                     |
 | `UNSUPPORTED_PROTOCOL` | `hello.v` not supported                                                                                                       | `{ supported: number[] }`           |
 | `UNAUTHORIZED`         | Session no longer valid (for example token revoked)                                                                           |                                     |
-| `FORBIDDEN`            | Not allowed for this player, for example `player.rename` by an authenticated player                                           |                                     |
+| `FORBIDDEN`            | Not allowed for this player, for example `player.rename` by an authenticated player, or `table.create` past a table limit     | `{ limit: number }` (table limits)  |
 | `NOT_FOUND`            | Unknown game or table                                                                                                         | `{ kind: 'game' \| 'table' }`       |
 | `INVALID_OPTIONS`      | Table options failed the game's options schema                                                                                | `{ issues: StandardSchemaIssue[] }` |
 | `INVALID_INPUT`        | Action input failed its schema                                                                                                | `{ issues: StandardSchemaIssue[] }` |
@@ -405,16 +425,25 @@ The server sends `bye { code, reason }` immediately before closing, when it can.
 
 ---
 
-## 9. Limits (defaults, all configurable)
+## 9. Limits (defaults, configurable unless noted)
 
-| Limit                                | Default                                        |
-| ------------------------------------ | ---------------------------------------------- |
-| `maxMessageBytes`                    | 65 536                                         |
-| Rate limit per connection            | token bucket, 20 messages per second, burst 40 |
-| `hello` timeout                      | 10 s                                           |
-| `heartbeatMs`                        | 15 000                                         |
-| Reconnect grace (`reconnectGraceMs`) | 60 000                                         |
-| In-flight requests per connection    | 32 (more are acked with `RATE_LIMITED`)        |
+| Limit                                | Default                                                 |
+| ------------------------------------ | ------------------------------------------------------- |
+| `maxMessageBytes`                    | 65 536                                                  |
+| Rate limit per connection            | token bucket, 20 messages per second, burst 40          |
+| `hello` timeout                      | 10 s                                                    |
+| `heartbeatMs`                        | 15 000                                                  |
+| Reconnect grace (`reconnectGraceMs`) | 60 000                                                  |
+| In-flight requests per connection    | 32 (more are acked with `RATE_LIMITED`)                 |
+| Send buffer (`maxBufferedBytes`)     | 8 MiB (then the connection is dropped)                  |
+| Open tables created per player       | 10 (`maxTablesPerPlayer`; ended tables free their slot) |
+| Tables per server (`maxTables`)      | 10 000 (then `table.create` from clients is refused)    |
+| Nesting of `act.input` and `options` | 32 levels (not configurable)                            |
+
+The table limits apply only to `table.create` requests. Tables made with the server API
+(`tables.create()`) are never refused, though they count toward `maxTables`. In guest mode anyone can mint a new player with a new
+connection, so the per-player limit only slows one connection down: limit connections per
+address at the reverse proxy, which is the only layer that sees real client addresses.
 
 ---
 

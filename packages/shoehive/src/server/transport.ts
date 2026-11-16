@@ -16,6 +16,12 @@ export interface UpgradeRequest {
 export interface Connection {
   send(text: string): void;
   close(code: number, reason: string): void;
+  /**
+   * Drops the connection at once, without a closing handshake (used for a client that
+   * stopped reading, whose close frame would only queue behind the backlog). Optional:
+   * without it the server falls back to `close()`.
+   */
+  terminate?(): void;
   /** Bytes queued but not yet sent (for backpressure). */
   bufferedAmount(): number;
   onMessage(listener: (text: string) => void): void;
@@ -79,6 +85,9 @@ export function connectMemory(
     },
     close: (code, reason) => {
       finish(code, reason);
+    },
+    terminate: () => {
+      finish(1006, '');
     },
     bufferedAmount: () => 0,
     onMessage: (l) => serverListeners.push(l),
@@ -266,6 +275,9 @@ function wrap(ws: WebSocket): Connection {
     },
     close: (code, reason) => {
       ws.close(code, reason);
+    },
+    terminate: () => {
+      ws.terminate();
     },
     bufferedAmount: () => ws.bufferedAmount,
     onMessage: (listener) => {

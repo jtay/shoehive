@@ -28,8 +28,13 @@ page sends it as the first message on the devtools socket.
 
 - `devtools: true` works only when `NODE_ENV !== 'production'`. In production it is
   ignored with a warning, and nothing is mounted or even imported.
-- Only loopback clients are served. Running in a container or on a remote dev box? Pass
-  `{ enabled: true, allowRemote: true }` and keep the token secret.
+- Only this machine is served: the client must connect from a loopback address, directly
+  (a request relayed by a proxy, with `X-Forwarded-For` or `Forwarded`, is refused), and the
+  address bar must say `localhost`, an IP address, or a host listed in the server's `origins`
+  option. Any other host name gets a 404, so a web page cannot reach the inspector by pointing
+  its own domain at 127.0.0.1 (DNS rebinding). Running in a container, on a remote dev box or
+  behind a proxy? Pass `{ enabled: true, allowRemote: true }`, keep the token secret, and use
+  TLS: the token travels in the first socket message.
 - Pass a fixed `token` (32 characters or more) if you want a stable URL across restarts.
 - `path` moves the inspector (default `/__shoehive`; its socket is `<path>/ws`).
 
@@ -111,6 +116,11 @@ last recorded balance; money held by a reservation before the fork is not modell
 `p0`, `p1`... and names are replaced, but the RNG seed is kept, because the fixture cannot
 replay without it. A fixture from a production table therefore reveals that table's cards:
 treat it as a secret.
+
+Player ids are also replaced inside action inputs and table options, unless the game then
+replays differently (for example because it checks what an id looks like); the export
+warning says when they were kept. Every fixture keeps free text in inputs such as chat, the
+table id, entry timestamps and the wallet balances the game read.
 
 Replay it in a test with `replayFixture` from `shoehive/testing`. It checks the game, its
 version and the exported state, and returns a live test table at the last entry:

@@ -20,6 +20,8 @@ function gameServer(): Plugin {
   // One devtools token per `npm run dev`, so an open inspector survives server restarts.
   const devtoolsToken =
     process.env.SHOEHIVE_DEVTOOLS_TOKEN ?? randomBytes(32).toString('base64url');
+  // Likewise one resume-token secret, so players keep their seats when the server restarts.
+  const secret = process.env.SHOEHIVE_SECRET ?? randomBytes(32).toString('base64url');
   let child: ChildProcess | undefined;
   const stop = (): void => {
     child?.kill();
@@ -42,6 +44,7 @@ function gameServer(): Plugin {
               ...process.env,
               PORT: String(SERVER_PORT),
               SHOEHIVE_DEVTOOLS_TOKEN: devtoolsToken,
+              SHOEHIVE_SECRET: secret,
               ...(address ? { WEB_URL: `http://localhost:${String(address.port)}` } : {}),
             },
           },

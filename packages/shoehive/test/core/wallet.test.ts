@@ -265,3 +265,132 @@ describe('ctx.wallet in onStand', () => {
     await t.verifyReplay();
   });
 });
+
+// Phase 8 security review (docs/security/review-1.0-platform.md, findings P-04, P-05, P-09).
+describe('wallet path hardening (security review)', () => {
+  /** A backend that accepts anything and records every reserve it receives. */
+  function recordingWallet(): { wallet: Wallet; reserves: [string, number, string][] } {
+    const reserves: [string, number, string][] = [];
+    return {
+      reserves,
+      wallet: {
+        reserve: (player, amount, key) => {
+          reserves.push([player, amount, key]);
+          return Promise.resolve({ ok: true });
+        },
+        commit: () => Promise.resolve(),
+        release: () => Promise.resolve(),
+        balance: () => Promise.resolve(100),
+        credit: () => Promise.resolve(),
+      },
+    };
+  }
+
+  const loose = defineGame({
+    id: 'loose',
+    seats: { min: 1, max: 2 },
+    setup: () => ({ tried: [] as string[] }),
+    actions: {
+      // A game bug: the schema allows any number, so the client picks the amount.
+      bet: {
+        input: z.object({ amount: z.number() }),
+        async run({ seat, input, ctx }) {
+          await ctx.wallet.reserve(seat, input.amount, 'bet');
+        },
+      },
+      // The documented pattern: catch WALLET_UNAVAILABLE and carry on (ADR 0007 rule 5).
+      tryBet: {
+        input: z.object({ seat: z.number().int(), key: z.string() }),
+        async run({ state, input, ctx }) {
+          try {
+            state.tried.push((await ctx.wallet.reserve(input.seat, 10, input.key)) ? 'ok' : 'no');
+          } catch (error) {
+            state.tried.push(
+              error instanceof Error && 'code' in error ? String(error.code) : 'error',
+            );
+          }
+        },
+      },
+      tryPeek: {
+        async run({ state, seat, ctx }) {
+          try {
+            state.tried.push(`balance ${String(await ctx.wallet.balance(seat))}`);
+          } catch (error) {
+            state.tried.push(
+              error instanceof Error && 'code' in error ? String(error.code) : 'error',
+            );
+          }
+        },
+      },
+    },
+  });
+
+  it('refuses reserve amounts that are not non-negative safe integers, before the backend', async () => {
+    const { wallet, reserves } = recordingWallet();
+    const t = await createTestTable(loose, { players: 1, wallet });
+    for (const amount of [-500, 1.5, 2 ** 53]) {
+      await expect(t.act(0, 'bet', { amount })).rejects.toMatchObject({ code: 'INTERNAL' });
+    }
+    expect(reserves).toEqual([]);
+    await t.act(0, 'bet', { amount: 0 });
+    expect(reserves.map(([, amount]) => amount)).toEqual([0]);
+  });
+
+  it('records a wallet failure the game caught, so the entry replays (restart recovery)', async () => {
+    let down = true;
+    const memory = new MemoryWallet({ startingBalance: 1000 });
+    const flaky: Wallet = {
+      reserve: (p, a, k) =>
+        down ? Promise.reject(new Error('ledger down')) : memory.reserve(p, a, k),
+      commit: (k) => memory.commit(k),
+      release: (k) => memory.release(k),
+      balance: (p) => (down ? Promise.reject(new Error('ledger down')) : memory.balance(p)),
+      credit: (p, a, k) => memory.credit(p, a, k),
+    };
+    const t = await createTestTable(loose, { players: 1, wallet: flaky });
+    await t.act(0, 'tryBet', { seat: 0, key: 'a' });
+    await t.act(0, 'tryPeek');
+    // A seat that is empty: ctx.wallet throws before any backend call.
+    await t.act(0, 'tryBet', { seat: 1, key: 'b' });
+    down = false;
+    await t.act(0, 'tryBet', { seat: 0, key: 'c' });
+    await t.act(0, 'tryPeek');
+    expect(t.state.tried).toEqual([
+      'WALLET_UNAVAILABLE',
+      'WALLET_UNAVAILABLE',
+      'error',
+      'ok',
+      'balance 990',
+    ]);
+    // The failed reserve's backend key is released after its entry committed.
+    const failed = t.runtime.log.find((e) => e.kind === 'action')!;
+    expect(failed.effects).toEqual([
+      {
+        op: 'reserve',
+        key: expect.stringMatching(/^test-table:a:[0-9a-f]{12}$/) as string,
+        ok: false,
+        error: { code: 'WALLET_UNAVAILABLE', message: 'The wallet failed' },
+      },
+    ]);
+    const [effect] = failed.effects!;
+    expect(failed.wallet).toEqual([
+      { op: 'release', key: effect?.op === 'reserve' ? effect.key : '' },
+    ]);
+    // Replay (recovery, devtools, fixtures) reproduces it without calling the wallet.
+    const copy = await TableRuntime.replay(loose, t.runtime.log, { dev: true });
+    expect(copy.state).toEqual(t.state);
+    await t.verifyReplay();
+  });
+});
+
+describe('table ids and wallet keys (security review P-09)', () => {
+  it('refuses table ids that could make two tables share a wallet key', async () => {
+    const t = { id: 't', seats: { min: 1, max: 1 }, setup: () => null };
+    const game = defineGame(t);
+    await expect(TableRuntime.create(game, { id: 'a:b' })).rejects.toThrow(TypeError);
+    await expect(TableRuntime.create(game, { id: '' })).rejects.toThrow(TypeError);
+    const ok = await TableRuntime.create(game, { id: 'a_b-1' });
+    expect(ok.id).toBe('a_b-1');
+    ok.dispose();
+  });
+});

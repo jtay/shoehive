@@ -51,9 +51,12 @@ export type PostgresPool = Pick<Pool, 'query' | 'connect'>;
 
 /** Where the store's tables live. Use the same values for the store and the migration. */
 export interface PostgresSchemaOptions {
-  /** The Postgres schema, created if missing. Default `public`. */
+  /** The Postgres schema, created if missing. Default `public`. At most 63 bytes. */
   schema?: string;
-  /** Prepended to each table name (`entries` becomes `${tablePrefix}entries`). Default none. */
+  /**
+   * Prepended to each table name (`entries` becomes `${tablePrefix}entries`). Default none.
+   * At most 52 bytes, so that `${tablePrefix}open_tables` fits Postgres's 63-byte limit.
+   */
   tablePrefix?: string;
 }
 
@@ -65,8 +68,28 @@ export interface PostgresStoreOptions extends PostgresSchemaOptions {
 
 const ident = (name: string) => `"${name.replaceAll('"', '""')}"`;
 
+/** Postgres silently truncates identifiers to 63 bytes (NAMEDATALEN - 1). */
+const MAX_IDENTIFIER_BYTES = 63;
+const TABLES = ['entries', 'snapshots', 'sessions', 'open_tables'] as const;
+
+/**
+ * Rejects a schema or table name Postgres would not keep as given: empty, with a NUL, or
+ * longer than 63 bytes, which Postgres truncates without an error, so that two of the
+ * store's tables (or two apps' prefixes) could end up as the same table.
+ */
+function checkIdentifier(what: string, name: string): void {
+  const bytes = Buffer.byteLength(name, 'utf8');
+  if (name === '' || name.includes('\u0000') || bytes > MAX_IDENTIFIER_BYTES) {
+    throw new TypeError(
+      `postgresStore: ${what} ${JSON.stringify(name)} must be 1 to ${String(MAX_IDENTIFIER_BYTES)} bytes with no NUL character`,
+    );
+  }
+}
+
 function tableNames({ schema = 'public', tablePrefix = '' }: PostgresSchemaOptions) {
-  const table = (name: string) => `${ident(schema)}.${ident(tablePrefix + name)}`;
+  checkIdentifier('schema', schema);
+  for (const name of TABLES) checkIdentifier('table name', tablePrefix + name);
+  const table = (name: (typeof TABLES)[number]) => `${ident(schema)}.${ident(tablePrefix + name)}`;
   return {
     schema,
     entries: table('entries'),

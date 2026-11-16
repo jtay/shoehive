@@ -59,7 +59,10 @@ const shoehive = createServer({ games, store: postgresStore({ pool }) });
 
 - You construct the pool, so you control pooling, TLS and credentials. `close()` never ends
   it; end it yourself on shutdown.
-- `schema` (default `public`) and `tablePrefix` (default `'shoehive_'`) isolate apps or tenants.
+- `schema` (default `public`) and `tablePrefix` (default none) isolate apps or tenants. The
+  schema can be up to 63 bytes and the prefix up to 52, because Postgres silently truncates
+  longer names (two of the store's tables would become one); the store throws a `TypeError`
+  for longer names, an empty schema or a NUL character.
 - Without `migratePostgres`, the store creates its schema lazily and idempotently before the
   first operation (concurrent setups are serialized with an advisory lock). Run
   `migratePostgres` from a deploy step if the app's role has no DDL rights.

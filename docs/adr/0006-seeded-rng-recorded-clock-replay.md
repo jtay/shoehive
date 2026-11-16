@@ -49,7 +49,9 @@ interface Clock {
 1. **Generator.** `ctx.random` is a ChaCha20 keystream (RFC 8439 block function, 20
    rounds) keyed by a 256-bit seed, implemented in pure TypeScript in core (no Node
    `crypto`, per ADR 0002). It is cryptographically strong and deterministic given the
-   seed. Output is consumed as 32-bit words.
+   seed. Output is consumed as 32-bit words. The 32-bit block counter gives a table
+   2^36 words; past that the stream throws a `RangeError` rather than repeat itself
+   (Phase 8 security review).
 2. **Seeds.** In production the seed is 32 bytes from `globalThis.crypto.getRandomValues`
    at table creation, stored hex encoded in the `create` entry. `createTestTable` takes
    `seed: string`; non-hex strings such as `'fixed'` are hashed with SHA-256 (pure TS) to

@@ -50,9 +50,24 @@ export interface LogEntryBase {
   wallet?: WalletOp[];
 }
 
-/** A recorded wallet result, replayed instead of calling the backend (ADR 0007). */
+/**
+ * A live `ctx.wallet` call that threw (for example `WALLET_UNAVAILABLE`), recorded so
+ * replay throws the same error at the same point. A game may catch it and commit.
+ */
+export interface WalletFailure {
+  /** The `ShoehiveError` code, normally `WALLET_UNAVAILABLE`. */
+  code: string;
+  /** The error message, as the game saw it. */
+  message: string;
+}
+
+/**
+ * A recorded wallet result, replayed instead of calling the backend (ADR 0007). With
+ * `error`, the call threw: a reserve then has `ok: false`, a balance `amount: 0`.
+ */
 export type WalletEffect =
-  { op: 'reserve'; key: string; ok: boolean } | { op: 'balance'; seat: number; amount: number };
+  | { op: 'reserve'; key: string; ok: boolean; error?: WalletFailure }
+  | { op: 'balance'; seat: number; amount: number; error?: WalletFailure };
 
 export type LogEntry = LogEntryBase &
   (
@@ -388,6 +403,13 @@ export class TableRuntime {
     game: AnyGame,
     args: RuntimeOptions & { id?: string; options?: unknown; seed?: string } = {},
   ): Promise<TableRuntime> {
+    // Wallet keys are `<table>:<game key>` (ADR 0007): with a ':' in the id, table `a:b`
+    // with key `c` and table `a` with key `b:c` would share a backend key.
+    if (args.id !== undefined && (args.id === '' || args.id.includes(':'))) {
+      throw new TypeError(
+        `TableRuntime.create(): table ids must be non-empty and must not contain ":", got ${JSON.stringify(args.id)}`,
+      );
+    }
     const options =
       game.options === undefined
         ? rejectUnexpectedOptions(args.options)
@@ -674,6 +696,14 @@ export class TableRuntime {
         );
       return next as Extract<WalletEffect, { op: E }>;
     };
+    /** The error a recorded failure stands for: replay throws it again. */
+    const failure = (error: WalletFailure): ShoehiveError =>
+      new ShoehiveError({ code: error.code, message: error.message });
+    /** What a failed live call records (the timeout and wallet errors are ShoehiveErrors). */
+    const failureOf = (error: unknown): WalletFailure =>
+      isShoehiveError(error)
+        ? { code: error.code, message: error.message }
+        : { code: 'WALLET_UNAVAILABLE', message: 'The wallet failed' };
     const backend = (): Wallet => {
       if (!this.walletBackend) {
         throw new ShoehiveError({
@@ -691,13 +721,24 @@ export class TableRuntime {
             `ctx.wallet.reserve(): key "${k}" is already reserved; commit or release it first`,
           );
         }
+        // Checked before anything is recorded, live and on replay alike: these depend only
+        // on the entry, so a game that catches them replays the same way.
+        if (!Number.isSafeInteger(amount) || amount < 0) {
+          throw new RangeError(
+            `ctx.wallet.reserve(): amount must be a non-negative safe integer, got ${String(amount)}`,
+          );
+        }
+        const player = playerAt(seat);
         const recorded = replayed('reserve');
         if (recorded) {
           tx.effects.push(recorded);
+          if (recorded.error) {
+            tx.deferred.push({ op: 'release', key: recorded.key });
+            throw failure(recorded.error);
+          }
           if (recorded.ok) reservations()[k] = recorded.key;
           return recorded.ok;
         }
-        const player = playerAt(seat);
         const wallet = backend();
         // A fresh backend key per attempt (recorded, so replay reuses it): a key the
         // game reuses after a rolled-back entry must not hit that attempt's tombstone.
@@ -708,8 +749,11 @@ export class TableRuntime {
           result = await this.walletCall(() => wallet.reserve(player, amount, full));
         } catch (error) {
           // It may still have succeeded at the backend: release it even if the game
-          // catches this error and the entry commits.
-          if (!tx.closed) tx.deferred.push({ op: 'release', key: full });
+          // catches this error and the entry commits. Recorded, so replay throws too.
+          if (!tx.closed) {
+            tx.effects.push({ op: 'reserve', key: full, ok: false, error: failureOf(error) });
+            tx.deferred.push({ op: 'release', key: full });
+          }
           throw error;
         }
         open();
@@ -719,14 +763,22 @@ export class TableRuntime {
       },
       balance: async (seat) => {
         open();
+        const player = playerAt(seat);
         const recorded = replayed('balance');
         if (recorded) {
           tx.effects.push(recorded);
+          if (recorded.error) throw failure(recorded.error);
           return recorded.amount;
         }
-        const player = playerAt(seat);
         const wallet = backend();
-        const amount = await this.walletCall(() => wallet.balance(player));
+        let amount: number;
+        try {
+          amount = await this.walletCall(() => wallet.balance(player));
+        } catch (error) {
+          if (!tx.closed)
+            tx.effects.push({ op: 'balance', seat, amount: 0, error: failureOf(error) });
+          throw error;
+        }
         open();
         tx.effects.push({ op: 'balance', seat, amount });
         return amount;

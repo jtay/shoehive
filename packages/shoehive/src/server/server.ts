@@ -85,6 +85,19 @@ export interface ServerLimits {
   helloTimeoutMs?: number;
   /** WebSocket ping interval. Default 15 000 ms. */
   heartbeatMs?: number;
+  /**
+   * Bytes a connection may have queued but not yet sent before it is dropped (a reader
+   * that stopped reading). Default 8 MiB. Table and lobby patches already pause at 1 MiB
+   * (backpressure); this is the hard cap for everything else.
+   */
+  maxBufferedBytes?: number;
+  /**
+   * Open (not ended) tables one player may have created through `table.create`.
+   * Default 10. Tables created with the server API do not count.
+   */
+  maxTablesPerPlayer?: number;
+  /** Tables the server holds before `table.create` from clients is refused. Default 10 000. */
+  maxTables?: number;
 }
 
 export interface ServerOptions {
@@ -223,14 +236,18 @@ interface Conn {
   identity: PlayerIdentity | null;
   session: Session | null;
   tables: Map<string, Joined>;
-  lobby: { rev: number; doc: LobbyDocument; filter: LobbyFilter } | null;
+  lobby: { rev: number; doc: LobbyDocument; filter: LobbyFilter; stale?: boolean } | null;
   tokens: number;
   refilledAt: number;
   rejected: number[];
   violations: number[];
   inFlight: number;
   helloTimer: TimerHandle | null;
+  /** True while a `hello` is being handled (a second one is refused). */
+  helloPending: boolean;
   closed: boolean;
+  /** Dropped for exceeding `maxBufferedBytes`: nothing more is sent; close is pending. */
+  dropped: boolean;
   connectedAt: number;
 }
 
@@ -244,6 +261,8 @@ interface TableEntry {
   lastStatus: TableRuntime['status'];
   /** A devtools fork: hidden from the lobby, never persisted (ADR 0011 rule 13). */
   dev: boolean;
+  /** The player whose `table.create` request made this table, if any (table limits). */
+  createdBy: string | null;
 }
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -333,10 +352,16 @@ function toWire(error: unknown, dev: boolean): WireError {
 
 // ---------------------------------------------------------------------------------
 
-/** A trimmed display name of 1 to 32 characters without control characters, or `null`. */
+/**
+ * Control characters, line and paragraph separators, and the bidirectional overrides and
+ * isolates used to make text display differently from what it is ("Trojan Source").
+ */
+const UNSAFE_NAME_CHARS = /[\p{Cc}\p{Zl}\p{Zp}\u202A-\u202E\u2066-\u2069]/u;
+
+/** A trimmed display name of 1 to 32 characters without unsafe characters, or `null`. */
 function cleanName(raw: string): string | null {
   const name = raw.trim();
-  return name.length > 0 && name.length <= 32 && !/\p{Cc}/u.test(name) ? name : null;
+  return name.length > 0 && name.length <= 32 && !UNSAFE_NAME_CHARS.test(name) ? name : null;
 }
 
 /** The lobby as one subscriber sees it: every game, only the matching tables. */
@@ -377,6 +402,9 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     maxInFlight: options.limits?.maxInFlight ?? 32,
     helloTimeoutMs: options.limits?.helloTimeoutMs ?? 10_000,
     heartbeatMs: options.limits?.heartbeatMs ?? 15_000,
+    maxBufferedBytes: options.limits?.maxBufferedBytes ?? 8 * 1024 * 1024,
+    maxTablesPerPlayer: options.limits?.maxTablesPerPlayer ?? 10,
+    maxTables: options.limits?.maxTables ?? 10_000,
   };
 
   const devtoolsConfig = resolveDevtools(options.devtools, path, logger);
@@ -417,6 +445,13 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     secrets = typeof configured === 'string' ? [configured] : Array.from<string>(configured);
   }
   const signer = new TokenSigner(secrets);
+  if (options.auth && (options.origins ?? []).length === 0) {
+    // A browser sends the page's cookies with a cross-site WebSocket upgrade, and the
+    // same-origin policy does not apply to WebSockets (cross-site WebSocket hijacking).
+    logger.warn(
+      "An auth hook is set but `origins` is empty: any web page can open an authenticated connection with its visitors' cookies. Set `origins` to your app's origins.",
+    );
+  }
   if (options.wallet && !options.auth && !dev) {
     logger.warn(
       'A wallet is configured with guest identities. Guest resume tokens are bearer tokens: unsuitable for money.',
@@ -425,6 +460,27 @@ export function createServer(options: ServerOptions): ShoehiveServer {
 
   const sessions = new Map<string, Session>();
   const conns = new Set<Conn>();
+  /**
+   * The connections joined to each table (kept in step with `conn.tables`), so per-table
+   * work (patches, events, spectator counts) does not scan every connection.
+   */
+  const viewers = new Map<string, Set<Conn>>();
+  const noViewers: ReadonlySet<Conn> = new Set();
+  const viewersOf = (tableId: string): ReadonlySet<Conn> => viewers.get(tableId) ?? noViewers;
+  const addViewer = (conn: Conn, tableId: string): void => {
+    let set = viewers.get(tableId);
+    if (!set) {
+      set = new Set();
+      viewers.set(tableId, set);
+    }
+    set.add(conn);
+  };
+  const removeViewer = (conn: Conn, tableId: string): void => {
+    const set = viewers.get(tableId);
+    if (!set) return;
+    set.delete(conn);
+    if (set.size === 0) viewers.delete(tableId);
+  };
   const tables = new Map<string, TableEntry>();
   const listeners = new Map<keyof ServerEvents, Set<(payload: never) => void>>();
   let lobbyRev = 0;
@@ -446,8 +502,19 @@ export function createServer(options: ServerOptions): ShoehiveServer {
   };
 
   const send = (conn: Conn, message: ServerMessage): void => {
-    if (conn.closed) return;
+    if (conn.closed || conn.dropped) return;
     conn.transport.send(JSON.stringify(message));
+    if (conn.transport.bufferedAmount() > limits.maxBufferedBytes) {
+      // The client stopped reading. Its queue would grow without bound, so drop it; a
+      // close frame would only queue behind the backlog. The close event runs onClose.
+      conn.dropped = true;
+      logger.warn('Dropped a connection that stopped reading', {
+        player: conn.session?.player.id ?? null,
+        bufferedBytes: conn.transport.bufferedAmount(),
+      });
+      if (conn.transport.terminate) conn.transport.terminate();
+      else conn.transport.close(CLOSE.GOING_AWAY, 'Send buffer full');
+    }
   };
 
   const closeConn = (conn: Conn, code: number, reason: string): void => {
@@ -461,10 +528,9 @@ export function createServer(options: ServerOptions): ShoehiveServer {
 
   const spectatorCount = (tableId: string, runtime: TableRuntime): number => {
     const players = new Set<string>();
-    for (const conn of conns) {
+    for (const conn of viewersOf(tableId)) {
       const player = conn.session?.player.id;
-      if (player && conn.tables.has(tableId) && runtime.seatsHeldBy(player).length === 0)
-        players.add(player);
+      if (player && !conn.closed && runtime.seatsHeldBy(player).length === 0) players.add(player);
     }
     return players.size;
   };
@@ -487,11 +553,39 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     };
   };
 
+  /**
+   * Builds one connection's document, or `null` (logged) when game code (`view()`)
+   * throws. A broken view must cost that viewer its update, never the commit, the other
+   * viewers or the process.
+   */
+  const tryBuildDoc = (
+    entry: TableEntry,
+    tableId: string,
+    conn: Conn,
+    role: 'player' | 'spectator',
+  ): TableDocument | null => {
+    try {
+      return buildDoc(entry, tableId, conn, role);
+    } catch (error) {
+      logger.error('Could not build a table document (view() threw)', {
+        table: tableId,
+        player: conn.session?.player.id ?? null,
+        error,
+      });
+      return null;
+    }
+  };
+
   const sendSnapshot = (conn: Conn, tableId: string): void => {
     const entry = tables.get(tableId);
     const joined = conn.tables.get(tableId);
     if (!entry || !joined) return;
-    joined.doc = buildDoc(entry, tableId, conn, joined.role);
+    const doc = tryBuildDoc(entry, tableId, conn, joined.role);
+    if (doc === null) {
+      joined.stale = true; // retried on the next commit
+      return;
+    }
+    joined.doc = doc;
     joined.rev = entry.runtime.rev;
     joined.stale = false;
     joined.active = true;
@@ -502,7 +596,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
   const syncTable = (tableId: string): void => {
     const entry = tables.get(tableId);
     if (!entry) return;
-    for (const conn of conns) {
+    for (const conn of viewersOf(tableId)) {
       const joined = conn.tables.get(tableId);
       if (!joined?.active || conn.closed) continue;
       if (joined.stale || conn.transport.bufferedAmount() > BACKPRESSURE_BYTES) {
@@ -511,7 +605,11 @@ export function createServer(options: ServerOptions): ShoehiveServer {
         if (conn.transport.bufferedAmount() <= BACKPRESSURE_BYTES) sendSnapshot(conn, tableId);
         continue;
       }
-      const doc = buildDoc(entry, tableId, conn, joined.role);
+      const doc = tryBuildDoc(entry, tableId, conn, joined.role);
+      if (doc === null) {
+        joined.stale = true; // send a snapshot once view() works again
+        continue;
+      }
       const ops = diff(joined.doc as unknown as Json, doc as unknown as Json);
       if (ops.length === 0) continue;
       send(conn, {
@@ -535,22 +633,38 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     })),
     tables: [...tables]
       .filter(([, entry]) => !entry.dev)
-      .map(([id, entry]) => ({
-        id,
-        game: entry.game.id,
-        status: entry.runtime.status,
-        seats: {
-          taken: entry.runtime.seats().filter((s) => s.status !== 'empty').length,
-          total: entry.game.seats.max,
-        },
-        spectators: spectatorCount(id, entry.runtime),
-        createdAt: entry.createdAt,
-        listed: null,
-      })),
+      .map(([id, entry]) => lobbyEntry(id, entry)),
   });
 
-  const syncLobby = (): void => {
+  const lobbyEntry = (id: string, entry: TableEntry): LobbyDocument['tables'][number] => ({
+    id,
+    game: entry.game.id,
+    status: entry.runtime.status,
+    seats: {
+      taken: entry.runtime.seats().filter((s) => s.status !== 'empty').length,
+      total: entry.game.seats.max,
+    },
+    spectators: spectatorCount(id, entry.runtime),
+    createdAt: entry.createdAt,
+    listed: null,
+  });
+
+  /**
+   * Brings the lobby up to date. `committed` names a table that just committed: a commit
+   * changes at most that table's entry, so when the entry is unchanged (most game
+   * actions) the full rebuild, which is linear in the number of tables, is skipped.
+   */
+  const syncLobby = (committed?: string): void => {
     devtools?.tablesChanged();
+    if (committed !== undefined) {
+      const entry = tables.get(committed);
+      if (entry?.dev) return;
+      const listed = entry && lobbyDoc.tables.find((t) => t.id === committed);
+      const now = entry && lobbyEntry(committed, entry);
+      if (listed && now && diff(listed as unknown as Json, now as unknown as Json).length === 0) {
+        return;
+      }
+    }
     const next = buildLobby();
     const ops = diff(lobbyDoc as unknown as Json, next as unknown as Json);
     if (ops.length === 0) return;
@@ -558,6 +672,13 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     lobbyDoc = next;
     for (const conn of conns) {
       if (!conn.lobby || conn.closed) continue;
+      if (conn.lobby.stale || conn.transport.bufferedAmount() > BACKPRESSURE_BYTES) {
+        // Backpressure, as for tables: skip patches, one snapshot once the buffer drains.
+        conn.lobby.stale = true;
+        if (conn.transport.bufferedAmount() <= BACKPRESSURE_BYTES)
+          subscribeLobby(conn, conn.lobby.filter);
+        continue;
+      }
       const doc = filterLobby(next, conn.lobby.filter);
       const ops = diff(conn.lobby.doc as unknown as Json, doc as unknown as Json);
       if (ops.length === 0) continue;
@@ -594,7 +715,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     syncTable(tableId);
     devtools?.tableCommitted(tableId);
     for (const event of commit.events) {
-      for (const conn of conns) {
+      for (const conn of viewersOf(tableId)) {
         if (!conn.tables.has(tableId) || conn.closed) continue;
         const held = entry.runtime.seatsHeldBy(conn.session!.player.id);
         const to = event.to;
@@ -628,7 +749,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       });
     }
     if (ended) emit('table:ended', { table: tableId, result: runtime.engine.result });
-    syncLobby();
+    syncLobby(tableId);
     scheduleIdleCheck(tableId);
   };
 
@@ -638,6 +759,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     runtime: TableRuntime,
     createdAt: number,
     dev = false,
+    createdBy: string | null = null,
   ): TableEntry => {
     const entry: TableEntry = {
       runtime,
@@ -648,6 +770,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       lastPhase: runtime.engine.phase,
       lastStatus: runtime.status,
       dev,
+      createdBy,
     };
     tables.set(tableId, entry);
     runtime.onCommit(onCommit(tableId, entry));
@@ -661,7 +784,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     rev: entry.runtime.rev,
     createdAt: entry.createdAt,
     connected: [
-      ...new Set([...conns].filter((c) => c.tables.has(id)).map((c) => c.session!.player.id)),
+      ...new Set([...viewersOf(id)].filter((c) => !c.closed).map((c) => c.session!.player.id)),
     ],
   });
 
@@ -679,6 +802,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
   const createTable = async (
     gameId: string,
     args: { options?: unknown; id?: string } = {},
+    createdBy: string | null = null,
   ): Promise<TableInfo> => {
     const game = games.get(gameId);
     if (!game) throw shoehiveError('NOT_FOUND', `Unknown game "${gameId}"`, { kind: 'game' });
@@ -693,7 +817,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     });
     const createEntry = runtime.log[0]!;
     await store.appendLog(id, [{ seq: 0, data: JSON.stringify(createEntry) }]);
-    const entry = register(id, game, runtime, createEntry.at);
+    const entry = register(id, game, runtime, createEntry.at, false, createdBy);
     await saveSnapshot(id, entry);
     runtime.setPersist(persistEntry(id));
     emit('table:created', { table: id, game: gameId });
@@ -702,8 +826,33 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     return tableInfo(id, entry);
   };
 
+  /** Tables being created by each player (counted with open tables, see below). */
+  const creating = new Map<string, number>();
+
+  /** Refuses a client's `table.create` past the table limits (resource exhaustion). */
+  const checkTableLimits = (player: string): void => {
+    let total = 0;
+    let mine = creating.get(player) ?? 0;
+    for (const entry of tables.values()) {
+      if (entry.dev) continue;
+      total += 1;
+      if (entry.createdBy === player && entry.runtime.status !== 'ended') mine += 1;
+    }
+    for (const n of creating.values()) total += n;
+    if (mine >= limits.maxTablesPerPlayer) {
+      throw shoehiveError('FORBIDDEN', 'You have too many open tables', {
+        limit: limits.maxTablesPerPlayer,
+      });
+    }
+    if (total >= limits.maxTables) {
+      throw shoehiveError('FORBIDDEN', 'The server has too many tables', {
+        limit: limits.maxTables,
+      });
+    }
+  };
+
   const isIdle = (tableId: string, entry: TableEntry): boolean =>
-    ![...conns].some((c) => c.tables.has(tableId)) &&
+    ![...viewersOf(tableId)].some((c) => !c.closed) &&
     entry.runtime.seats().every((s) => s.status === 'empty');
 
   const scheduleIdleCheck = (tableId: string): void => {
@@ -740,7 +889,8 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     entry.runtime.releaseOpenReservations();
     await entry.runtime.idle();
     entry.runtime.dispose();
-    for (const conn of conns) {
+    for (const conn of [...viewersOf(tableId)]) {
+      removeViewer(conn, tableId);
       if (conn.tables.delete(tableId)) send(conn, { t: 'table.closed', table: tableId, reason });
     }
     for (const session of sessions.values()) {
@@ -807,6 +957,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
 
   const leaveTable = (conn: Conn, tableId: string, explicit: boolean): Promise<void> | void => {
     if (!conn.tables.delete(tableId)) return;
+    removeViewer(conn, tableId);
     const session = conn.session!;
     const entry = tables.get(tableId);
     if (!entry) return;
@@ -842,6 +993,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       stale: true,
       active: false,
     });
+    addViewer(conn, tableId);
     session.joined.add(tableId);
     scheduleIdleCheck(tableId);
     if (!alreadyHere) await endGrace(session, tableId);
@@ -877,7 +1029,17 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     // Keep the session through the grace period so a quick resume restores it.
     session.cleanup = clock.setTimer(clock.now() + graceMs * 2, () => {
       session.cleanup = null;
-      if (session.conns.size === 0 && session.grace.size === 0) sessions.delete(session.player.id);
+      if (session.conns.size > 0 || session.grace.size > 0) return;
+      const playerId = session.player.id;
+      sessions.delete(playerId);
+      // A guest's record would otherwise stay forever: one per hello, so anyone could
+      // grow the store without bound. Its resume token carries the id and the name, so a
+      // later resume still restores the guest. Seated guests keep theirs (ADR 0009).
+      if (session.player.guest && seatedTables(playerId).length === 0) {
+        store.sessions.delete(playerId).catch((error: unknown) => {
+          logger.warn('Could not delete a guest session record', { player: playerId, error });
+        });
+      }
     });
   };
 
@@ -891,7 +1053,8 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     conn: Conn,
     message: Extract<ClientRequest, { t: 'hello' }>,
   ): Promise<Json> => {
-    if (conn.session) throw shoehiveError('BAD_REQUEST', 'hello was already sent');
+    if (conn.session || conn.helloPending)
+      throw shoehiveError('BAD_REQUEST', 'hello was already sent');
     if (message.v !== PROTOCOL_VERSION) {
       const error = shoehiveError(
         'UNSUPPORTED_PROTOCOL',
@@ -909,6 +1072,18 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       clock.clearTimer(conn.helloTimer);
       conn.helloTimer = null;
     }
+    conn.helloPending = true;
+    try {
+      return await welcomeConn(conn, message);
+    } finally {
+      conn.helloPending = false;
+    }
+  };
+
+  const welcomeConn = async (
+    conn: Conn,
+    message: Extract<ClientRequest, { t: 'hello' }>,
+  ): Promise<Json> => {
     const now = clock.now();
     const token = message.resume ? signer.verify(message.resume, now) : null;
     let player: Session['player'];
@@ -946,11 +1121,11 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     });
     emit('player:connected', { player: player.id });
 
-    const exp = now + tokenTtlMs;
+    const issued = issueToken(player, now);
     const welcome: Welcome = {
       player: { id: player.id, name: player.name, guest: player.guest },
-      resumeToken: signer.sign({ sub: player.id, name: player.name, iat: now, exp }),
-      resumeExpiresAt: exp,
+      resumeToken: issued.resumeToken,
+      resumeExpiresAt: issued.resumeExpiresAt,
       resumed,
       server: {
         protocol: 1,
@@ -977,6 +1152,17 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       });
     }
     return welcome as unknown as Json;
+  };
+
+  const issueToken = (
+    player: Session['player'],
+    now: number,
+  ): { resumeToken: string; resumeExpiresAt: number } => {
+    const exp = now + tokenTtlMs;
+    return {
+      resumeToken: signer.sign({ sub: player.id, name: player.name, iat: now, exp }),
+      resumeExpiresAt: exp,
+    };
   };
 
   type After = (() => void) | undefined;
@@ -1026,11 +1212,21 @@ export function createServer(options: ServerOptions): ShoehiveServer {
         for (const tableId of seatedTables(player.id)) {
           await tables.get(tableId)?.runtime.rename({ player: player.id, name });
         }
-        return { result: { name } };
+        // A fresh token carries the new name, so a resume after the session record is
+        // gone (see scheduleSessionCleanup) still restores it.
+        return { result: { name, ...issueToken(player, clock.now()) } };
       }
       case 'table.create': {
-        const info = await createTable(message.game, { options: message.options });
-        return { result: { table: info.id } };
+        checkTableLimits(player.id);
+        creating.set(player.id, (creating.get(player.id) ?? 0) + 1);
+        try {
+          const info = await createTable(message.game, { options: message.options }, player.id);
+          return { result: { table: info.id } };
+        } finally {
+          const n = (creating.get(player.id) ?? 1) - 1;
+          if (n > 0) creating.set(player.id, n);
+          else creating.delete(player.id);
+        }
       }
       case 'table.join': {
         requireTable(message.table);
@@ -1195,6 +1391,11 @@ export function createServer(options: ServerOptions): ShoehiveServer {
           send(conn, { t: 'ack', id: message.id, ok: false, error: toWire(error, dev) });
         },
       )
+      .catch((error: unknown) => {
+        // Last line of defence: a request must never become an unhandled rejection,
+        // which would stop the whole process.
+        logger.error('Request handling failed after its ack', { type: message.t, error });
+      })
       .finally(() => {
         conn.inFlight -= 1;
       });
@@ -1241,7 +1442,9 @@ export function createServer(options: ServerOptions): ShoehiveServer {
         violations: [],
         inFlight: 0,
         helloTimer: null,
+        helloPending: false,
         closed: false,
+        dropped: false,
         connectedAt: clock.now(),
       };
       conns.add(conn);
@@ -1358,7 +1561,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
       runtime: entry.runtime,
       createdAt: entry.createdAt,
       dev: entry.dev,
-      connections: [...conns].filter((c) => c.tables.has(id)).length,
+      connections: [...viewersOf(id)].filter((c) => !c.closed).length,
     });
     return {
       production,
@@ -1547,7 +1750,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
         entry.runtime.dispose();
         tables.delete(id);
         await recoverTable(id);
-        for (const conn of conns) if (conn.tables.has(id)) sendSnapshot(conn, id);
+        for (const conn of viewersOf(id)) sendSnapshot(conn, id);
         devtools?.tableCommitted(id);
       },
       runtime: (id) => tables.get(id)?.runtime,

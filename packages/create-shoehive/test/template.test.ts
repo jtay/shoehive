@@ -62,6 +62,26 @@ describe('render', () => {
   });
 });
 
+describe('render escaping (security review P-11)', () => {
+  it('keeps a --shoehive spec inside its JSON string', async () => {
+    const dest = await tempDir();
+    const spec = '1.0.0", "postinstall-pwned": "1';
+    await copyTemplate(join(TEMPLATES_DIR, 'blank'), dest, { ...VARS, shoehiveVersion: spec });
+    const pkg = readJson(join(dest, 'package.json'));
+    expect(pkg['dependencies']?.['shoehive']).toBe(spec);
+    expect(Object.keys(pkg['dependencies'] ?? {})).not.toContain('postinstall-pwned');
+  });
+
+  it('escapes values for HTML and JSON, and leaves Markdown as is', () => {
+    const vars = { ...VARS, name: 'a"<b>&' };
+    expect(render('"{{name}}"', vars, 'json')).toBe('"a\\"<b>&"');
+    expect(render('<title>{{name}}</title>', vars, 'html')).toBe(
+      '<title>a&quot;&lt;b&gt;&amp;</title>',
+    );
+    expect(render('# {{name}}', vars)).toBe('# a"<b>&');
+  });
+});
+
 describe('targetName', () => {
   it('restores files npm would strip', () => {
     expect(targetName('_gitignore')).toBe('.gitignore');
@@ -120,6 +140,19 @@ describe.each(TEMPLATES.map((t) => t.name))('the %s template', (template) => {
       if (name === 'shoehive') continue;
       expect(range, name).toBe(expected[name]);
     }
+  });
+
+  it('ships no fixed resume-token secret (security review P-01)', () => {
+    // A secret in the template is the same in every generated project: anyone could sign
+    // resume tokens for any guest of a server started without NODE_ENV=production.
+    const server = readFileSync(join(TEMPLATES_DIR, template, 'src/server.ts'), 'utf8');
+    const secret = /\bsecret:\s*([^,]+),/.exec(server);
+    expect(secret?.[1]?.trim()).toBe('process.env.SHOEHIVE_SECRET');
+    expect(server).not.toMatch(/dev-only-secret/);
+    // `npm run dev` hands the game server a random secret for the session instead.
+    const vite = readFileSync(join(TEMPLATES_DIR, template, 'vite.config.ts'), 'utf8');
+    expect(vite).toMatch(/process\.env\.SHOEHIVE_SECRET \?\? randomBytes\(32\)/);
+    expect(vite).toMatch(/SHOEHIVE_SECRET: secret/);
   });
 
   it('uses no workspace aliases', () => {

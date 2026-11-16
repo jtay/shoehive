@@ -106,6 +106,14 @@ const t = replayFixture(blackjack, fixture); // a test table at the last entry
 - A cross-site browser `Origin` is refused before authentication, so a web page can
   neither guess the token nor trigger the lockout. Same-host origins, and those in the
   server's `origins` option, are allowed.
+- Rule 4 in detail (Phase 8 security review, findings P-02 and P-03): without
+  `allowRemote`, a request is served only if its TCP peer is loopback, it carries no
+  `Forwarded`, `X-Forwarded-For` or `X-Real-IP` header (a proxy on the same host connects
+  from loopback on behalf of anyone), and its `Host` is an IP literal, `localhost`, a
+  `.localhost` name or the host of an `origins` entry. The `Host` rule stops DNS
+  rebinding: a page on an attacker's domain that resolves to 127.0.0.1 sends a same-host
+  `Origin`, which the Origin check alone would accept. With `allowRemote: true` none of
+  these checks apply, so rely on the token (and TLS) there.
 - The CSP is `default-src 'self'` with `connect-src` also listing the page's own `ws:`
   and `wss:` origin, `img-src` allowing `data:`, and `base-uri`, `form-action`,
   `frame-ancestors` and `object-src` set to `'none'`. Responses also send `nosniff`,
@@ -121,6 +129,12 @@ const t = replayFixture(blackjack, fixture); // a test table at the last entry
   wallet ops and reservation keys, and each distinct name to `p0`, `p0 (2)`...; `expect`
   comes from replaying the anonymized log, and `replayFixture` in `shoehive/testing`
   checks it. The Playwright suite exports a fixture from every example and replays it.
+- Export also replaces strings equal to a known player id inside action and timer inputs
+  and the table options. If the log does not replay that way (a game that inspects the
+  shape of an id), those values are kept and the export warning says so. Kept in every
+  fixture, besides the seed: free text in inputs (chat, for example), the table id,
+  entry timestamps and the wallet balances the game read. A player id embedded in a
+  longer string is not recognised.
 
 ## Consequences
 

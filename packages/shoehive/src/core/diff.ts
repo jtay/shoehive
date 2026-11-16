@@ -57,7 +57,9 @@ function walk(a: Json, b: Json, path: string, ops: JsonPatchOp[]): void {
 
 /**
  * Applies `ops` to `doc` and returns the new document. `doc` is not modified; untouched
- * subtrees are shared with the result.
+ * subtrees are shared with the result. Patches can come from the network, so anything
+ * outside the subset `diff` produces (unknown ops, malformed paths or array indexes)
+ * throws instead of being guessed at.
  */
 export function applyPatch(doc: Json, ops: readonly JsonPatchOp[]): Json {
   let root = doc;
@@ -65,7 +67,16 @@ export function applyPatch(doc: Json, ops: readonly JsonPatchOp[]): Json {
   return root;
 }
 
+const ARRAY_INDEX = /^(0|[1-9][0-9]*)$/;
+
 function applyOne(root: Json, op: JsonPatchOp): Json {
+  const kind: unknown = op.op; // untrusted: the type is what we expect, not what we got
+  if (kind !== 'add' && kind !== 'remove' && kind !== 'replace') {
+    throw new Error(`applyPatch: unsupported op "${String(kind)}"`);
+  }
+  if (typeof op.path !== 'string' || (op.path !== '' && !op.path.startsWith('/'))) {
+    throw new Error('applyPatch: a path must be empty or start with "/"');
+  }
   if (op.path === '') {
     if (op.op === 'remove') throw new Error('applyPatch: cannot remove the root');
     return op.value;
@@ -79,8 +90,12 @@ function setIn(node: Json, tokens: string[], depth: number, op: JsonPatchOp): Js
   const last = depth === tokens.length - 1;
   if (Array.isArray(node)) {
     const copy = node.slice();
-    const index = token === '-' ? copy.length : Number(token);
-    if (!Number.isInteger(index) || index < 0 || index > copy.length) {
+    // RFC 6901: decimal digits without leading zeros, or "-" (one past the end) for add.
+    const appending = token === '-' && last && op.op === 'add';
+    const index = appending ? copy.length : ARRAY_INDEX.test(token) ? Number(token) : -1;
+    // Only add may address one past the end; everything else needs an existing element.
+    const end = last && op.op === 'add' ? copy.length : copy.length - 1;
+    if (index < 0 || index > end) {
       throw new Error(`applyPatch: bad array index "${token}" in ${op.path}`);
     }
     if (!last) {

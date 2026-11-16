@@ -1029,11 +1029,19 @@ export type WalletEffect = {
     op: 'reserve';
     key: string;
     ok: boolean;
+    error?: WalletFailure;
 } | {
     op: 'balance';
     seat: number;
     amount: number;
+    error?: WalletFailure;
 };
+
+// @public
+export interface WalletFailure {
+    code: string;
+    message: string;
+}
 
 // @public
 export type WalletOp = {

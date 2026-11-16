@@ -1054,3 +1054,156 @@ describe('pushes', () => {
     expect(lists()).toHaveLength(count);
   });
 });
+
+// ---------------------------------------------------------------------------------
+// Phase 8 security review (docs/security/review-1.0-platform.md)
+
+function requestWith(url: string, remoteAddress: string, headers: Record<string, string>) {
+  return {
+    url,
+    method: 'GET',
+    headers,
+    socket: { remoteAddress },
+  } as unknown as IncomingMessage;
+}
+
+describe('loopback-only hardening (security review P-02, P-03)', () => {
+  it('refuses DNS-rebound host names on HTTP and on the socket, even from loopback', async () => {
+    const { server, port, devUrl, log } = await start();
+    const devtools = server.devtools!;
+    for (const host of [
+      'rebind.example',
+      `rebind.example:${String(port)}`,
+      'localhost.evil.example',
+    ]) {
+      const { out, res } = fakeResponse();
+      devtools.handleRequest(requestWith('/__shoehive/', '127.0.0.1', { host }), res);
+      expect(out.status).toBe(404);
+    }
+    for (const host of [
+      'localhost',
+      `localhost:${String(port)}`,
+      'app.localhost:3000',
+      '127.0.0.1:3000',
+      '[::1]:3000',
+    ]) {
+      const { out, res } = fakeResponse();
+      devtools.handleRequest(requestWith('/__shoehive/', '127.0.0.1', { host }), res);
+      expect(out.status).toBe(200);
+    }
+    expect(log.lines.filter((l) => l.message.includes('DNS rebinding'))).toHaveLength(1);
+
+    // A page on rebind.example that resolved to 127.0.0.1 sends a matching Origin.
+    const rebound = `rebind.example:${String(port)}`;
+    const evil = new Dev(
+      devUrl,
+      new WebSocket(devUrl, { headers: { host: rebound, origin: `http://${rebound}` } }),
+    );
+    await expect(evil.open()).rejects.toThrow('HTTP 404');
+    // The real inspector page still connects.
+    const local = `localhost:${String(port)}`;
+    const page = new Dev(
+      devUrl,
+      new WebSocket(devUrl, { headers: { host: local, origin: `http://${local}` } }),
+    );
+    await page.open();
+
+    // A host name listed in `origins` is served; allowRemote turns the check off.
+    const listed = await start({ origins: ['http://devbox.example:3000'] });
+    const named = fakeResponse();
+    listed.server.devtools!.handleRequest(
+      requestWith('/__shoehive/', '127.0.0.1', { host: 'devbox.example:3000' }),
+      named.res,
+    );
+    expect(named.out.status).toBe(200);
+    const remote = await start({ devtools: { enabled: true, token: TOKEN, allowRemote: true } });
+    const any = fakeResponse();
+    remote.server.devtools!.handleRequest(
+      requestWith('/__shoehive/', '10.0.0.1', { host: 'devbox.example' }),
+      any.res,
+    );
+    expect(any.out.status).toBe(200);
+  });
+
+  it('treats a request relayed by a same-host proxy as remote', async () => {
+    const { server, devUrl } = await start();
+    for (const header of ['x-forwarded-for', 'forwarded', 'x-real-ip']) {
+      const { out, res } = fakeResponse();
+      server.devtools!.handleRequest(
+        requestWith('/__shoehive/', '127.0.0.1', { host: 'localhost', [header]: '203.0.113.9' }),
+        res,
+      );
+      expect(out.status).toBe(404);
+    }
+    const proxied = new Dev(
+      devUrl,
+      new WebSocket(devUrl, { headers: { 'x-forwarded-for': '203.0.113.9' } }),
+    );
+    await expect(proxied.open()).rejects.toThrow('HTTP 404');
+
+    const remote = await start({ devtools: { enabled: true, token: TOKEN, allowRemote: true } });
+    const { out, res } = fakeResponse();
+    remote.server.devtools!.handleRequest(
+      requestWith('/__shoehive/', '127.0.0.1', { host: 'localhost', 'x-forwarded-for': '1.2.3.4' }),
+      res,
+    );
+    expect(out.status).toBe(200);
+  });
+});
+
+/** Takes the host player's id as a table option; `note` only accepts a guest id. */
+const hosted = defineGame({
+  id: 'hosted',
+  seats: { min: 1, max: 2 },
+  options: z.object({ host: z.string() }),
+  setup: ({ options }) => ({ host: options.host, note: null as string | null }),
+  actions: {
+    note: {
+      input: z.object({ text: z.string() }),
+      run({ state, input }) {
+        // Inspects the shape of an id, so replacing ids in inputs breaks its replay.
+        if (!input.text.startsWith('g_')) reject('NOT_A_GUEST_ID');
+        state.note = input.text;
+      },
+    },
+  },
+});
+
+describe('export anonymization (security review P-06)', () => {
+  it('replaces player ids inside table options', async () => {
+    const { devUrl, gameUrl, server } = await start({ games: [hosted] });
+    const dev = await Dev.connect(devUrl);
+    const alice = await player(gameUrl, 'Alice');
+    const id = alice.welcome!.player.id;
+    const { id: table } = await server.tables.create('hosted', { options: { host: id } });
+    await alice.ok('table.join', { table });
+    await alice.ok('seat.take', { table });
+    await server.tables.runtime(table)!.idle();
+
+    const { fixture, warning } = await dev.request('table.export', { table });
+    expect(JSON.stringify(fixture)).not.toContain(id);
+    expect(fixture.entries[0]).toMatchObject({ kind: 'create', options: { host: 'p0' } });
+    expect(warning).not.toMatch(/could not be replaced/);
+    const t = await replayFixture(hosted, fixture);
+    expect(t.state).toEqual({ host: 'p0', note: null });
+  });
+
+  it('says so when ids inside inputs and options had to be kept for the fixture to replay', async () => {
+    const { devUrl, gameUrl, server } = await start({ games: [hosted] });
+    const dev = await Dev.connect(devUrl);
+    const alice = await player(gameUrl, 'Alice');
+    const id = alice.welcome!.player.id;
+    const { id: table } = await server.tables.create('hosted', { options: { host: id } });
+    await alice.ok('table.join', { table });
+    await alice.ok('seat.take', { table });
+    await alice.ok('act', { table, name: 'note', input: { text: id } });
+    await server.tables.runtime(table)!.idle();
+
+    const { fixture, warning } = await dev.request('table.export', { table });
+    expect(warning).toMatch(/could not be replaced/);
+    // The engine's own fields are still anonymized.
+    const sit = fixture.entries.find((e) => e.kind === 'system' && e.event === 'sit');
+    expect(sit).toMatchObject({ player: { id: 'p0', name: 'p0' } });
+    await replayFixture(hosted, fixture);
+  });
+});

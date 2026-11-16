@@ -64,6 +64,7 @@ export type {
   TableMeta,
   TimerState,
   WalletEffect,
+  WalletFailure,
 } from './core/runtime';
 export { systemClock, type Clock, type TimerHandle } from './core/clock';
 export {
