@@ -27,6 +27,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # The store tests need both services when CI is set (test/store/recovery.ts), as in ci.yml.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: shoehive
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,6 +55,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Full check before any publish
         run: pnpm check
+        env:
+          SHOEHIVE_TEST_POSTGRES_URL: postgres://postgres:shoehive@localhost:5432/postgres
+          SHOEHIVE_TEST_REDIS_URL: redis://localhost:6379
 
   release:
     name: Version PR or publish
