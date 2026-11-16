@@ -1,0 +1,10 @@
+{
+  // The site's own TypeScript: build scripts and the helpers the components use. Snippets
+  // have their own project (snippets/tsconfig.json); .astro and .mdx files are checked by
+  // the Astro build.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "astro/client"]
+  },
+  "include": ["scripts/**/*.ts", "src/lib/**/*.ts", "src/env.d.ts", "src/content.config.ts"]
+}

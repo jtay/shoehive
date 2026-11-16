@@ -44,7 +44,9 @@ function describeError(error: unknown): string {
 
 export function App(): ReactNode {
   const tableId = useTableRoute();
+  // #region connection
   const { status, player } = useConnection();
+  // #endregion connection
   return (
     <div className="app">
       <header className="bar">
@@ -62,6 +64,7 @@ export function App(): ReactNode {
 }
 
 function Lobby(): ReactNode {
+  // #region lobby
   const lobby = useLobby();
   const client = useClient<[TicTacToe]>();
   const [creating, setCreating] = useState(false);
@@ -80,6 +83,7 @@ function Lobby(): ReactNode {
     }
   };
 
+  // #endregion lobby
   return (
     <main>
       <div className="row">
@@ -110,8 +114,10 @@ function Lobby(): ReactNode {
 }
 
 function TableScreen({ tableId }: { tableId: string }): ReactNode {
+  // #region use-table
   const { status, error, view, meta, seats, mySeat, pending, actionError, act, sit } =
     useTable<TicTacToe>(tableId);
+  // #endregion use-table
 
   if (status === 'error') {
     return (
@@ -131,10 +137,12 @@ function TableScreen({ tableId }: { tableId: string }): ReactNode {
   }
   if (!view || !meta) return <p className="muted">Joining...</p>;
 
+  // #region derived
   const turn = meta.turn?.seat ?? null;
   const over = meta.status === 'ended';
   const myTurn = !over && turn !== null && turn === mySeat;
   const canSit = mySeat === null && !over && seats.some((s) => s.status === 'empty');
+  // #endregion derived
 
   let headline: string;
   if (view.winner === 'draw') headline = 'Draw';
@@ -183,6 +191,7 @@ function TableScreen({ tableId }: { tableId: string }): ReactNode {
         {headline}
       </p>
 
+      {/* #region board */}
       <div className="board">
         {view.board.map((cell, i) => (
           <button
@@ -200,6 +209,7 @@ function TableScreen({ tableId }: { tableId: string }): ReactNode {
           </button>
         ))}
       </div>
+      {/* #endregion board */}
 
       {alert ? (
         <p role="alert" className="error">

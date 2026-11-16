@@ -111,7 +111,7 @@ On `listen()` or `attach()`, before accepting connections:
 6. Re-send unconfirmed deferred wallet ops (ADR 0007).
 
 A table that fails any step is not opened. It is reported through the operator event
-`table:recovery-failed { tableId, reason }` and logged; other tables continue.
+`table:recovery-failed { table, reason }` and logged; other tables continue.
 
 ### Game definition versions
 
@@ -156,6 +156,15 @@ tail loading, open and closed tables, sessions, large payloads (1 MiB), exact ro
 of unusual JSON and ids, many tables, and data surviving close and reopen. CI runs it on
 all four adapters, with Postgres 16 and Redis 7 as service containers, plus a
 restart-recovery end-to-end test per adapter.
+
+### Status in v1 (Phase 7 review)
+
+- **`migrate` is not implemented.** Any version difference fails recovery with
+  `VERSION_MISMATCH`, whatever the tail; the table stays in the store untouched. Until a
+  `migrate` hook ships, bump `version` only once open tables have ended or been closed.
+  Whether to build it before 1.0 is an open decision for Phase 8.
+- **`retainLog` is not implemented**: the full log is always kept (see the Phase 5 note
+  on what pruning would need).
 
 ## Consequences
 

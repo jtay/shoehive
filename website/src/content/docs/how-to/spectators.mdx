@@ -1,0 +1,138 @@
+---
+title: 'Spectators'
+description: 'Let people watch a table without a seat.'
+sidebar:
+  order: 10
+---
+
+A spectator joins a table to watch it, with no seat and no actions. Spectators get live
+updates like players do, but only what the game shows to everyone who holds no seat.
+
+## Join as a spectator
+
+Ask for the `spectator` role when you join:
+
+```ts
+import type { ShoehiveClient } from 'shoehive/client';
+declare const client: ShoehiveClient;
+declare const tableId: string;
+// ---cut---
+const table = await client.join(tableId, { as: 'spectator' });
+
+console.log(table.you.role); // 'spectator'
+console.log(table.doc?.spectators); // how many people are watching
+```
+
+In React, pass the same option to `useTable`:
+
+```tsx
+import { useTable } from 'shoehive/react';
+
+export function Watch({ tableId }: { tableId: string }) {
+  const { status, view, meta, you } = useTable(tableId, { as: 'spectator' });
+  if (status !== 'ready') return <p>Joining...</p>;
+  return (
+    <p>
+      {you?.role} sees a {meta?.status} table: {JSON.stringify(view)}
+    </p>
+  );
+}
+```
+
+A spectator can watch any number of tables, and can sit down later with `table.sit()` (or
+`sit()` from `useTable`). Once seated, `you.role` becomes `'player'` and the view becomes the
+seat's view. Calling `act` without a seat fails with `NOT_SEATED`.
+
+## What spectators see
+
+Everyone without a seat at a table gets one shared view: the game's `view()` function runs once
+for the `spectator` viewer, and every spectator receives that result. The viewer has
+`kind: 'spectator'`, no seat (`seat: null`, `seats: []`) and no player id.
+
+This is the same rule that hides a hand from the other seats. A game that already uses
+`seatView` for hidden information needs no extra code, because a spectator holds no seat, so
+every hidden value stays hidden:
+
+```ts
+import { defineGame } from 'shoehive';
+
+export const game = defineGame({
+  id: 'watch-demo',
+  seats: { min: 2, max: 2 },
+  setup: () => ({
+    hands: [
+      ['A', 'K'],
+      ['Q', 'J'],
+    ],
+    moves: 0,
+  }),
+  turns: { order: 'round-robin' },
+  view: ({ state, viewer }) => ({
+    moves: state.moves,
+    // Seats see their own hand. Spectators see only how many cards each holds.
+    hands: state.hands.map((hand, seat) => (viewer.seats.includes(seat) ? hand : hand.length)),
+    // To change what spectators see, branch on the viewer:
+    watching: viewer.kind === 'spectator',
+  }),
+});
+```
+
+Two limits to know about:
+
+- The view is shared. Shoehive v1 has no per-spectator view, for example "a coach who sees
+  one seat's hand". If you need it, that is a protocol extension, not a setting.
+- An unseated player who joined as a `player` also gets the spectator view. The `as` option
+  only labels the role in `you.role` and in the spectator count. Hidden information is decided
+  by whether the viewer holds a seat.
+
+Ephemeral events can target spectators too: `ctx.emit('reveal', payload, { to: 'spectators' })`
+reaches only the people without a seat, and `to: 'all'` reaches everyone.
+
+## Spectator counts
+
+Each table document has a `spectators` number: the count of distinct players with a connection
+joined to the table and no seat. Seated players and the same person's extra tabs do not count.
+The lobby lists the same number for each table, so you can show "12 watching".
+
+```ts
+import type { ShoehiveClient } from 'shoehive/client';
+declare const client: ShoehiveClient;
+// ---cut---
+const lobby = await client.lobby({ filter: { status: ['active'] } });
+
+for (const t of lobby.doc?.tables ?? []) {
+  console.log(`${t.id}: ${t.seats.taken}/${t.seats.total} seated, ${t.spectators} watching`);
+}
+```
+
+## Find tables to watch
+
+A lobby subscription takes an optional filter by game and by table status. Use it to list only
+tables that are running:
+
+```tsx
+import { useLobby } from 'shoehive/react';
+
+export function LiveTables() {
+  const lobby = useLobby({ filter: { games: ['holdem'], status: ['active'] } });
+  return (
+    <ul>
+      {lobby?.tables.map((t) => (
+        <li key={t.id}>
+          {t.id} ({t.spectators} watching)
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+There is one lobby subscription per client. The last filter you pass wins, for every component
+that uses it. Every game is always listed, and the filter narrows only the tables. See
+[Wire protocol](/reference/protocol/) section 6.3 for the lobby document.
+
+## Related
+
+- [Hidden information](/how-to/hidden-information/)
+- [Views and sync](/concepts/views-and-sync/)
+- [ADR 0003: per-viewer views and patch sync](/contributing/adr/0003-per-viewer-views-json-patch-sync/)

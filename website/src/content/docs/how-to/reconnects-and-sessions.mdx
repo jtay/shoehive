@@ -1,0 +1,166 @@
+---
+title: 'Reconnects and sessions'
+description: 'How players get back into their seats after a dropped connection.'
+sidebar:
+  order: 2
+---
+
+Phones lose signal, laptops sleep, people refresh the page. Shoehive treats a player as an
+identity, not a socket, so a dropped connection does not end a game. This page shows what
+happens and the few things you can tune.
+
+## What happens when a connection drops
+
+1. The client notices the closed socket and reconnects with exponential backoff.
+2. If the player has no other open connection at a table, the server marks their seat
+   `reserved` (other players see `connected: false`) and runs the game's `onDisconnect` hook.
+3. The seat is held for `reconnectGraceMs` (60 seconds by default).
+4. If the player's connection returns in time, the seat is `occupied` again and `onReconnect`
+   runs. The server sends fresh snapshots of every table and the lobby, and play continues.
+5. If the time runs out, the player is stood up (`onStand` runs) and the seat becomes `empty`.
+
+The game itself keeps running meanwhile. If it is the absent player's turn, use a
+[turn timer](/how-to/timers-and-turn-clocks/) so the table does not wait forever.
+
+## Resume tokens and where they live
+
+Reconnecting needs proof of who you are. In guest mode that proof is the resume token from the
+`welcome` message (see [Authentication](/how-to/authentication/)). The client keeps it in
+`ClientOptions.storage`:
+
+- In a browser the default is `localStorage`, under a key that includes the server URL. A page
+  refresh, a new tab and a restarted browser all find the same player.
+- In Node the default is memory: the player lasts as long as the process.
+- Pass your own `{ get, set }` object to store the token elsewhere, or `false` to store nothing
+  (every connection is then a new guest).
+
+```ts
+import { createClient, type TokenStorage } from 'shoehive/client';
+
+// For example React Native, or a test: keep the token in your own place.
+const storage: TokenStorage = {
+  get: () => sessionStorage.getItem('shoehive-token'),
+  set: (token) => {
+    if (token === null) sessionStorage.removeItem('shoehive-token');
+    else sessionStorage.setItem('shoehive-token', token);
+  },
+};
+
+const client = createClient({ url: 'ws://localhost:3000/shoehive', storage });
+```
+
+With `sessionStorage`, each browser tab is its own guest, which is handy when you test a
+two-player game alone. Two private windows work the same way with the default storage.
+
+## Client reconnect
+
+Reconnecting is on by default. The delay doubles from 500 ms up to 10 seconds, with random
+jitter. Change it, or turn it off, with `reconnect`:
+
+```ts
+import { createClient } from 'shoehive/client';
+
+const client = createClient({
+  url: 'ws://localhost:3000/shoehive',
+  reconnect: { initialDelayMs: 250, maxDelayMs: 5_000 }, // or `false`
+});
+
+// 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed'
+client.onStatus((status) => {
+  console.log('connection:', status);
+});
+```
+
+The client stops for good (status `closed`) when you call `client.close()`, when you set
+`reconnect: false`, and after close codes that mean reconnecting would not help (1000, 1009,
+4001, 4002, 4409). See [close codes](/reference/protocol/) in the protocol reference.
+
+After a reconnect you do nothing: tables you joined are joined again and their handles keep
+updating. The server restores the session itself. Only if it could not (for example after a
+restart that lost the session) does the client join the tables again on its own.
+
+### Requests in flight
+
+A request waiting for its answer when the socket drops fails with `CONNECTION_LOST`. It may or
+may not have been applied, so do not retry blindly. Read the table (`table.view`, `table.seats`)
+after the reconnect, then decide. `client.close()` fails waiting requests with `CLIENT_CLOSED`,
+and a request with no answer in 15 seconds fails with `REQUEST_TIMEOUT`. See the
+[error codes](/reference/error-codes/).
+
+## Show the state in React
+
+`useConnection` re-renders when the status changes, or when the player changes (for example
+after a rename).
+
+```tsx
+import { useConnection } from 'shoehive/react';
+
+export function ConnectionBanner() {
+  const { status } = useConnection();
+  if (status === 'open') return null;
+  return <p role="status">{status === 'reconnecting' ? 'Reconnecting...' : 'Offline'}</p>;
+}
+```
+
+## Several tabs
+
+A player may have any number of connections, and any of them may act for the player's seat.
+The seat counts as connected while at least one connection has joined the table. Closing one
+tab, or an old socket after a new one exists, changes nothing. Opening a second tab of a seated
+player produces no `onDisconnect` or `onReconnect` at all.
+
+## Renaming a guest
+
+`client.rename(name)` changes a guest's display name. It updates the stored session (so the name
+survives reconnects), every seat the player holds (other viewers see it as a normal table
+update), and `client.player`. Names are 1 to 32 characters after trimming, with no control
+characters, or the request fails with `BAD_REQUEST`. Authenticated players get `FORBIDDEN`:
+their name comes from your `auth` hook.
+
+```ts
+import type { ShoehiveClient } from 'shoehive/client';
+declare const client: ShoehiveClient;
+// ---cut---
+const name = await client.rename('Ada Lovelace'); // resolves the trimmed name used
+```
+
+## React to it in the game
+
+`onDisconnect` and `onReconnect` run as ordinary log entries, so they change state like an
+action does and are replayed in tests. `seat` and `player` say who is concerned.
+
+```ts
+import { defineGame } from 'shoehive';
+
+export const game = defineGame({
+  id: 'demo',
+  seats: { min: 2, max: 2 },
+  setup: () => ({ away: [] as number[] }),
+  turns: { order: 'round-robin' },
+  onDisconnect({ state, seat }) {
+    if (seat !== null) state.away.push(seat);
+  },
+  onReconnect({ state, seat }) {
+    state.away = state.away.filter((s) => s !== seat);
+  },
+});
+```
+
+Put `state.away` in your view and the other players see who is away.
+
+## Server settings
+
+| Option             | Default | Meaning                                                    |
+| ------------------ | ------- | ---------------------------------------------------------- |
+| `reconnectGraceMs` | 60 000  | How long a seat is held after its player disconnects       |
+| `resumeTokenTtlMs` | 7 days  | How long a guest token stays valid, renewed on every hello |
+
+A restart starts a fresh grace period for every seated player, so tables recover and players
+come back in the same way (see [persistence and restart recovery](/how-to/persistence-and-restart-recovery/)).
+A connection that misses heartbeats is closed by the server and treated like any other drop.
+
+## Related
+
+- [Authentication](/how-to/authentication/)
+- [Tables and seats](/concepts/tables-and-seats/)
+- [Wire protocol](/reference/protocol/), sections 4 and 8

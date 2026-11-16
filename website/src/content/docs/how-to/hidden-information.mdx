@@ -1,0 +1,95 @@
+---
+title: 'Hidden information'
+description: 'Keep cards, roles and answers secret with per-seat views.'
+sidebar:
+  order: 3
+---
+
+import Snippet from '../../../components/Snippet.astro';
+
+Clients never receive your state, only the output of `view()`. So hiding information means
+writing a `view()` that leaves it out. This page shows how, with a small card game
+(`website/snippets/hidden-information/`). The design is in
+[ADR 0003](/contributing/adr/0003-per-viewer-views-json-patch-sync/); for how views reach
+clients see [Views and sync](/concepts/views-and-sync/).
+
+If you do not write a `view`, every viewer gets the full state. Add one as soon as the state
+holds anything a player should not see.
+
+## Write the view
+
+`view({ state, viewer, ctx })` runs once per viewer after every commit. `state` is read-only,
+and `ctx` holds read-only engine information (`ctx.phase`, `ctx.turn`, `ctx.status`, ...).
+The result must be plain JSON.
+
+<Snippet file="website/snippets/hidden-information/src/game.ts" region="view" title="game.ts" />
+
+Three things happen here:
+
+- `hands` uses `seatView`, which keeps each viewer's own hands and replaces the others with
+  what the callback returns. `revealTo(hand, flag)` gives the hand as it is when `flag` is
+  true, and `faceDown(hand)` otherwise: same number of entries, each `null`.
+- `shown` is public, so it is passed through.
+- The deck is reduced to a count. **Never put the deck, the RNG seed or a field that lets
+  someone recompute them in a view.** Anything in a view can be read in the browser.
+
+## The viewer
+
+The `viewer` argument has two shapes:
+
+| `viewer.kind` | `seat`                   | `seats`                      | `playerId` |
+| ------------- | ------------------------ | ---------------------------- | ---------- |
+| `'seat'`      | the first seat they hold | every seat that player holds | their id   |
+| `'spectator'` | `null`                   | `[]`                         | `null`     |
+
+Each seated player has one view, even if they hold several seats. All spectators share a
+single view, which is why spectators have no `playerId`. Use `viewer.seats.includes(n)`
+rather than `viewer.seat === n` when a player can hold more than one seat.
+
+## The card helpers
+
+`shoehive/cards` has four small functions for views:
+
+- `seatView(perSeat, viewer, hidden)` maps an array indexed by seat. The callback also
+  receives the seat number, so you can reveal at showdown.
+- `faceDown(cards)` turns every card into `null`.
+- `revealTo(cards, visible)` is the card list or `faceDown`.
+- `hideCard(card)` hides one card, handy in `map`. Blackjack uses it for the dealer's hole
+  card (the second card of the dealer's hand).
+
+Cards are strings such as `'AS'`, so a hidden card in a view is `null` and the type is
+`VisibleCard`. The helpers are conveniences: for anything else, such as a quiz answer or a
+secret role, just leave the field out or set it to `null` until it is time to reveal.
+
+## Reveal at the right moment
+
+A view is a function of the state, so "reveal" means a state change that makes the view
+return more. The quiz keeps the correct answer out of the view until the `reveal` phase:
+
+<Snippet file="examples/quiz/src/game.ts" region="view" title="examples/quiz/src/game.ts" />
+
+Blackjack does the same with the hole card, switching on `ctx.phase === 'dealer'`.
+
+## Test it
+
+`t.viewOf(seat)` returns exactly what that seat would receive, and `t.viewOf('spectator')`
+what a spectator would. Assert on both what they can see and what they must not.
+
+<Snippet
+  file="website/snippets/hidden-information/test/game.test.ts"
+  region="leak"
+  title="game.test.ts"
+/>
+
+Checking the serialized view for a card string is crude but effective, because it also
+catches a secret that leaked into an unexpected field. The engine's own property test does
+the same for blackjack (invariant 6 in `packages/shoehive/test/properties/invariants.test.ts`):
+after every random command it collects every card in every viewer's view and requires that
+it equals the cards that are public, so the shoe and the hole card can never appear.
+
+## Checks the engine makes for you
+
+In development and in `createTestTable`, the engine throws if a view is not JSON (an
+`undefined` in an array, a `Map`, a `Date`), and it names the path. It also keeps each
+viewer's last view and sends only the difference. The wire format is in the
+[protocol reference](/reference/protocol/).

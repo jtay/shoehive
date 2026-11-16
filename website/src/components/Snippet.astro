@@ -1,0 +1,31 @@
+---
+// Shows code from a real, type-checked file. See src/content/docs/contributing/writing-docs.mdx.
+//
+//   <Snippet file="examples/tic-tac-toe/src/game.ts" region="game" />
+//
+// `file` is relative to the repository root. `region` picks the lines between
+// `// #region <name>` and `// #endregion`. `title` overrides the path shown above the code
+// (pass `title=""` for none). Other props (`mark`, `ins`, `del`, `frame`, ...) go to
+// Expressive Code's <Code>.
+import { Code } from '@astrojs/starlight/components';
+import { readSnippet } from '../lib/snippets';
+
+interface Props {
+  file: string;
+  region?: string;
+  title?: string;
+  lang?: string;
+  [prop: string]: unknown;
+}
+
+const { file, region, title, lang, ...rest } = Astro.props;
+const snippet = readSnippet(__SHOEHIVE_REPO_ROOT__, file, region);
+const shownTitle = title ?? snippet.title;
+---
+
+<Code
+  code={snippet.code}
+  lang={lang ?? snippet.lang}
+  {...shownTitle === '' ? {} : { title: shownTitle }}
+  {...rest}
+/>

@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "pnpm -r --filter ./packages/** run build",
+    "build": "pnpm -r --filter \"./packages/**\" run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test --trace off",
@@ -17,8 +17,11 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc -p tsconfig.json --noEmit && pnpm -r run typecheck",
-    "check:package": "pnpm -r --filter ./packages/** run check:package",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:package",
+    "check:package": "pnpm -r --filter \"./packages/**\" run check:package",
+    "docs:dev": "pnpm --filter @shoehive/website dev",
+    "docs:build": "pnpm --filter @shoehive/website build",
+    "docs:check": "pnpm --filter @shoehive/website check",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm docs:check && pnpm test && pnpm build && pnpm check:package",
     "changeset": "changeset",
     "release": "pnpm build && changeset publish",
     "bench": "esbuild packages/shoehive/bench/latency.ts --bundle --platform=node --format=esm --log-level=warning --outfile=packages/shoehive/bench/.out/latency.mjs && node packages/shoehive/bench/.out/latency.mjs"

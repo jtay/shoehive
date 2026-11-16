@@ -1,0 +1,114 @@
+---
+title: 'Actions, drafts and atomicity'
+description: 'Why an action either applies completely or not at all.'
+sidebar:
+  order: 2
+---
+
+import Snippet from '../../../components/Snippet.astro';
+
+An **Action** is the only way a table's state changes from outside. Shoehive treats each one as
+a transaction: it applies completely or it does not apply at all. This page explains how, and
+what that buys you. The full design is in
+[ADR 0005](/contributing/adr/0005-mutative-drafts/) and the validation order in
+[ADR 0004](/contributing/adr/0004-standard-schema-validation/).
+
+## From socket to state
+
+An `act` message passes a series of gates. Only the last one runs your code.
+
+```txt nocheck
+message ─► size cap ─► rate limit ─► envelope check ─► action lookup ─► input schema
+                                                                             │
+        (all of this runs outside the queue, so floods of bad input cannot block a table)
+                                                                             ▼
+                          serial queue for the table ─► draft ─► run() ─► commit or roll back
+```
+
+1. **Limits and shape.** Oversized messages, rate-limit overflow and malformed envelopes are
+   refused first. See the [security model](/concepts/security-model/).
+2. **Lookup.** The action must exist in the current phase (or at the top level). Otherwise:
+   `ACTION_NOT_ALLOWED`.
+3. **Validation.** The `input` is checked against the action's
+   [Standard Schema](https://standardschema.dev/) (zod, valibot, arktype or anything that
+   implements it). Failure is `INVALID_INPUT` with the schema's issues. Your `run` receives the
+   validator's **output**, so defaults and transforms work, and it is typed from the schema.
+   No `input` schema means the action takes no input.
+4. **The queue.** Valid requests join the table's serial queue. The phase is checked again
+   there, because it may have changed while the request waited.
+
+## The queue: one thing at a time
+
+Each table has one serial queue. Actions, lifecycle hooks (`onSit`, `onStand` and the rest) and
+timer firings all go through it, one entry at a time, in arrival order. There are no locks and
+no races inside game code: when your `run` starts, nothing else is touching this table's state.
+"Simultaneous" play in a [round](/concepts/turns-and-rounds/) still means submissions arrive
+one after another.
+
+An `async` action holds the queue until it finishes. Only await things on `ctx` (such as the
+wallet). Awaiting anything else breaks [determinism](/concepts/determinism-replay-and-persistence/).
+Other tables are never affected.
+
+## The draft
+
+Each entry runs against a **draft** of the committed state, made with
+[Mutative](https://mutative.js.org/). You change it like a normal object. Shoehive keeps the
+real state untouched until your code finishes.
+
+<Snippet
+  file="website/snippets/actions-drafts-and-atomicity/src/game.ts"
+  region="game"
+  title="game.ts"
+/>
+
+Line 3 undoes lines 1 and 2. The proof:
+
+<Snippet file="website/snippets/actions-drafts-and-atomicity/src/game.ts" region="demo" title="" />
+
+`demo()` returns 2 coins and `['apple']`: the failed purchase left no trace, and it did not
+move the revision.
+
+## Commit or roll back
+
+- **Commit:** `run` returns normally. The draft becomes the new, immutable state, the revision
+  goes up by one, and the entry is appended to the log.
+- **Roll back:** `run` calls `reject(code, details?)` or throws. The draft is thrown away. The
+  client gets `ack { ok: false }` with your code (`reject`) or `INTERNAL` (any other error;
+  the cause is logged, and the client message is generic in production). Nothing was applied,
+  nothing was added to the log, and no patches go out.
+
+Rollback covers more than your state. Everything the entry did through `ctx` is part of the
+same transaction: phase changes, turn moves, timers you scheduled, random numbers you drew, and
+events you emitted. `ctx.phase.go('showdown')` in an action that later rejects never happens.
+Wallet `commit`, `release` and `credit` calls wait until the entry has committed and been
+stored.
+
+## Follow-ups in the same entry
+
+Hooks triggered by an action run inside its transaction, on the same draft: the action body,
+then `onExit` of the old phase, then `onEnter` of the new one, or `onEnd` after `ctx.end()`. If
+any of them throws, the whole entry rolls back, including the action that started it.
+
+Work the engine decides to do next becomes a **new entry**, queued after the current one: the
+automatic start when enough seats fill, and closing a round when the last submission arrives.
+So the last answer in a round commits and reaches clients first, and a bug in `onClose` rolls
+back only the close.
+
+## Frozen committed state
+
+Committed state is plain data that is never mutated. In development it is frozen, so touching
+it from `view()`, from a test, or through a draft you kept after `run` returned throws a
+`TypeError` right where the mistake is. In production freezing is off for speed, so test with
+the checks on (`shoehive/testing` always does).
+
+State must be JSON: objects, arrays, strings, finite numbers, booleans and `null`. No `Map`,
+`Set`, `Date`, class instances or `undefined` in arrays. In dev Shoehive checks the state after
+every commit and names the offending path.
+
+## Acknowledgement
+
+The ack for an action is sent after its log entry is durably stored and after the patches for
+that commit. An `ok: true` ack means the change is saved and the client's view already
+includes it. See [Views and sync](/concepts/views-and-sync/).
+
+Related: [testing games](/how-to/testing-games/), [error codes](/reference/error-codes/).

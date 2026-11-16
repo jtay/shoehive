@@ -31,12 +31,14 @@ const devtools =
     ? false
     : { enabled: true, ...(devtoolsToken ? { token: devtoolsToken } : {}) };
 
+// #region server
 const shoehive = createServer({
   games: [blackjack],
   wallet: new MemoryWallet({ startingBalance: 1000 }),
   devtools,
   ...(secret ? { secret } : {}),
 });
+// #endregion server
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',

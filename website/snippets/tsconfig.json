@@ -1,0 +1,20 @@
+{
+  // Snippets shown on the site (<Snippet file="website/snippets/...">) and the inline ```ts
+  // blocks checked by scripts/check-snippets.ts compile against the workspace source of
+  // `shoehive`, with the same strict settings as the examples.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    // Docs read like everyday code: `process.env.PORT` rather than `process.env['PORT']`.
+    "noPropertyAccessFromIndexSignature": false,
+    "types": ["node"],
+    "paths": {
+      "shoehive": ["../../packages/shoehive/src/index.ts"],
+      "shoehive/store/*": ["../../packages/shoehive/src/store/*.ts"],
+      "shoehive/*": ["../../packages/shoehive/src/*/index.ts"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": [".inline"]
+}

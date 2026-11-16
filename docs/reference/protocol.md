@@ -62,7 +62,7 @@ one spec.
 
 Every message is a JSON object with a string field `t` (type).
 
-```ts
+```ts nocheck
 // Client to server
 interface Request {
   t: string; // request type, for example "act"
@@ -106,7 +106,7 @@ client                                   server
 
 ### 4.1 `hello`
 
-```ts
+```ts nocheck
 { t: 'hello', id, v: 1, resume?: string, name?: string, client?: { name: string; version: string } }
 ```
 
@@ -150,7 +150,7 @@ the lobby, and a `table.snapshot` for every table the session had joined.
 - Browsers cannot observe ping frames, so clients may send the application-level `ping` to measure
   round-trip time and the server clock offset (needed to render countdowns from `deadline` values):
 
-```ts
+```ts nocheck
 { t: 'ping', id? }                          // client
 { t: 'pong', id?, now: number }             // server, echoes id
 ```
@@ -177,7 +177,7 @@ the game's `onStand` hook runs and the seats become `empty`. A player may hold s
 | `table.join`    | `table`, `as?: 'player' \| 'spectator'` (default `'player'`)  | none (a `table.snapshot` follows)     | `NOT_FOUND`, `TABLE_ENDED`, `FORBIDDEN`                                                                                                                                                                                       |
 | `table.leave`   | `table`                                                       | none                                  | `NOT_JOINED`                                                                                                                                                                                                                  |
 | `table.sync`    | `table`                                                       | none (a `table.snapshot` follows)     | `NOT_JOINED`                                                                                                                                                                                                                  |
-| `seat.take`     | `table`, `seat?: number` (omit for the first free seat)       | `{ seat: number }`                    | `NOT_JOINED`, `SEAT_TAKEN`, `TABLE_FULL`, `ALREADY_SEATED`, game codes from `canSit`                                                                                                                                          |
+| `seat.take`     | `table`, `seat?: number` (omit for the first free seat)       | `{ seat: number }`                    | `NOT_JOINED`, `SEAT_TAKEN`, `TABLE_FULL`, `ALREADY_SEATED`, game codes from `onSit` (a `reject` there refuses the seat)                                                                                                       |
 | `seat.leave`    | `table`, `seat?: number` (omit for all of the player's seats) | none                                  | `NOT_SEATED`                                                                                                                                                                                                                  |
 | `act`           | `table`, `name`, `input?`, `seat?`, `rev?`                    | `{ rev: number, value?: Json }`       | `NOT_SEATED`, `NOT_STARTED`, `ACTION_NOT_ALLOWED`, `INVALID_INPUT`, `ALREADY_SUBMITTED`, `NOT_PARTICIPANT`, `ROUND_CLOSED`, `STALE_REVISION`, `TABLE_ENDED`, `TABLE_UNAVAILABLE`, `WALLET_UNAVAILABLE`, `TIMEOUT`, game codes |
 | `ping`          | `id?`                                                         | answered by `pong`, not `ack`         |                                                                                                                                                                                                                               |
@@ -253,16 +253,16 @@ are part of game state and reach clients only through `view()`.
 
 ### 6.2 `table.snapshot`
 
-```ts
+```ts nocheck
 { t: 'table.snapshot', table: string, rev: number, doc: TableDocument }
 ```
 
-Sent after `table.join`, after `table.sync`, after a resume, and whenever the server decides a
-patch would be larger than a snapshot. It replaces the client's document entirely.
+Sent after `table.join`, after `table.sync`, after a resume, and to a connection that fell
+behind (backpressure). It replaces the client's document entirely.
 
 ### 6.3 `table.patch`
 
-```ts
+```ts nocheck
 { t: 'table.patch', table: string, from: number, rev: number, ops: JsonPatchOp[] }
 ```
 
@@ -283,7 +283,7 @@ patch would be larger than a snapshot. It replaces the client's document entirel
 
 ### 6.4 `table.event`
 
-```ts
+```ts nocheck
 { t: 'table.event', table: string, rev: number, name: string, payload: unknown }
 ```
 
@@ -294,7 +294,7 @@ never sent to viewers outside it.
 
 ### 6.5 `table.closed`
 
-```ts
+```ts nocheck
 { t: 'table.closed', table: string, reason: 'ended' | 'closed' | 'game-removed' | 'expired' }
 ```
 
@@ -305,7 +305,7 @@ they are closed, so players can see the final result.
 
 Lobby subscribers hold one document, synced the same way:
 
-```ts
+```ts nocheck
 interface LobbyDocument {
   games: Array<{ id: string; name: string; description: string | null; seats: { min: number; max: number } }>;
   tables: Array<{
@@ -350,7 +350,7 @@ and must not reuse a built-in code (a type error at `defineGame`). Built-in code
 | `BAD_REQUEST`          | Malformed message, unknown request type, request before `hello`                                                               |                                     |
 | `UNSUPPORTED_PROTOCOL` | `hello.v` not supported                                                                                                       | `{ supported: number[] }`           |
 | `UNAUTHORIZED`         | Session no longer valid (for example token revoked)                                                                           |                                     |
-| `FORBIDDEN`            | A hook such as `canCreate` or `canJoin` refused                                                                               |                                     |
+| `FORBIDDEN`            | Not allowed for this player, for example `player.rename` by an authenticated player                                           |                                     |
 | `NOT_FOUND`            | Unknown game or table                                                                                                         | `{ kind: 'game' \| 'table' }`       |
 | `INVALID_OPTIONS`      | Table options failed the game's options schema                                                                                | `{ issues: StandardSchemaIssue[] }` |
 | `INVALID_INPUT`        | Action input failed its schema                                                                                                | `{ issues: StandardSchemaIssue[] }` |

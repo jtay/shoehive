@@ -1,0 +1,128 @@
+---
+title: 'Wallets and real-money safety'
+description: 'Hold chips or money with ctx.wallet, and what Shoehive does and does not promise.'
+sidebar:
+  order: 9
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import Snippet from '../../../components/Snippet.astro';
+
+<Aside type="caution" title="Shoehive is not a licensed gaming system">
+
+Shoehive provides bookkeeping primitives. It does not provide regulatory compliance,
+certified RNG, KYC, responsible gambling controls or audited payouts. Operators running
+real-money games are responsible for all of that.
+
+</Aside>
+
+A wallet lets a game hold, spend and pay out chips or money without ever double-charging. You
+give `createServer` a `Wallet`, and game code uses it through `ctx.wallet`. For development,
+`new MemoryWallet({ startingBalance: 1000 })` implements the whole contract in memory. It is
+exported from `shoehive/server` and is never suitable for real money.
+
+## Use it in a game
+
+Amounts are non-negative safe integers in the smallest unit (chips, cents). Never floats.
+
+| `ctx.wallet` call            | When it runs                                                          |
+| ---------------------------- | --------------------------------------------------------------------- |
+| `reserve(seat, amount, key)` | Now, awaited. Resolves `false` if refused (not enough funds).         |
+| `balance(seat)`              | Now, awaited. Available funds, excluding reservations.                |
+| `commit(key)`                | After the entry commits and is stored. A reservation becomes a debit. |
+| `release(key)`               | After the entry commits and is stored. The reservation is cancelled.  |
+| `credit(seat, amount, key)`  | After the entry commits and is stored. Pays the seat's player.        |
+
+So money never moves for a state change that did not happen. If the action rejects, throws or
+times out, the engine releases every key it tried to reserve. A reservation that a committed
+action keeps stays held until a later action commits or releases it, and reservations still
+open when a table closes are released.
+
+<Snippet file="examples/blackjack/src/game.ts" region="betting" title="Reserve a bet" />
+
+Blackjack reserves the bet here, then commits it and credits the payout when the hand settles:
+
+<Snippet file="examples/blackjack/src/game.ts" region="dealer" title="Settle a hand" />
+
+### Keys
+
+Pass a key that is unique within the table and stable for the thing you are paying for, such
+as `bet:12:3` for hand 12, seat 3. The engine prefixes it with the table id. For `reserve` it
+also adds a random id per attempt, so a game can reuse a key after a rolled-back attempt.
+`commit` and `release` take your original key.
+
+`credit` keys are used as given and must be unique for good: a retry of the same payout must
+reuse the key, and a different payout must not. Build it from a counter in state, like the
+hand number above.
+
+Calls time out after `walletTimeoutMs` (5 seconds) and throw `WALLET_UNAVAILABLE`. If your game
+does not catch it, the action rolls back and the client gets that code. Without a wallet,
+`ctx.wallet` throws `WALLET_NOT_CONFIGURED`.
+
+## Implement a wallet against a real ledger
+
+Your database is the source of truth for money. Implement the five `Wallet` methods so that
+**every key is a small state machine**: `reserved`, then exactly one of `committed` or
+`released`.
+
+- Repeating a call with the same arguments does nothing and returns the original result.
+- A conflicting call throws: `commit` after `release`, `release` after `commit`, or `reserve`
+  with a different amount or player.
+- `release` of an unknown key records a tombstone, so a late `reserve` with that key
+  returns `{ ok: false, reason: 'RELEASED' }`.
+- `reserve` refuses with `INSUFFICIENT_FUNDS` or `UNKNOWN_PLAYER` rather than throwing.
+- `credit` is idempotent by key.
+- Do each call in one database transaction with a unique constraint on the key.
+
+<Snippet
+  file="website/snippets/wallets-and-real-money-safety/src/ledger-wallet.ts"
+  region="wallet"
+  title="src/ledger-wallet.ts"
+/>
+
+`Ledger` stands for your database. Your SQL goes inside `transaction`.
+
+## Prove it with the conformance suite
+
+`runWalletConformance` from `shoehive/testing` checks idempotency, conflicts, tombstones and
+concurrent keys. It hands your factory the starting funds for each test.
+
+<Snippet
+  file="website/snippets/wallets-and-real-money-safety/test/ledger-wallet.test.ts"
+  region="conformance"
+  title="test/ledger-wallet.test.ts"
+/>
+
+## Failures after commit and reconciliation
+
+`commit`, `release` and `credit` run after the table state is committed and broadcast. If one
+fails, the server retries it (5 attempts over about 3 seconds). If it still fails, the table is
+**not** rolled back. The server logs an error and emits `wallet:error` with the table, the
+operation and the error. Page someone and reconcile by hand.
+
+<Snippet
+  file="website/snippets/wallets-and-real-money-safety/src/server.ts"
+  region="server"
+  title="src/server.ts"
+/>
+
+Operations that were in flight when the server stopped are kept in snapshots and the log, and
+are sent again after a restart. Idempotent keys make the repeats harmless. To reconcile, keep
+an audit log in your ledger (key, player, amount, state, time).
+
+## Guests are not enough for money
+
+Without an `auth` hook, every connection is a guest, and the guest resume token is a bearer
+token: whoever holds it is that player. The server warns when you configure a wallet without
+`auth` in production. Authenticate with your own accounts, return their stable ids from
+`auth`, and use those ids as the wallet's player ids.
+
+## What you are still responsible for
+
+Shoehive gives you idempotent, commit-tied bookkeeping. Licensing, age and identity checks,
+certified randomness, responsible gambling tools, tax and audited payouts are yours.
+
+## Related
+
+- [Persistence and restart recovery](/how-to/persistence-and-restart-recovery/).
+- [Authentication](/how-to/authentication/).

@@ -1,0 +1,112 @@
+---
+title: 'Tables and seats'
+description: 'How tables run games, and how seats are taken, held and freed.'
+sidebar:
+  order: 1
+---
+
+A **Table** is one running instance of a Game. A **Seat** is a numbered slot at that table.
+Players act as a seat, and game code only ever talks about seats. This page explains how a
+table moves through its life and how people come and go around it. The six nouns are
+introduced in [The six concepts](/start/six-concepts/).
+
+## The table lifecycle
+
+A table has one of three statuses, visible to every client as `meta.status`.
+
+| Status    | Meaning                                                                   |
+| --------- | ------------------------------------------------------------------------- |
+| `waiting` | Created, waiting for enough seats to fill. Only `preStart` actions run.   |
+| `active`  | Started. Actions, turns, rounds and timers run.                           |
+| `ended`   | The game called `ctx.end(result)`. Every later action gets `TABLE_ENDED`. |
+
+```txt nocheck
+create ──► waiting ──(min seats occupied, or ctx.start())──► active ──(ctx.end)──► ended
+                                                                                      │
+                          closed: by an operator, when the game is removed, or when idle ◄┘
+```
+
+An `ended` table is not gone. It stays joinable and read-only so players can look at the final
+view and `meta.result`. A table disappears only when it is **closed**: by an operator
+(`shoehive.tables.close(id)`), because its game was removed, or because it expired. Clients are
+told with `table.closed` and a reason (`ended`, `closed`, `game-removed` or `expired`).
+
+A table that nobody has joined and where every seat is empty is **idle**. After `idleTableMs`
+(default 10 minutes) the server closes it with reason `expired`. This keeps abandoned tables
+from piling up.
+
+## Seats
+
+Seats are numbered from `0`. The game fixes how many: `seats: { min, max }`.
+
+| Seat status | Meaning                                                                   |
+| ----------- | ------------------------------------------------------------------------- |
+| `empty`     | Nobody is sitting here.                                                   |
+| `occupied`  | A player holds the seat and is connected.                                 |
+| `reserved`  | The player disconnected. The seat is held for the reconnect grace period. |
+
+A player takes a seat with `seat.take` (a specific seat, or the first free one). They leave it
+with `seat.leave`. Each change is an entry in the table's log and runs the game's `onSit` or
+`onStand` hook.
+
+### Reserved seats and reconnecting
+
+When a player's last connection to a table drops, their seat becomes `reserved` and the game's
+`onDisconnect` hook runs. Other viewers see `connected: false` on that seat. The grace period is
+`reconnectGraceMs` (default 60 seconds).
+
+- The player comes back in time: the seat returns to `occupied` and `onReconnect` runs.
+- The grace period runs out: `onStand` runs and the seat becomes `empty`.
+
+Opening a second tab while one is already open changes nothing at the table. See
+[Reconnects and sessions](/how-to/reconnects-and-sessions/) for the client side.
+
+### How many seats one player can hold
+
+`seats.perPlayer` is how many seats one player may hold at once. It defaults to `1`. A game
+where one person plays several hands (a blackjack player with two seats) raises it. Taking more
+than the limit is `ALREADY_SEATED`. When a player holds several seats, `act` needs a `seat` to
+say which one is acting.
+
+## Starting a table
+
+By default a table starts by itself as soon as `seats.min` seats are not empty (`autoStart` is
+`true`). Reserved seats count, so a brief disconnect does not stop a game from starting.
+
+Set `autoStart: false` when something else decides. The table then starts when an action marked
+`preStart` calls `ctx.start()` (for example a "ready" button), or when an operator calls
+`shoehive.tables.start(id)`. Before the start, only `preStart` actions run, and anything else
+is rejected with `NOT_STARTED`.
+
+People can sit down after the start too: a seat that opens up mid-game can be taken by someone
+new. A seat that stands up leaves the turn order and the open round. See
+[Turns and rounds](/concepts/turns-and-rounds/).
+
+## Players and spectators
+
+Joining and sitting are separate. `table.join` subscribes a connection to a table, either
+`as: 'player'` (the default) or `as: 'spectator'`. A joined player is not seated until they
+take a seat.
+
+|                    | Player                     | Spectator                      |
+| ------------------ | -------------------------- | ------------------------------ |
+| Can act            | Yes, from a seat they hold | No                             |
+| Receives           | Their own view             | One shared view                |
+| Identified in view | By seat and player id      | Never: no player id, by design |
+
+All spectators share one computed view, so a table with a thousand watchers costs one `view()`
+call and one serialisation per change. See [Views and sync](/concepts/views-and-sync/) and the
+[spectators how-to](/how-to/spectators/).
+
+## The lobby
+
+The lobby is a live list of games and tables. A client sends `lobby.sub` (optionally with a
+filter on games and status) and gets a `lobby.snapshot`, then `lobby.patch` messages as tables
+fill, start and end. It is synced with the same revision and patch scheme as a table.
+
+Each lobby row shows the game, the status, `seats.taken` out of `seats.total`, the number of
+spectators and when the table was created. It never includes game state or server-only
+configuration. Joining a table from the lobby is just `table.join`.
+
+Next: [Actions, drafts and atomicity](/concepts/actions-drafts-and-atomicity/). The wire details
+are in the [protocol reference](/reference/protocol/).

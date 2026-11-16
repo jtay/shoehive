@@ -1,0 +1,94 @@
+---
+title: Shoehive
+description: Build multiplayer card, casino, board and party games in TypeScript. You write the rules; Shoehive handles seats, sync, secrets, reconnects and persistence.
+template: splash
+editUrl: false
+hero:
+  title: Multiplayer games, minus the plumbing
+  tagline: Build a card, casino, board or party game in an afternoon. You write the rules in TypeScript; Shoehive handles seats, sync, secrets, reconnects and persistence.
+  actions:
+    - text: Quick start
+      link: /start/quick-start/
+      icon: right-arrow
+    - text: Why Shoehive
+      link: /start/why-shoehive/
+      variant: minimal
+    - text: GitHub
+      link: https://github.com/jtay/shoehive
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import Snippet from '../../components/Snippet.astro';
+
+## Your rules, as code
+
+These are the rules of tic-tac-toe, from the
+[example in the repository](https://github.com/jtay/shoehive/tree/main/examples/tic-tac-toe)
+(`winnerOf` is a plain function in the same file). Input is checked against the schema,
+out-of-turn moves are rejected, and a rejected action changes nothing.
+
+<Snippet file="examples/tic-tac-toe/src/game.ts" region="game" />
+
+Host it, and any number of tables can be played at once:
+
+```ts
+import type { AnyGame } from 'shoehive';
+declare const ticTacToe: AnyGame;
+// ---cut---
+import { createServer } from 'shoehive/server';
+
+await createServer({ games: [ticTacToe] }).listen({ port: 3000 });
+```
+
+## What you get
+
+<CardGrid>
+  <Card title="Typed end to end" icon="seti:typescript">
+    Action inputs and views are inferred from your game, all the way to `useTable()` in React. No
+    code generation.
+  </Card>
+  <Card title="Hidden information" icon="eye">
+    Clients only ever receive what your `view()` lets each seat see. Hole cards stay hidden.
+  </Card>
+  <Card title="Turns and rounds" icon="list-format">
+    Turn-based games, and round-based play where everyone acts at once against a timer.
+  </Card>
+  <Card title="Reconnects and restarts" icon="random">
+    Guest sessions with resume tokens. Tables survive a server restart with SQLite, Postgres or
+    Redis.
+  </Card>
+  <Card title="Deterministic" icon="seti:clock">
+    Seeded randomness and a recorded action log power tests, replays and time travel in the
+    devtools.
+  </Card>
+  <Card title="Test without sockets" icon="approve-check">
+    `createTestTable(game)` runs your rules in a unit test with a fake clock.
+  </Card>
+</CardGrid>
+
+## Where to next
+
+<CardGrid>
+  <LinkCard
+    title="Quick start"
+    description="From npm create shoehive to a game you can play in two browsers."
+    href="/start/quick-start/"
+  />
+  <LinkCard
+    title="The six concepts"
+    description="Game, Table, Seat, Player, Action and View: everything else is plumbing."
+    href="/start/six-concepts/"
+  />
+  <LinkCard
+    title="Tutorial: tic-tac-toe in 20 minutes"
+    description="Write the game, test it and give it a React UI."
+    href="/tutorials/tic-tac-toe/"
+  />
+  <LinkCard
+    title="API reference"
+    description="Every export of every subpath, generated from the source."
+    href="/reference/api/shoehive/"
+  />
+</CardGrid>

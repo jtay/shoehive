@@ -1,0 +1,97 @@
+---
+title: 'Phases'
+description: 'Split a game into phases with their own actions, turns and hooks.'
+sidebar:
+  order: 6
+---
+
+import Snippet from '../../../components/Snippet.astro';
+
+A phase is a stage of the game with its own rules: what actions exist, whether play is by
+turns or rounds, and what runs on the way in and out. Betting, then playing, then the
+dealer, then settling is four phases. A game that is one continuous stage (tic-tac-toe)
+needs none. The model is in [ADR 0001](/contributing/adr/0001-game-model-state-machine/).
+
+The examples are one small game, `website/snippets/phases/`.
+
+## Declare phases
+
+`phases` is an object keyed by phase name. The **first one declared is the initial phase**,
+entered when the table starts. Each phase can have `actions`, `turns` or `rounds` (not
+both), `onEnter` and `onExit`.
+
+<Snippet file="website/snippets/phases/src/game.ts" region="enter" title="game.ts" />
+
+A game with phases sets `turns` and `rounds` inside each phase, never at the top level.
+Top-level `actions` are available in every phase, and a phase's own `actions` only there.
+Calling a phase action in the wrong phase rejects with `ACTION_NOT_ALLOWED`, with the
+current phase in `details.phase`. Internal actions work the same way, so a timer set in one
+phase whose action does not exist in the next does nothing when it fires.
+
+## Move between phases
+
+`ctx.phase.go('duel')` switches phase. Call it from an action, a hook, or `onClose`. Three
+things to know:
+
+- It takes effect when your function returns, not at the call. `ctx.phase.name` is still the
+  old phase for the rest of the function, so finish your state changes first.
+- It is part of the transaction. If the action later rejects or throws, the move never
+  happens.
+- On the way, the engine runs the old phase's `onExit`, cancels the turn clock and round
+  timer, then enters the new phase. Your own timers are not cancelled: cancel them in
+  `onExit`.
+
+Entering a phase sets up its model: a turns phase computes the order and picks the first
+seat, a rounds phase opens round 1. Then `onEnter` runs.
+
+<Snippet file="website/snippets/phases/src/game.ts" region="duel" title="" />
+
+## The first turn and `onEnter`
+
+The first seat is chosen **before** `onEnter` runs. So `first` should read state that was
+set up before `ctx.phase.go()`, such as the button in poker. If `onEnter` then makes that
+seat skippable (a dealt blackjack, a die of 1 above), the engine moves the turn on to the
+next eligible seat once `onEnter` has finished, and it is still turn 1. `skip` is checked
+again at every `ctx.turn.next()`.
+
+`onEnter` can itself call `ctx.phase.go()`, for example when no seat has anything left to
+do. Blackjack's deal does this when every hand is a natural.
+
+## Phase names are typed
+
+TypeScript reads the phase names from the keys of `phases`, so a typo in `go` is an error
+at compile time:
+
+```ts
+import { defineGame } from 'shoehive';
+
+defineGame({
+  id: 'typed',
+  seats: { min: 1, max: 1 },
+  setup: () => ({}),
+  phases: {
+    play: {
+      onEnter: ({ ctx }) => {
+        // @ts-expect-error 'finnish' is not a phase of this game
+        ctx.phase.go('finnish');
+        ctx.phase.go('finish');
+      },
+    },
+    finish: {},
+  },
+});
+```
+
+Without `phases`, any string type-checks and `ctx.phase.go` fails at runtime with an
+`unknown phase` error. `GamePhases<typeof game>` gives you the union of names for your own
+code. On clients `meta.phase` is a plain `string | null`.
+
+## Test phase changes
+
+Assert on `t.meta.phase` after acting, and on the rejection for actions from the wrong
+phase.
+
+<Snippet file="website/snippets/phases/test/game.test.ts" region="test" title="" />
+
+Related: [Turns vs rounds](/how-to/turns-vs-rounds/) and
+[Timers and turn clocks](/how-to/timers-and-turn-clocks/).

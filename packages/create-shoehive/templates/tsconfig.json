@@ -1,0 +1,13 @@
+{
+  // In-repo only: type-checks and lints the templates against the shoehive source, as the
+  // examples do. Each template ships its own _tsconfig.json, which create-shoehive writes
+  // to the generated project as tsconfig.json (it uses the published package instead).
+  "extends": "./tic-tac-toe/_tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "shoehive": ["../../shoehive/src/index.ts"],
+      "shoehive/*": ["../../shoehive/src/*/index.ts"]
+    }
+  },
+  "include": ["*/src", "*/test", "*/web", "*/vite.config.ts"]
+}

@@ -8,6 +8,9 @@ Its security model is ADR 0011.
 ## Turning it on
 
 ```ts
+import type { AnyGame } from 'shoehive';
+declare const games: AnyGame[];
+// ---cut---
 import { createServer } from 'shoehive/server';
 
 const shoehive = createServer({ games, devtools: true });
@@ -45,6 +48,12 @@ every other request to it. If your framework owns dispatch, or you add `request`
 after `attach()`, route explicitly:
 
 ```ts
+import type { IncomingMessage, Server, ServerResponse } from 'node:http';
+import type { ShoehiveServer } from 'shoehive/server';
+declare const http: Server;
+declare const shoehive: ShoehiveServer;
+declare function app(req: IncomingMessage, res: ServerResponse): void;
+// ---cut---
 http.on('request', (req, res) => {
   if (shoehive.devtools?.handleRequest(req, res)) return;
   app(req, res);
@@ -56,10 +65,15 @@ http.on('request', (req, res) => {
 Only for a short, deliberate debugging session:
 
 ```ts
-createServer({
-  games,
-  devtools: { enabled: true, allowInProduction: true, token: process.env.DEVTOOLS_TOKEN },
-});
+import type { AnyGame } from 'shoehive';
+declare const games: AnyGame[];
+// ---cut---
+import { createServer } from 'shoehive/server';
+
+const token = process.env.DEVTOOLS_TOKEN;
+if (!token) throw new Error('Set DEVTOOLS_TOKEN (32 characters or more)');
+
+createServer({ games, devtools: { enabled: true, allowInProduction: true, token } });
 ```
 
 Without `allowInProduction` and a token of at least 32 characters, `createServer` throws.
@@ -101,7 +115,7 @@ treat it as a secret.
 Replay it in a test with `replayFixture` from `shoehive/testing`. It checks the game, its
 version and the exported state, and returns a live test table at the last entry:
 
-```ts
+```ts nocheck
 import { expect, it } from 'vitest';
 import { replayFixture, type Fixture } from 'shoehive/testing';
 import { holdem } from '../src/game';

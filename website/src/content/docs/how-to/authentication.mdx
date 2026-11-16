@@ -1,0 +1,146 @@
+---
+title: 'Authentication (guest and custom)'
+description: 'Use guest identities with resume tokens, or plug your own login into the auth hook.'
+sidebar:
+  order: 1
+---
+
+Shoehive works with no login at all: every visitor becomes a guest, and a signed **resume
+token** brings them back as the same guest. When you have real accounts, an `auth` hook
+replaces guest mode with your own identity. This page covers both.
+
+## Guests (the default)
+
+With no `auth` option, the first `hello` on a connection creates a guest: an id such as
+`g_...` (128 random bits) and a name such as `Guest k3x9`. The server answers with a resume
+token. The client stores it (in `localStorage` in a browser, in memory in Node) and sends it
+on the next connection, so the same guest comes back. Every connection gets a fresh token with
+a new expiry, so a player who keeps coming back never expires.
+
+To pick the guest's first name, pass `name` to the client. See
+[Reconnects and sessions](/how-to/reconnects-and-sessions/) for storage and renaming.
+
+```ts
+import { createClient } from 'shoehive/client';
+
+const client = createClient({ url: 'ws://localhost:3000/shoehive', name: 'Ada' });
+```
+
+A missing, forged or expired token is not an error: the server simply creates a new guest, and
+the client sees a different `player.id` in `welcome`. Tokens expire after `resumeTokenTtlMs`
+(7 days by default).
+
+### The secret
+
+Resume tokens are signed with HMAC-SHA256. Set the key with the `secret` option or the
+`SHOEHIVE_SECRET` environment variable. A key must be at least 32 bytes long, or
+`createServer` throws.
+
+```ts
+import type { AnyGame } from 'shoehive';
+declare const games: AnyGame[];
+// ---cut---
+import { createServer } from 'shoehive/server';
+
+const shoehive = createServer({
+  games,
+  // The first secret signs new tokens. Every secret verifies, so to rotate a key,
+  // put the new one first and keep the old one until its tokens have expired.
+  secret: [process.env.SHOEHIVE_SECRET_NEW!, process.env.SHOEHIVE_SECRET_OLD!],
+});
+```
+
+- **In production** (`NODE_ENV=production`, or `dev: false`) a guest server with no secret
+  refuses to start.
+- **In development** the server makes up a random secret and logs a warning. Tokens then stop
+  working after a restart, so set `SHOEHIVE_SECRET` when you want to test restart recovery.
+- There is no way to revoke one token. Replacing the secret revokes all of them.
+
+### Origins
+
+`origins` is an allowlist for the HTTP `Origin` header of the WebSocket upgrade. A request
+from any other origin, or with no `Origin` header, is refused with HTTP 403. The default is to
+accept any origin. Set it in production so other websites cannot open sockets to your server
+from a visitor's browser.
+
+```ts
+import type { AnyGame } from 'shoehive';
+declare const games: AnyGame[];
+// ---cut---
+import { createServer } from 'shoehive/server';
+
+const shoehive = createServer({ games, origins: ['https://play.example.com'] });
+```
+
+### Guests and money
+
+A guest token is a bearer credential: whoever copies it from `localStorage` becomes that guest
+until it expires. That is fine for a card game with friends and wrong for real money. If you
+configure a `wallet` on a production server without an `auth` hook, Shoehive logs a warning at
+startup. Use custom auth for anything with a balance.
+
+## Your own login
+
+The `auth` hook runs once for every WebSocket upgrade, with the HTTP request (headers, cookies,
+URL). Return a `PlayerIdentity` to let the connection in, or `null` to answer HTTP 401. If the
+hook throws, the server logs the error and answers HTTP 500.
+
+```ts
+import type { AnyGame } from 'shoehive';
+declare const games: AnyGame[];
+declare function findAccount(
+  sessionCookie: string | undefined,
+): Promise<{ id: string; displayName: string; plan: string } | null>;
+// ---cut---
+import { createServer } from 'shoehive/server';
+
+const shoehive = createServer({
+  games,
+  auth: async (req) => {
+    const cookies = String(req.headers.cookie ?? '');
+    const session = /(?:^|; )session=([^;]+)/.exec(cookies)?.[1];
+    const account = await findAccount(session);
+    if (!account) return null; // HTTP 401, no socket is opened
+    return {
+      id: account.id,
+      name: account.displayName,
+      metadata: { plan: account.plan },
+    };
+  },
+});
+```
+
+What to know:
+
+- **`id` is the player.** It must be stable and unique: two connections that return the same
+  `id` are the same player, in several tabs, and they share seats.
+- **`name`** is shown to everyone at the table. It comes from your hook every time, so
+  `client.rename()` is refused with `FORBIDDEN` for authenticated players.
+- **`metadata`** is any JSON. Shoehive keeps it with the stored session record (see
+  [Stores](/reference/stores/)). It is not sent to clients and game code does not see it.
+- **Resume tokens are ignored.** The identity always comes from `auth`, and the session is found
+  by `id`, so a reconnect restores the same seats. The client still stores and sends the token.
+- Browsers cannot set headers on a WebSocket upgrade. Use a cookie (sent automatically to the
+  same site), or a short-lived ticket in the URL that your app fetches first:
+
+```ts
+import { createClient } from 'shoehive/client';
+
+declare const ticket: string;
+const client = createClient({
+  url: `wss://play.example.com/shoehive?ticket=${encodeURIComponent(ticket)}`,
+});
+```
+
+On the server, read it with `new URL(req.url ?? '/', 'http://localhost').searchParams.get('ticket')`.
+Make a ticket valid for seconds and for one use, because URLs end up in logs. Do not put a
+long-lived credential in the URL.
+
+A client that gets the close code `4401` was unauthorized or revoked: it clears its stored
+token and reconnects, and your hook then decides again.
+
+## Related
+
+- [Reconnects and sessions](/how-to/reconnects-and-sessions/)
+- [Wire protocol](/reference/protocol/), section 2 (transport) and 4 (`hello`)
+- [ADR 0010: guest identity and resume tokens](/contributing/adr/0010-guest-identity-resume-tokens/)

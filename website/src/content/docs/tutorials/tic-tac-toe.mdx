@@ -1,0 +1,266 @@
+---
+title: 'Tic-tac-toe in 20 minutes'
+description: 'Build a complete two-player game from an empty file: the rules, tests and a React UI.'
+sidebar:
+  order: 1
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import Snippet from '../../../components/Snippet.astro';
+import WhatYoullBuild from '../../../components/WhatYoullBuild.astro';
+
+<WhatYoullBuild time="20 minutes" example="tic-tac-toe">
+
+- A two-player game with turns, input validation and win detection
+- Tests that play the game without a server
+- A React board that two browsers can play on
+
+</WhatYoullBuild>
+
+You need [Node.js](https://nodejs.org/) 22 or newer. If you only want to see the game run, the
+[quick start](/start/quick-start/) takes five minutes. Here you read the project from the
+rules outward: the game, its tests, the server, then the UI.
+
+## Create the project
+
+<Tabs syncKey="pkg">
+<TabItem label="npm">
+
+```sh
+npm create shoehive@latest my-game
+```
+
+</TabItem>
+<TabItem label="pnpm">
+
+```sh
+pnpm create shoehive my-game
+```
+
+</TabItem>
+</Tabs>
+
+The scaffolder copies the tic-tac-toe template into `my-game/` and installs it. Everything
+below is that code, so you can read along or delete `src/game.ts` and type it back in.
+
+## 1. The game
+
+A game is one `defineGame` call. It says who plays, what the starting state is, whose turn it
+is, and what players can do. Start with the shape and one action:
+
+```ts
+import { defineGame, reject } from 'shoehive';
+import { z } from 'zod';
+
+type Mark = 'X' | 'O';
+
+export const ticTacToe = defineGame({
+  id: 'tic-tac-toe',
+  name: 'Tic Tac Toe',
+  seats: { min: 2, max: 2 },
+
+  setup: () => ({
+    board: Array<Mark | null>(9).fill(null),
+    winner: null as Mark | 'draw' | null,
+  }),
+
+  turns: { order: 'round-robin' },
+
+  actions: {
+    place: {
+      input: z.object({ cell: z.number().int().min(0).max(8) }),
+      run({ state, seat, input, ctx }) {
+        if (ctx.turn.seat !== seat) reject('NOT_YOUR_TURN');
+        if (state.board[input.cell]) reject('CELL_TAKEN');
+        state.board[input.cell] = seat === 0 ? 'X' : 'O';
+        ctx.turn.next();
+      },
+    },
+  },
+});
+```
+
+- **Seats.** The table holds two seats, and the game starts when both are taken.
+- **State.** `setup` returns the starting state: nine cells and a winner. State must be plain
+  JSON, so there are no classes, `Map`s or `Date`s.
+- **Turns.** With `turns`, the engine tracks whose turn it is in `ctx.turn`. `round-robin`
+  goes through the seats in order, starting with seat 0.
+- **Input.** `input` is a [zod](https://zod.dev) schema. Anything that does not match, such
+  as `{ cell: 9 }`, is refused with `INVALID_INPUT` before your code runs.
+- **Reject.** `run` changes `state` directly. `reject('CELL_TAKEN')` stops the action and
+  throws away every change it made, and the player gets that error code. Game codes are
+  `SCREAMING_SNAKE_CASE` and may not reuse a built-in code.
+
+The engine does not decide for you that only the seat on turn may act. You check it, which is
+why the first line of `run` rejects `NOT_YOUR_TURN`.
+
+### Win detection
+
+Add a plain function that looks at the board. It is ordinary TypeScript, so you can test it
+on its own:
+
+<Snippet
+  file="packages/create-shoehive/templates/tic-tac-toe/src/game.ts"
+  region="winner"
+  title="src/game.ts"
+/>
+
+Now finish `place`. After the mark is set, compute the winner. If there is one, `ctx.end`
+closes the table with a result. Otherwise the turn moves on:
+
+<Snippet
+  file="packages/create-shoehive/templates/tic-tac-toe/src/game.ts"
+  region="place"
+  title="src/game.ts"
+  mark="ctx.end"
+/>
+
+After `ctx.end`, the table is `ended` and later actions fail with `TABLE_ENDED`. The result
+reaches clients as `meta.result`. See [the six concepts](/start/six-concepts/) for how state,
+actions and turns fit together.
+
+## 2. Test the rules
+
+`shoehive/testing` runs a table in memory, with no server or sockets.
+`createTestTable` seats the players, `t.act(seat, name, input)` plays as one of them, and
+`t.state` and `t.meta` are what the server would hold.
+
+<Snippet
+  file="packages/create-shoehive/templates/tic-tac-toe/test/game.test.ts"
+  region="out-of-turn"
+  title="test/game.test.ts"
+/>
+
+A rejected action is a promise that rejects with the error, so `toMatchObject` can check its
+`code`. `source: 'game'` tells it apart from errors Shoehive raises itself.
+
+<Snippet
+  file="packages/create-shoehive/templates/tic-tac-toe/test/game.test.ts"
+  region="win"
+  title="test/game.test.ts"
+  mark="verifyReplay"
+/>
+
+`verifyReplay()` is worth ending every test with. It replays the table's action log from
+scratch and fails if the result differs from the live state. That catches a game that reads
+the clock or `Math.random()` instead of `ctx.now()` and `ctx.random`, which would break
+reconnects and history. The template's file has three more tests, for input validation, a
+taken cell and the game not starting with one player.
+
+```sh
+npm test
+```
+
+## 3. The server
+
+<Snippet
+  file="packages/create-shoehive/templates/tic-tac-toe/src/server.ts"
+  region="create-server"
+  title="src/server.ts"
+/>
+
+`createServer` takes the list of games it can host. The `secret` signs the resume tokens that
+let a guest keep their seat after a reload, and in production the server refuses to start
+without `SHOEHIVE_SECRET`. The `devtools` option turns on the inspector, in development only.
+
+The rest of `src/server.ts` is a small static file server for the built web app. The one line
+that matters is this one, which adds the Shoehive WebSocket endpoint (at `/shoehive`) and the
+inspector to that HTTP server:
+
+<Snippet
+  file="packages/create-shoehive/templates/tic-tac-toe/src/server.ts"
+  region="attach"
+  title="src/server.ts"
+/>
+
+By default tables live in memory. See [stores](/reference/stores/) when you need them to
+survive a restart.
+
+## 4. The React UI
+
+The browser never gets the game's rules, only its types. Everything it knows about a table
+comes from the server as a view, which for this game is the whole state.
+
+### Connect
+
+<Snippet file="packages/create-shoehive/templates/tic-tac-toe/web/main.tsx" title="web/main.tsx" />
+
+`ShoehiveProvider` creates one client for the page and connects it. Each browser becomes a
+guest player, remembered across reloads. In the app, `useConnection()` gives the connection
+status and who you are:
+
+<Snippet
+  file="packages/create-shoehive/templates/tic-tac-toe/web/App.tsx"
+  region="connection"
+  title="web/App.tsx"
+/>
+
+### The lobby
+
+<Snippet
+  file="packages/create-shoehive/templates/tic-tac-toe/web/App.tsx"
+  region="lobby"
+  title="web/App.tsx"
+/>
+
+`useLobby()` is a live list of open tables, `null` until it loads. `createTable` makes a new
+one and returns its id, and the app routes to it with the URL hash. Passing
+`useClient<[TicTacToe]>()` the game type (`typeof ticTacToe`, imported as a type only) is what
+makes `createTable` and `act` check their arguments against your game.
+
+### The table
+
+<Snippet
+  file="packages/create-shoehive/templates/tic-tac-toe/web/App.tsx"
+  region="use-table"
+  title="web/App.tsx"
+/>
+
+`useTable` joins the table and keeps it current. `view` is the game state, typed from your
+game. `meta` has the status and whose turn it is, `seats` and `mySeat` say who sits where, and
+`act` and `sit` send actions. They never throw: a failure lands in `actionError`, and
+`pending` counts actions still waiting for the server. From those the component works out what
+to show:
+
+<Snippet
+  file="packages/create-shoehive/templates/tic-tac-toe/web/App.tsx"
+  region="derived"
+  title="web/App.tsx"
+/>
+
+The board is a button per cell. It is disabled unless it is your turn, the cell is empty and
+nothing is in flight, and clicking sends the `place` action:
+
+<Snippet
+  file="packages/create-shoehive/templates/tic-tac-toe/web/App.tsx"
+  region="board"
+  title="web/App.tsx"
+/>
+
+The disabled button is a convenience, not the rule. A modified client can still send a move
+out of turn, and the server rejects it, which the app shows from `actionError` using the
+error codes you wrote in the game.
+
+## 5. Play it
+
+```sh
+npm run dev
+```
+
+This starts the Vite dev server and the game server together. Open http://localhost:5173 in
+two windows, one of them private, so that each is a different guest. Create a game in one,
+take a seat, then open the same address in the other and take the second seat. Play to a win.
+Try clicking out of turn, and reload a window mid-game: you keep your seat.
+
+## 6. Look inside
+
+The game server printed an inspector link when it started (`Devtools inspector: ...`). Open
+it while a game is running. You can see the table's state, each seat's view next to the
+spectator's, and the action log, including the moves the game rejected. See
+[devtools](/reference/devtools/) for what else it does.
+
+## Where next
+
+- [The six concepts](/start/six-concepts/): the ideas behind what you just built.
+- The `blank` template: `npm create shoehive@latest my-game -- --template blank`.
+- [Devtools](/reference/devtools/) and [stores](/reference/stores/), from the reference.

@@ -1,0 +1,68 @@
+---
+title: Why Shoehive
+description: What Shoehive does for you, who it is for, and when to pick something else.
+---
+
+Writing a multiplayer game means writing two programs. One is the game: its rules, its state,
+whose turn it is. The other is everything around it: seats, connections, validation, keeping
+every screen in sync, hiding what players must not see, reconnecting a dropped phone, and
+surviving a server restart. The second program is usually bigger than the first, and it is
+where the bugs live.
+
+Shoehive is that second program, written once. You describe your game; Shoehive hosts it.
+
+## A game is a state machine
+
+In Shoehive a game is a typed, deterministic state machine. You write one `defineGame` call
+with:
+
+- `setup`: the starting state.
+- `actions`: the named, validated moves a seat can make. They are the only way the state
+  changes from outside.
+- `view`: what each seat (and each spectator) is allowed to see.
+
+Shoehive does the rest: the lobby, tables, seats, sessions, turn order, timers, syncing views
+to clients as small patches, and the test harness. Types flow from your game definition to the
+client and the React hooks, so `table.act('place', { cell: 4 })` is checked by the compiler.
+
+## What you get
+
+- **Hidden information by construction.** Clients only receive `view()` output, never the raw
+  state. A poker game cannot leak a hole card by accident.
+- **Atomic actions.** An action runs on a draft of the state. If it throws or calls
+  `reject()`, nothing changes.
+- **Turns and rounds.** Turn-based play, and rounds where everyone acts at once against a
+  timer, such as a quiz.
+- **Reconnects and restarts.** Players reconnect into their seats with a resume token. Tables
+  are stored as a snapshot plus an action log, so they survive a restart (memory, SQLite,
+  Postgres or Redis).
+- **Determinism.** Randomness is seeded and time is recorded, so any table replays exactly.
+  That powers tests, restart recovery and time travel in the devtools.
+- **Tests without sockets.** `createTestTable` from `shoehive/testing` runs your rules in a
+  unit test with a fake clock.
+- **Optional extras.** A card toolkit (`shoehive/cards`) and a wallet interface with ledger
+  semantics for games with chips.
+
+## Who it is for
+
+Shoehive is for TypeScript developers building games where players take turns or act in
+rounds: card games, casino tables, board games and party games. It ships four examples that
+cover those families: tic-tac-toe, a quiz, blackjack and Texas Hold'em.
+
+## How it compares
+
+|                    | boardgame.io  | Colyseus                | Shoehive                                    |
+| ------------------ | ------------- | ----------------------- | ------------------------------------------- |
+| Model              | moves, phases | rooms with schema state | tables with seats, actions, views and turns |
+| Hidden information | `playerView`  | filters                 | per-seat and spectator `view()`             |
+| Money              | none          | none                    | optional wallet with ledger semantics       |
+| Cards              | none          | none                    | seeded decks, shoes, hands, visibility      |
+| End-to-end types   | partial       | code generation         | inferred from `defineGame`                  |
+
+## When to pick something else
+
+Shoehive has no fixed tick loop. Physics, continuous movement and twitch games are out of
+scope, and so are MMO scale and skill-based matchmaking. Version 1 runs on a single Node
+process.
+
+Ready? Go to the [quick start](/start/quick-start/).

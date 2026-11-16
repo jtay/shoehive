@@ -54,6 +54,7 @@ import { z } from 'zod';
 
 export const NEXT_HAND_MS = 5_000;
 
+// #region options
 const optionsSchema = z
   .object({
     smallBlind: z.number().int().positive().default(5),
@@ -71,9 +72,11 @@ const optionsSchema = z
   });
 
 export type HoldemOptions = z.output<typeof optionsSchema>;
+// #endregion options
 export type Street = 'preflop' | 'flop' | 'turn' | 'river';
 export type HoldemPhase = 'waiting' | Street | 'showdown';
 
+// #region seat
 export interface SeatState {
   stack: number;
   hole: Card[];
@@ -89,6 +92,7 @@ export interface SeatState {
   /** Hole cards revealed at showdown. */
   shown: boolean;
 }
+// #endregion seat
 
 export interface PotResult {
   amount: number;
@@ -183,6 +187,7 @@ function dealable(state: HoldemState, ctx: Ctx): number[] {
 // -------------------------------------------------------------------------------------
 // Money
 
+// #region buyin
 async function buyIn(state: HoldemState, seat: number, ctx: Ctx): Promise<boolean> {
   const { buyIn: amount } = ctx.options;
   state.ledger += 1;
@@ -194,6 +199,7 @@ async function buyIn(state: HoldemState, seat: number, ctx: Ctx): Promise<boolea
   }
   return ok;
 }
+// #endregion buyin
 
 /** Moves `amount` (capped at the stack) from the seat's stack into its bet. */
 function put(p: SeatState, amount: number): number {
@@ -231,6 +237,7 @@ function startHand(state: HoldemState, ctx: Ctx): boolean {
   state.currentBet = bigBlind;
   state.lastRaise = bigBlind;
 
+  // #region deal
   state.deck = ctx.random.shuffle(standardDeck());
   const from = dealt.indexOf(state.smallBlind);
   for (let round = 0; round < 2; round++) {
@@ -238,6 +245,7 @@ function startHand(state: HoldemState, ctx: Ctx): boolean {
       state.seats[dealt[(from + i) % dealt.length]!]!.hole.push(...draw(state.deck, 1));
     }
   }
+  // #endregion deal
   ctx.emit('handStart', {
     hand: state.hand,
     button: state.button,
@@ -283,6 +291,7 @@ function advance(state: HoldemState, ctx: Ctx, seat: number): void {
   else ctx.turn.set(nextToAct(state, seat)!);
 }
 
+// #region settle
 function settle(state: HoldemState, ctx: Ctx): void {
   const contenders = state.seats.flatMap((p, seat) => (live(p) ? [seat] : []));
   const uncontested = contenders.length === 1;
@@ -320,6 +329,7 @@ function settle(state: HoldemState, ctx: Ctx): void {
   ctx.emit('handEnd', state.last as unknown as Json);
   ctx.timers.after('nextHand', NEXT_HAND_MS, 'nextHand', null, { visible: true });
 }
+// #endregion settle
 
 // -------------------------------------------------------------------------------------
 // Betting actions (shared by the four street phases)
@@ -335,6 +345,7 @@ function mayRaise(state: HoldemState, seat: number): boolean {
   return !p.acted && state.seats.some((o, s) => s !== seat && canAct(o));
 }
 
+// #region raise
 function raiseTo(state: HoldemState, seat: number, amount: number, ctx: Ctx): void {
   const p = myTurn(state, seat, ctx);
   const max = p.bet + p.stack;
@@ -356,6 +367,7 @@ function raiseTo(state: HoldemState, seat: number, amount: number, ctx: Ctx): vo
   ctx.emit('action', { seat, action: p.stack === 0 ? 'allIn' : 'raise', to: amount });
   advance(state, ctx, seat);
 }
+// #endregion raise
 
 const amountInput = z.object({ amount: z.number().int().positive() });
 
@@ -428,6 +440,7 @@ const bettingActions = {
   },
 };
 
+// #region turns
 /**
  * Turns for a betting street: the first seat after `from` that has to act starts. When
  * nobody has to act, `onEnter` ends the street at once, so the start does not matter.
@@ -443,6 +456,7 @@ function streetTurns(
     onTimeout: 'timeout',
   };
 }
+// #endregion turns
 
 /** `onEnter` of a betting street: deals its cards, or runs it out when nobody can bet. */
 function enterStreet(state: HoldemState, ctx: Ctx, cards: number): void {
@@ -482,6 +496,7 @@ export const holdem = defineGame({
     if (ctx.phase.name === 'waiting') startHand(state, ctx);
   },
 
+  // #region stand
   onStand: ({ state, seat, ctx }) => {
     const p = state.seats[seat!]!;
     const wasLive = isBetting(ctx) && live(p);
@@ -506,6 +521,7 @@ export const holdem = defineGame({
       ctx.turn.set(nextToAct(state, seat!)!);
     }
   },
+  // #endregion stand
 
   actions: {
     /** Buys in again with an empty stack (also after a refused buy-in at the seat). */
@@ -530,6 +546,7 @@ export const holdem = defineGame({
         startHand(state, ctx);
       },
     },
+    // #region phases
     preflop: {
       turns: streetTurns((state) => state.bigBlind),
       onEnter: ({ state, ctx }) => {
@@ -544,6 +561,7 @@ export const holdem = defineGame({
       },
       actions: bettingActions,
     },
+    // #endregion phases
     turn: {
       turns: streetTurns((state) => state.button),
       onEnter: ({ state, ctx }) => {
@@ -573,6 +591,7 @@ export const holdem = defineGame({
     },
   },
 
+  // #region view
   view: ({ state, viewer }) => {
     // Own cards always; other hands only once shown at showdown (spectators hold no seat).
     const holes: VisibleCard[][] = seatView(
@@ -600,4 +619,5 @@ export const holdem = defineGame({
       last: state.last,
     };
   },
+  // #endregion view
 });

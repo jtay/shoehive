@@ -31,7 +31,9 @@ const devtools =
     ? false
     : { enabled: true, ...(devtoolsToken ? { token: devtoolsToken } : {}) };
 
+// #region create-server
 const shoehive = createServer({ games: [ticTacToe], devtools, ...(secret ? { secret } : {}) });
+// #endregion create-server
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -100,7 +102,9 @@ const http = createHttpServer((req, res) => {
   });
 });
 
+// #region attach
 await shoehive.attach(http);
+// #endregion attach
 http.listen(PORT, () => {
   console.log(`[tic-tac-toe] http://localhost:${String(PORT)} (WebSocket at /shoehive)`);
 });

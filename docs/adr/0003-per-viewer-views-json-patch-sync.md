@@ -85,6 +85,15 @@ connection tracks its own last acknowledged rev, so a lagging tab resyncs alone.
 Lobby sync (`lobby.snapshot` / `lobby.patch`) uses the same diff and `from` / `rev`
 scheme with one lobby-wide rev.
 
+### Status in v1 (Phase 7 review)
+
+Rule 10's `secret` helper, the dev warning and the leak-assertion helper were not built.
+v1 covers the same ground with `shoehive/cards` view helpers (`seatView`, `faceDown`,
+`revealTo`, `hideCard`) and with a per-game leak invariant in the property tests (see the
+blackjack check in `packages/shoehive/test/properties/invariants.test.ts`, and the
+Hold'em random-play test). A player may hold more than one seat (`seats.perPlayer`,
+default 1); views then show all of that player's seats.
+
 ## Consequences
 
 ### Positive

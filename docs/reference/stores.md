@@ -24,6 +24,9 @@ written its log entry. How durable that write is depends on the adapter's settin
 ## SQLite
 
 ```ts
+import type { AnyGame } from 'shoehive';
+declare const games: AnyGame[];
+// ---cut---
 import { createServer } from 'shoehive/server';
 import { sqliteStore } from 'shoehive/store/sqlite';
 
@@ -42,6 +45,9 @@ const shoehive = createServer({ games, store: sqliteStore({ file: './shoehive.db
 ## Postgres
 
 ```ts
+import type { AnyGame } from 'shoehive';
+declare const games: AnyGame[];
+// ---cut---
 import pg from 'pg';
 import { createServer } from 'shoehive/server';
 import { migratePostgres, postgresStore } from 'shoehive/store/postgres';
@@ -63,11 +69,14 @@ const shoehive = createServer({ games, store: postgresStore({ pool }) });
 ## Redis
 
 ```ts
+import type { AnyGame } from 'shoehive';
+declare const games: AnyGame[];
+// ---cut---
 import { Redis } from 'ioredis';
 import { createServer } from 'shoehive/server';
 import { redisStore } from 'shoehive/store/redis';
 
-const client = new Redis(process.env.REDIS_URL);
+const client = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
 const shoehive = createServer({ games, store: redisStore({ client }) });
 ```
 
@@ -97,7 +106,7 @@ Implement the `Store` interface (exported from `shoehive/server` and every adapt
 the conformance suite from `shoehive/testing` with your test runner. Pass a backend that can
 reopen the same storage so the suite also checks durability across a restart:
 
-```ts
+```ts nocheck
 import { describe, expect, it } from 'vitest';
 import { runStoreConformance } from 'shoehive/testing';
 import { myStore } from './my-store';

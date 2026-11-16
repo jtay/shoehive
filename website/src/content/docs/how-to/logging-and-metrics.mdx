@@ -1,0 +1,150 @@
+---
+title: 'Logging and metrics'
+description: "Send Shoehive's logs and events to your own tooling."
+sidebar:
+  order: 14
+---
+
+A running server tells you about itself in two ways. The **logger** gets human-readable
+messages for things an operator should notice. **Server events** are typed notifications you
+subscribe to in code, such as a table opening or a wallet operation failing. Use the logger for
+your log pipeline and events for metrics and alerts.
+
+## The logger
+
+Pass any object with four methods as `logger`. `console`, pino and winston loggers fit once
+you adapt the argument order. The interface is:
+
+```ts
+import type { Logger } from 'shoehive/server';
+
+const example: Logger = {
+  debug: (message, data) => {},
+  info: (message, data) => {},
+  warn: (message, data) => {},
+  error: (message, data) => {},
+};
+```
+
+Each call has a message and an optional `data` object. Two loggers are built in:
+
+- `consoleLogger` is the default. It prints `warn` and `error` as `[shoehive] message` through
+  `console.warn` and `console.error`, and drops `debug` and `info`.
+- `silentLogger` drops everything. Use it to keep test output clean.
+
+Here is a logger that writes one JSON line per message, which most log shippers read directly:
+
+```ts
+import { createServer, type Logger } from 'shoehive/server';
+import type { AnyGame } from 'shoehive';
+declare const games: AnyGame[];
+// ---cut---
+const logger: Logger = {
+  debug: () => undefined, // the server does not log at debug or info today
+  info: () => undefined,
+  warn: (message, data) => {
+    console.log(JSON.stringify({ level: 'warn', message, ...data }));
+  },
+  error: (message, data) => {
+    console.error(JSON.stringify({ level: 'error', message, ...data }));
+  },
+};
+
+const shoehive = createServer({ games, logger });
+```
+
+Values in `data` such as `error` can be `Error` objects, which `JSON.stringify` turns into
+`{}`. With a real logging library, pass them through its error serializer.
+
+## What is logged
+
+The server logs nothing at `debug` or `info` in v1: those methods exist for your own use and
+for later versions. It logs problems and one-off startup notices.
+
+| Level   | Message (the start of it)                                          | Meaning                                                          |
+| ------- | ------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `warn`  | No secret set: using a random one                                  | Resume tokens will not survive a restart                         |
+| `warn`  | A wallet is configured with guest identities                       | Guest tokens are bearer tokens: not for money                    |
+| `warn`  | Devtools inspector, `devtools: true` is ignored, and so on         | Devtools startup notices; every export and fork is also warned   |
+| `warn`  | Could not record a disconnect, Could not restore a resumed session | A single player's session hit a store error                      |
+| `error` | Could not write a snapshot, Could not write the final snapshot     | The store is failing; the log is still the source of truth       |
+| `error` | A wallet operation failed after retries                            | Money needs reconciling by hand, with the table and op in `data` |
+| `error` | Could not recover a table                                          | A table did not load at startup                                  |
+| `error` | Could not close an idle table                                      | The store failed while closing an expired table                  |
+| `error` | Request failed, auth() threw                                       | A bug in a game or your `auth` hook                              |
+| `error` | Listener for `<event>` threw                                       | One of your own event listeners threw                            |
+
+Alert on every `error`, and on a `warn` that mentions the secret or a wallet in production.
+
+## Server events
+
+`shoehive.on(event, listener)` subscribes to an event and returns a function that removes the
+listener. Listeners run synchronously when the event happens; an error in one is logged and
+does not affect the server.
+
+| Event                   | Payload                | When                                                       |
+| ----------------------- | ---------------------- | ---------------------------------------------------------- |
+| `table:created`         | `{ table, game }`      | a table is created                                         |
+| `table:ended`           | `{ table, result }`    | the game ended, with its result                            |
+| `table:closed`          | `{ table, reason }`    | `reason` is `ended`, `closed`, `expired` or `game-removed` |
+| `table:recovered`       | `{ table }`            | a stored table was loaded after a restart                  |
+| `table:recovery-failed` | `{ table, reason }`    | a stored table could not be loaded                         |
+| `player:connected`      | `{ player }`           | a connection said hello (a second tab fires it again)      |
+| `player:disconnected`   | `{ player }`           | a player's last connection closed                          |
+| `wallet:error`          | `{ table, op, error }` | a deferred wallet operation still failed after retries     |
+
+`wallet:error` is the one to page on: a commit, release or credit did not reach your wallet,
+so the ledger and the game disagree until someone reconciles it.
+
+## Turn events into metrics
+
+Keep a gauge or counter per event. The sketch below uses a tiny `Metrics` interface so you can
+plug in Prometheus, StatsD or OpenTelemetry:
+
+```ts
+import { createServer } from 'shoehive/server';
+import type { AnyGame } from 'shoehive';
+declare const games: AnyGame[];
+interface Metrics {
+  inc(name: string, labels?: Record<string, string>): void;
+  gauge(name: string, delta: number): void;
+}
+declare const metrics: Metrics;
+declare function alertOncall(message: string): void;
+// ---cut---
+const shoehive = createServer({ games });
+
+shoehive.on('table:created', ({ game }) => {
+  metrics.inc('shoehive_tables_created_total', { game });
+  metrics.gauge('shoehive_tables_open', +1);
+});
+shoehive.on('table:closed', ({ reason }) => {
+  metrics.inc('shoehive_tables_closed_total', { reason });
+  metrics.gauge('shoehive_tables_open', -1);
+});
+shoehive.on('player:connected', () => metrics.inc('shoehive_player_connections_total'));
+shoehive.on('player:disconnected', () => metrics.inc('shoehive_player_disconnects_total'));
+shoehive.on('table:recovery-failed', ({ table, reason }) => {
+  metrics.inc('shoehive_recovery_failures_total');
+  alertOncall(`Table ${table} did not recover: ${reason}`);
+});
+shoehive.on('wallet:error', ({ table, op }) => {
+  metrics.inc('shoehive_wallet_errors_total', { op: op.op });
+  alertOncall(`Wallet ${op.op} ${op.key} failed on table ${table}: reconcile by hand`);
+});
+```
+
+`player:connected` fires for every connection while `player:disconnected` fires only when a
+player's last connection closes, so count them rather than subtracting one from the other.
+After a restart, recovered tables fire `table:recovered`, not `table:created`, so count both
+if you want a gauge that survives restarts. For a point-in-time view, `shoehive.tables.list()`
+returns every table with its status, revision and connected players, which suits a periodic
+gauge or an admin endpoint.
+
+## Related
+
+- [Deploying](/how-to/deploying/) for health checks and shutdown.
+- [Wallets and real-money safety](/how-to/wallets-and-real-money-safety/) for what to do
+  after a `wallet:error`.
+- [Debugging with devtools](/how-to/debugging-with-devtools/) to inspect a table that logged
+  an error.

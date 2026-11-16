@@ -1,0 +1,87 @@
+---
+title: 'Timers and turn clocks'
+description: 'Add turn clocks, round timers and delayed actions.'
+sidebar:
+  order: 4
+---
+
+import Snippet from '../../../components/Snippet.astro';
+
+Shoehive has no tick loop. Time enters a game in one way: a timer fires and runs an action.
+This page covers delayed actions, turn clocks and countdowns in the browser. Rounds with a
+duration are in [Turns vs rounds](/how-to/turns-vs-rounds/). The design is in
+[ADR 0006](/contributing/adr/0006-seeded-rng-recorded-clock-replay/) and
+[ADR 0008](/contributing/adr/0008-turns-and-rounds/).
+
+The examples come from a small game, `website/snippets/timers/`.
+
+## Run an action later
+
+`ctx.timers.after(name, ms, action, input?, options?)` schedules an action to run `ms` after
+the current entry. The action should be `internal: true`, so only timers and the engine can
+run it (a client that calls it gets `ACTION_NOT_ALLOWED`). For an internal action run by a
+timer, `seat` is `-1` and `player` is `null`, so pass what you need in `input`.
+
+<Snippet file="website/snippets/timers/src/game.ts" region="fuse" title="game.ts" />
+<Snippet file="website/snippets/timers/src/game.ts" region="internal" title="" />
+
+The rest of the API:
+
+- `ctx.timers.cancel(name)` removes a timer. `ctx.timers.has(name)` tells you if it is set.
+- `ctx.timers.deadline(name)` returns its deadline in epoch milliseconds, or `null`.
+- Using a name again replaces the timer, so "restart the countdown" is just another `after`.
+- `input` must be JSON, and it is checked against the action's input schema when you
+  schedule it. A bad input throws in the entry that scheduled it, which rolls that entry
+  back. The schema must be synchronous.
+- Time is the entry's time (`ctx.now()`), never the system clock. Do not use `setTimeout`.
+
+A timer survives a phase change, so cancel it in `onExit` if it should not outlive the phase.
+If the action does not exist in the phase when the timer fires, nothing happens. When the
+table ends, all timers are cleared.
+
+## Show a timer to players
+
+A timer's deadline is private by default. Pass `{ visible: true }` and it appears in
+`meta.timers[name]`, for every viewer. Only the deadline is published: the action and its
+input stay on the server.
+
+## A clock for each turn
+
+Set `timeoutMs` and `onTimeout` on `turns`. The engine arms a timer named `turn` on every
+turn change, replaces it when the turn moves, and cancels it when the phase exits.
+`onTimeout` names an internal action, which receives `{ seat }`.
+
+<Snippet file="website/snippets/timers/src/game.ts" region="turns" title="" />
+
+`timeoutMs` is a number or a function of `{ seats, state, options }`, so a table option can
+set the length. It must be positive, and `onTimeout` must name an action. Both are checked
+in `defineGame`, so a mistake fails at startup. What the timeout does is up to you: skip the
+turn as above, auto-stand like blackjack's `autoStand`, or fold.
+
+The turn clock is not in `meta.timers`. Clients read it at `meta.turn.deadline` (and the
+seat at `meta.turn.seat`). A round's deadline is `meta.round.deadline`.
+
+## Count down in the browser
+
+`useServerTime()` returns the server's time and re-renders on an interval (250 ms by
+default). Subtract it from a deadline.
+
+<Snippet file="website/snippets/timers/src/Countdown.tsx" title="Countdown.tsx" />
+
+Do not use `Date.now()` for this: the player's clock may be minutes off. `useServerTime`
+corrects the browser clock by the offset the client measured against the server.
+
+## Test with a fake clock
+
+`createTestTable` uses a fake clock that only moves when you call `t.advance(ms)`. It fires
+every timer that is due and waits for the table to settle, so tests are instant and
+deterministic.
+
+<Snippet file="website/snippets/timers/test/game.test.ts" region="clock" title="" />
+
+## Deadlines survive restarts
+
+Deadlines are stored as absolute times in the table snapshot. After a restart the table
+re-arms them. A deadline that passed while the server was down fires straight away, in
+deadline order, as a normal timer entry. So a turn clock keeps counting through a deploy.
+See [persistence and restart recovery](/how-to/persistence-and-restart-recovery/).

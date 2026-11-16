@@ -1,0 +1,187 @@
+---
+title: 'Blackjack: hidden cards, phases, turn timers, chips'
+description: 'Build a blackjack table with a dealer, a hidden hole card, turn timers and chips from a wallet.'
+sidebar:
+  order: 3
+---
+
+import WhatYoullBuild from '../../../components/WhatYoullBuild.astro';
+import Snippet from '../../../components/Snippet.astro';
+
+<WhatYoullBuild time="45 minutes" example="blackjack">
+
+- A blackjack table with a dealer and a hidden hole card
+- Betting and playing phases with turn timers
+- Chips held in a wallet with reservations and payouts
+
+</WhatYoullBuild>
+
+You will walk through `examples/blackjack`: up to five players, each playing their own hand
+against the house. This tutorial assumes you finished [tic-tac-toe](/tutorials/tic-tac-toe/)
+and the [quiz](/tutorials/quiz/), so `defineGame`, actions, `reject()` and `view()` are not
+explained again. Here you meet cards, phases that hand over to each other, turn timers and
+money.
+
+## A hand in three phases
+
+A hand moves through three phases, declared under `phases` in one `defineGame` call:
+
+1. `betting`: everyone bets at once, against a timer (a round, as in the quiz).
+2. `play`: players take turns to hit, stand or double.
+3. `dealer`: the dealer plays, the hands are settled and the next hand is scheduled.
+
+Each phase has its own actions, so `hit` simply does not exist while people are betting.
+`ctx.phase.go('play')` moves on. See [phases](/how-to/phases/) for the full model.
+
+## Cards and shuffling
+
+`shoehive/cards` has the card helpers. A `Card` is a two-character string such as `'AS'` or
+`'TD'`. `shoe(6)` is an unshuffled stack of six decks, and `blackjackValue(cards)` scores a hand
+as `{ total, soft, blackjack, bust }`.
+
+Shuffle with `ctx.random`, never `Math.random()`. It is the table's seeded generator, so a
+replay or a test with a fixed seed deals the same cards. The `deal` code runs when the `play`
+phase starts:
+
+<Snippet file="examples/blackjack/src/game.ts" region="deal" title="src/game.ts (play phase)" />
+
+The shoe lives in `state`, so it is saved and replayed with the table. It is also secret,
+which the view below takes care of.
+
+## Betting: a round and a wallet
+
+The `betting` phase is a round with `closeWhen: 'all-submitted'` and a 20 second limit.
+`bet` is a `once` action, so each seat bets once. When the round closes, `onClose` starts the
+deal if anyone bet, or opens a new round if nobody did.
+
+<Snippet
+  file="examples/blackjack/src/game.ts"
+  region="betting"
+  title="src/game.ts (betting phase)"
+/>
+
+The bet is money, so it goes through `ctx.wallet` (see
+[wallets and real-money safety](/how-to/wallets-and-real-money-safety/) and
+[ADR 0007](/contributing/adr/0007-wallet-ledger-semantics/)):
+
+- `await ctx.wallet.reserve(seat, amount, key)` takes the amount out of the player's
+  available balance and returns `true`, or `false` when they cannot afford it. It runs
+  immediately because the action needs the answer. Here a `false` becomes
+  `reject('INSUFFICIENT_FUNDS')`, so the whole action is undone.
+- `commit(key)`, `release(key)` and `credit(seat, amount, key)` do not return anything.
+  They are held back and sent only after the action has been saved, so money never moves for
+  a state change that did not happen.
+- The key names the reservation. It must be unique at the table, so the example builds it
+  from the hand and seat number: one key per hand per seat.
+
+<Snippet file="examples/blackjack/src/game.ts" region="keys" title="src/game.ts" />
+
+`double` reserves the same stake again, under its own key. Amounts are whole numbers (chips,
+or cents), never fractions.
+
+## Turns, skipping and the turn timer
+
+The `play` phase declares who may act and what happens to a slow player:
+
+<Snippet file="examples/blackjack/src/game.ts" region="turns" title="src/game.ts (play phase)" />
+
+- Turns go round the seats in order. `skip` passes over seats with no hand, and over hands
+  that are already done (a natural blackjack, or a stand). Both `hit` and `stand` end by
+  calling `ctx.turn.next()`, and when no seat is left they call `ctx.phase.go('dealer')`.
+- `timeoutMs` arms a 30 second timer each time the turn changes. When it fires, Shoehive runs
+  the action named in `onTimeout` with `{ seat }` as input.
+- That action must exist, and it should be `internal`: it cannot be sent by a client, only by
+  a timer or by your own code. Otherwise any player could stand for somebody else.
+
+<Snippet
+  file="examples/blackjack/src/game.ts"
+  region="autostand"
+  title="src/game.ts (play phase actions)"
+/>
+
+For other clocks see [timers and turn clocks](/how-to/timers-and-turn-clocks/). The dealer
+phase uses one more, `ctx.timers.after('nextHand', NEXT_HAND_MS, 'nextHand')`, which runs the
+internal `nextHand` action five seconds later to start betting again.
+
+## The dealer and settlement
+
+When the dealer phase starts, the dealer draws to 17, then every hand is scored. For each
+hand the code commits the reservations (the stake is now really spent) and credits the
+winnings, which include the stake back on a win or a push:
+
+<Snippet file="examples/blackjack/src/game.ts" region="dealer" title="src/game.ts (dealer phase)" />
+
+Net effect for a 100 chip bet that wins: 100 reserved at the bet, committed at settlement,
+200 credited. A loss credits nothing. Because the credit key is `pay:<hand>:<seat>`, it
+cannot pay twice for one hand even if something retries.
+
+## Leaving mid-hand
+
+A player can stand up at any time, and their money must not get stuck. `onStand` handles it:
+before the deal (no cards yet) the bet is released, so it returns to their balance. After the
+deal the bet is forfeit, so it is committed.
+
+<Snippet file="examples/blackjack/src/game.ts" region="leave" title="src/game.ts" />
+
+`onSit` copies the wallet balance into `state.bankroll`. That number is only for display; the
+wallet stays the source of truth.
+
+## Hiding the hole card
+
+The dealer's second card must stay face down until the dealer plays. The view builds what
+each client may see, and `hideCard` turns a card into `null`:
+
+<Snippet file="examples/blackjack/src/game.ts" region="view" title="src/game.ts" />
+
+Two details matter. The dealer's total is `null` until the reveal, so the total cannot give
+the card away. And the shoe is sent as a count only, so nobody can read the next card.
+Clients receive views, never `state`, so there is nothing to peek at. More patterns in
+[hidden information](/how-to/hidden-information/).
+
+## Run it with a wallet
+
+A game that calls `ctx.wallet` needs a wallet on the server. Without one, every call fails
+with `WALLET_NOT_CONFIGURED`. `MemoryWallet` is an in-memory ledger for development:
+
+<Snippet file="examples/blackjack/src/server.ts" region="server" title="src/server.ts" />
+
+Every new player starts with 1000. For real money you implement the `Wallet` interface on
+your own database or payment service, and the rest of the game does not change. Shoehive is
+bookkeeping, not a licensed gaming system: read
+[wallets and real-money safety](/how-to/wallets-and-real-money-safety/) first.
+
+## Test the money and the secrets
+
+`createTestTable` gives every player a `MemoryWallet` balance of 1000 and exposes it as
+`t.wallet`. This test checks that bets are reserved, that the hole card is hidden from every
+viewer, including spectators, and that the shoe never leaves the server:
+
+<Snippet
+  file="examples/blackjack/test/game.test.ts"
+  region="hidden-test"
+  title="test/game.test.ts"
+/>
+
+Time is fake in tests. `t.advance(ms)` moves the clock, so you can check the turn timer
+without waiting 30 seconds. `t.runtime.idle()` waits for the deferred wallet operations, then
+the test checks each balance, `t.walletErrors` and a replay:
+
+<Snippet file="examples/blackjack/test/game.test.ts" region="play-test" title="test/game.test.ts" />
+
+And the release on leaving before the deal:
+
+<Snippet
+  file="examples/blackjack/test/game.test.ts"
+  region="leave-test"
+  title="test/game.test.ts"
+/>
+
+More in [testing games](/how-to/testing-games/).
+
+## Where next
+
+- Try it: `pnpm build:web && pnpm start` in `examples/blackjack`, then open two browsers.
+- Add a rule: insurance, or a blackjack payout of 6 to 5. Change `PAYOUT` and see which
+  tests fail.
+- Next tutorial: [Texas Hold'em](/tutorials/holdem/), with side pots and per-seat hidden
+  hands.

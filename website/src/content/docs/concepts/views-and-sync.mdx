@@ -1,0 +1,104 @@
+---
+title: 'Views and sync (revisions, patches)'
+description: "How each client's view stays in sync with small patches."
+sidebar:
+  order: 4
+---
+
+Clients never receive your game's state. They receive **views**, and after the first one they
+receive only small patches. This page explains what is sent, why each message carries two
+revision numbers, and what a client does when it falls behind. The decisions are in
+[ADR 0003](/contributing/adr/0003-per-viewer-views-json-patch-sync/) and the exact messages in
+the [protocol reference](/reference/protocol/).
+
+## One view per viewer
+
+After every commit, the server calls your `view()` function once per distinct **viewer** and
+compares the result with the view that viewer last received.
+
+| Viewer    | Keyed by                | Notes                                                                                                             |
+| --------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Player    | Player id               | One view even if the player holds several seats and has many tabs.                                                |
+| Spectator | All spectators together | One `view()` call and one set of bytes for all of them. They have no player id, which is what makes sharing safe. |
+
+If you do not define `view`, everyone sees the whole state. When you do, `view()` is a pure
+function of state, so hiding information is something you can unit test. See
+[hidden information](/how-to/hidden-information/).
+
+A view is the part you control. The server also builds a **table document** around it:
+
+```txt nocheck
+{ view,   // your view() output for this viewer
+  meta,   // status, phase, turn, round, options, result, visible timers
+  seats,  // who sits where, and whether they are connected
+  spectators, you }
+```
+
+Views must be JSON (no `Map`, `Set`, `Date`, classes or `undefined` in arrays). In development
+Shoehive checks every view and names the bad path.
+
+## Revisions
+
+A table has one **revision**, `rev`. It starts at 0 and goes up by one for every committed
+entry. It never resets, not even across a restart. A rejected action commits nothing, so it
+does not move `rev`.
+
+## Snapshots and patches
+
+- A **snapshot** (`table.snapshot { rev, doc }`) is the whole document. It is sent when a client
+  joins, when it asks to resync, after a resume, and after a slow connection skipped patches.
+- A **patch** (`table.patch { from, rev, ops }`) is an
+  [RFC 6902 JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) against the document, using
+  only `add`, `remove` and `replace`. The diff is structural: objects by key, arrays by index.
+
+```txt nocheck
+table.patch { from: 3, rev: 4, ops: [
+  { op: "replace", path: "/view/board/4", value: "X" },
+  { op: "replace", path: "/meta/turn/seat", value: 1 } ] }
+```
+
+A viewer whose document did not change gets nothing for that commit. Raw state patches are never
+used, because a patch such as "`hands/1/0` changed" would leak that another seat drew a card.
+The server diffs the views.
+
+## Why `from` and `rev`
+
+Because unchanged viewers are skipped, a viewer's revisions can have gaps: it may go from 3
+straight to 7. So each patch says which revision it applies on top of.
+
+- `rev` is the table revision after this commit.
+- `from` is the revision of the **last document the server sent this viewer**.
+
+The client rule is one line: **apply a patch only if `from` equals your current revision.**
+Otherwise you missed something, so discard the patch and send `table.sync`, which answers with
+a fresh snapshot. The built-in client and React hooks do this for you. Applying every patch in
+order always reproduces exactly the document the server holds (an engine invariant that is
+property tested).
+
+Each connection tracks its own revision, so a lagging tab resyncs alone. If a connection's send
+buffer passes 1 MiB, the server stops sending it patches and sends one snapshot when it
+drains. Other viewers are unaffected.
+
+## Ordering and acks
+
+For one commit, the server sends in this order:
+
+1. The patches for that commit.
+2. Any `table.event` messages from `ctx.emit` (ephemeral: animations and sounds, not state, not
+   replayed on resync).
+3. The `ack` for the action that caused it.
+
+So when a client receives `ack { ok: true, result: { rev } }`, its document is already at `rev`
+or later. The ack also means the action was stored (see
+[persistence](/concepts/determinism-replay-and-persistence/)).
+
+## Stale actions
+
+`act` may include `rev`: "only apply this if the table is still at revision N". If the table
+has moved on, the action fails with `STALE_REVISION` (the current revision is in `details`)
+without running. Use it when an action only makes sense for what the player was looking at.
+
+## Lobby
+
+The lobby uses the same scheme: `lobby.snapshot`, then `lobby.patch` with `from` and `rev`. It
+has one lobby-wide revision. See [Tables and seats](/concepts/tables-and-seats/).
