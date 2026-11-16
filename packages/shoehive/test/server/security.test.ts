@@ -233,6 +233,46 @@ describe('N-05: cross-site WebSocket hijacking', () => {
     start({ logger, auth, origins: ['https://game.example'] });
     expect(warnings.some((w) => w.includes('`origins` is empty'))).toBe(false);
   });
+
+  /** Opens a raw upgrade with an optional Origin; resolves 'open' or the HTTP status. */
+  async function upgrade(url: string, origin?: string): Promise<'open' | number> {
+    return new Promise((resolve) => {
+      const ws = new WebSocket(url, 'shoehive.v1', origin === undefined ? {} : { origin });
+      ws.on('open', () => {
+        ws.close();
+        resolve('open');
+      });
+      ws.on('unexpected-response', (_req, res) => {
+        resolve(res.statusCode ?? 0);
+      });
+      ws.on('error', () => undefined);
+    });
+  }
+
+  it('in production with auth and no origins, only same-origin browsers may connect', async () => {
+    const auth = () => ({ id: 'u1', name: 'User' });
+    const { url } = await start({ auth, dev: false }).listen();
+    const host = new URL(url).host;
+    expect(await upgrade(url, 'https://evil.example')).toBe(403);
+    expect(await upgrade(url, `http://${host}`)).toBe('open');
+    expect(await upgrade(url)).toBe('open'); // no Origin: not a browser
+  });
+
+  it('keeps cross-origin open in development, and for an explicit allowlist or "*"', async () => {
+    const auth = () => ({ id: 'u1', name: 'User' });
+    const dev = await start({ auth, dev: true }).listen();
+    expect(await upgrade(dev.url, 'http://localhost:5173')).toBe('open');
+    const listed = await start({ auth, dev: false, origins: ['https://app.example'] }).listen();
+    expect(await upgrade(listed.url, 'https://app.example')).toBe('open');
+    expect(await upgrade(listed.url, 'https://evil.example')).toBe(403);
+    const any = await start({ auth, dev: false, origins: ['*'] }).listen();
+    expect(await upgrade(any.url, 'https://evil.example')).toBe('open');
+  });
+
+  it('leaves guest servers (no auth) open to any origin by default', async () => {
+    const { url } = await start({ dev: false }).listen();
+    expect(await upgrade(url, 'https://elsewhere.example')).toBe('open');
+  });
 });
 
 describe('N-06: a second hello on the same connection', () => {

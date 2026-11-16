@@ -45,9 +45,11 @@ one spec.
 - Browsers attach cookies to cross-site WebSocket upgrades, and the same-origin policy does not
   cover WebSockets. A server whose `auth` hook reads cookies must therefore configure the origin
   allowlist, or any web page can open a connection as its visitor (cross-site WebSocket
-  hijacking). `shoehive/server` logs a warning at startup when `auth` is set and `origins` is
-  empty. Guest mode is not affected: the resume token travels in `hello`, which another site
-  cannot read.
+  hijacking). So with an `auth` hook and no `origins`, `shoehive/server` in production accepts
+  only same-origin browser upgrades (the `Origin` host must equal the `Host` header) and logs
+  that at startup; in development it only warns. `origins: ['*']` allows any origin. Upgrades
+  without an `Origin` (not from a browser) are allowed. Guest mode is not affected: the resume
+  token travels in `hello`, which another site cannot read.
 - An upgrade the server refuses (401, 403, 404, 500) gets the HTTP response and then the TCP
   socket is closed, even if the client keeps its side open.
 - Upgrades to other paths: when Shoehive starts its own HTTP server (`listen()`), they are

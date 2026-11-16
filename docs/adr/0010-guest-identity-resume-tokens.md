@@ -126,9 +126,11 @@ See `docs/security/review-1.0-network.md`.
   a name display as something else in other players' seat lists and in logs (finding N-10).
 - **One `hello` per connection, strictly.** A second `hello` sent before the first was
   answered used to pass the check and bind the connection to two players (finding N-06).
-- **Cookie auth needs `origins`.** Step 7's cookie pattern is open to cross-site WebSocket
-  hijacking unless the origin allowlist is set; the server warns at startup when `auth` is
-  set and `origins` is empty (finding N-05).
+- **Cookie auth is same-origin by default in production.** Step 7's cookie pattern is open
+  to cross-site WebSocket hijacking without an origin allowlist, so with `auth` set and
+  `origins` empty, production accepts only same-origin browser upgrades (finding N-05,
+  decided by the stakeholder in Phase 8); development only warns. List `origins` for an app
+  served from another origin, or `['*']` to accept any.
 
 ## Consequences
 

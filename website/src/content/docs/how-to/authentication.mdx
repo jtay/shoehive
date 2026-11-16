@@ -59,9 +59,12 @@ const shoehive = createServer({
 ### Origins
 
 `origins` is an allowlist for the HTTP `Origin` header of the WebSocket upgrade. A request
-from any other origin, or with no `Origin` header, is refused with HTTP 403. The default is to
-accept any origin. Set it in production so other websites cannot open sockets to your server
-from a visitor's browser.
+from any other origin, or with no `Origin` header, is refused with HTTP 403; `['*']` accepts
+any. Without it, guest servers accept any origin. With an `auth` hook in production, the
+default is same-origin only: a page served from the same host as the socket may connect, and
+others get 403, because a browser would otherwise send your site's cookies along with another
+site's connection. Set `origins` when your web app is served from a different origin than the
+socket.
 
 ```ts
 import type { AnyGame } from 'shoehive';

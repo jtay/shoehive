@@ -113,7 +113,14 @@ export interface ServerOptions {
   logger?: Logger;
   /** WebSocket path. Default `/shoehive`. */
   path?: string;
-  /** Allowed `Origin` headers. Default: any. */
+  /**
+   * Allowed `Origin` headers for browser connections, for example
+   * `['https://play.example.com']`; `['*']` allows any. Default: any origin, except in
+   * production with an `auth` hook, where only same-origin pages may connect (a browser
+   * sends a site's cookies with a cross-site WebSocket upgrade, so any web page could
+   * otherwise connect as a signed-in visitor). Clients that send no `Origin` (servers,
+   * native apps) are always allowed.
+   */
   origins?: readonly string[];
   /**
    * What `attach()` does with WebSocket upgrades for paths Shoehive does not serve.
@@ -445,11 +452,15 @@ export function createServer(options: ServerOptions): ShoehiveServer {
     secrets = typeof configured === 'string' ? [configured] : Array.from<string>(configured);
   }
   const signer = new TokenSigner(secrets);
+  // A browser sends the page's cookies with a cross-site WebSocket upgrade, and the
+  // same-origin policy does not apply to WebSockets (cross-site WebSocket hijacking).
+  // With an auth hook and no origins, production refuses cross-origin pages.
+  const sameOriginOnly = Boolean(options.auth) && !dev && (options.origins ?? []).length === 0;
   if (options.auth && (options.origins ?? []).length === 0) {
-    // A browser sends the page's cookies with a cross-site WebSocket upgrade, and the
-    // same-origin policy does not apply to WebSockets (cross-site WebSocket hijacking).
     logger.warn(
-      "An auth hook is set but `origins` is empty: any web page can open an authenticated connection with its visitors' cookies. Set `origins` to your app's origins.",
+      sameOriginOnly
+        ? 'An auth hook is set and `origins` is empty: only same-origin pages may connect. Set `origins` if your app is served from another origin.'
+        : "An auth hook is set but `origins` is empty: in development any web page can open an authenticated connection with its visitors' cookies. Production allows same-origin pages only; set `origins` to be explicit.",
     );
   }
   if (options.wallet && !options.auth && !dev) {
@@ -1702,6 +1713,7 @@ export function createServer(options: ServerOptions): ShoehiveServer {
         maxMessageBytes: limits.maxMessageBytes,
         heartbeatMs: limits.heartbeatMs,
         origins: options.origins ?? [],
+        sameOriginOnly,
         unknownUpgrades: policy,
         // The devtools listener (mounted above) answers its own socket path.
         siblingPaths: devtoolsConfig ? [`${devtoolsConfig.path}/ws`] : [],

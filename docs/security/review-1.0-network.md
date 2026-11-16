@@ -56,7 +56,7 @@ or with cookie-based `auth`.
 | N-02 | High     | Unbounded send buffer for a client that stops reading                         | Fixed: `test/server/security.test.ts` "N-02: a client that stops reading ... is dropped once its send buffer passes maxBufferedBytes" |
 | N-03 | High     | Unbounded table creation by any client                                        | Fixed: `test/server/security.test.ts` "N-03: table creation limits" (2 tests)                                                         |
 | N-04 | Medium   | Guest session records are never deleted                                       | Fixed: `test/server/security.test.ts` "N-04: guest session records ...", `test/client/security.test.ts` "N-04: player.rename ..."     |
-| N-05 | Medium   | Cookie `auth` without `origins` allows cross-site WebSocket hijacking         | Partly fixed (startup warning, docs): `test/server/security.test.ts` "N-05"; secure default deferred to the owner                     |
+| N-05 | Medium   | Cookie `auth` without `origins` allows cross-site WebSocket hijacking         | Fixed: same-origin default in production with `auth`; `test/server/security.test.ts` "N-05"                                           |
 | N-06 | Low      | Two concurrent `hello`s bind one connection to two players                    | Fixed: `test/server/security.test.ts` "N-06: a second hello on the same connection ..."                                               |
 | N-07 | Low      | `Infinity` and deep nesting in `input` / `options` reach game code            | Fixed: `test/server/security.test.ts` "N-07: payload validation" (2 tests)                                                            |
 | N-08 | Low      | Malformed server messages throw out of the client's socket handler            | Fixed: `test/client/security.test.ts` "N-08: hostile server messages" (2 tests)                                                       |
@@ -151,12 +151,14 @@ show) and no `origins` allowlist (the default), any web page a logged-in player 
 a fully authenticated connection and act as them. Guest mode is not affected: its token travels
 in `hello`, which another site cannot read.
 
-**Fix (partial).** `createServer` logs a warning at startup when `auth` is set and `origins` is
-empty, and protocol section 2 explains the risk. **Not done:** a secure default (for example
-same-origin only when `auth` is set and `origins` is not), because it would refuse existing
-cross-origin deployments (a Vite dev server on another port, a separate web host) and is a
-product decision for the owner. Recommended before 1.0: either that default, or an explicit
-`origins` requirement whenever `auth` is set in production.
+**Fix.** The owner chose the secure default. With an `auth` hook and no `origins`, production
+accepts only same-origin browser upgrades (the `Origin` host must equal the request's `Host`),
+and upgrades without an `Origin` (not from a browser) are allowed. Development keeps accepting
+any origin with a startup warning, so a Vite dev server on another port still works.
+`origins: ['*']` is the explicit opt-out. Tests: "N-05" in `test/server/security.test.ts`
+(production refuses a foreign origin and accepts its own; development, an allowlist and `'*'`
+behave as documented; guest servers are unaffected). The production test fails with the new
+default switched off.
 
 ### N-06 (Low): two concurrent `hello`s bind one connection to two players
 

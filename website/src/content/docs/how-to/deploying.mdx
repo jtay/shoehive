@@ -89,8 +89,9 @@ on, and an idle timeout of a minute or more.
 
 Set `origins` to the sites that host your client, for example
 `['https://play.example.com']`. A browser upgrade from any other origin is refused with
-HTTP 403. The default allows any origin, so set it in production. The socket path is
-`/shoehive` unless you pass `path`.
+HTTP 403. Without it, guest servers accept any origin, and servers with an `auth` hook accept
+only same-origin pages in production. Behind a proxy, make sure the `Host` header reaches the
+server unchanged (or list `origins`). The socket path is `/shoehive` unless you pass `path`.
 
 ## Docker
 
