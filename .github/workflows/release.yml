@@ -2,8 +2,8 @@ name: Release
 
 # Changesets opens (and keeps updated) a "Version Packages" PR while unreleased
 # changesets exist on main. Merging that PR publishes to npm with provenance.
-# While .changeset/pre.json is in "pre" mode, releases are 1.0.0-next.x on the
-# "next" dist-tag.
+# While .changeset/pre.json is in "pre" mode, releases are 1.0.0-rc.x on the
+# "rc" dist-tag. `pnpm changeset pre exit` in a PR makes the next release 1.0.0.
 
 on:
   push:

@@ -39,8 +39,14 @@ are released.
 ## Prereleases
 
 Until 1.0.0, the repository is in Changesets pre mode (`.changeset/pre.json`): releases are
-`1.0.0-next.x` on the `next` dist-tag, so `npm install shoehive@next` gets the latest one. To
-leave pre mode for the final release, run `pnpm changeset pre exit` in a PR.
+release candidates, `1.0.0-rc.x` on the `rc` dist-tag, so `npm install shoehive@rc` and
+`npm create shoehive@rc` get the latest one. To leave pre mode for the final release, run
+`pnpm changeset pre exit` in a PR; the next Version Packages PR then publishes `1.0.0` on
+`latest`.
+
+The API reports in `packages/shoehive/api/` are frozen from the first release candidate: a
+change to a report after `1.0.0-rc.0` needs a changeset that says why, and a breaking change
+waits for 2.0.
 
 ## The docs site
 
