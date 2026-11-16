@@ -1,6 +1,6 @@
 {
   "name": "create-shoehive",
-  "version": "0.10.0",
+  "version": "1.0.0-rc.0",
   "description": "Create a new Shoehive multiplayer game: npm create shoehive@latest",
   "keywords": [
     "shoehive",

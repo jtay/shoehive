@@ -1,6 +1,6 @@
 {
   "name": "shoehive",
-  "version": "0.10.0",
+  "version": "1.0.0-rc.0",
   "description": "Build multiplayer card, casino, board and party games: write the rules, Shoehive handles seats, sync, secrets, reconnects and persistence.",
   "keywords": [
     "multiplayer",
