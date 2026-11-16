@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sqliteStore } from '../../src/store/sqlite';
-import { StoreConflictError, type Store } from '../../src/store/types';
+import { StoreConflictError, type SessionRecord, type Store } from '../../src/store/types';
 import { runStoreConformance, type StoreBackend } from '../../src/testing/index';
 import { describeRecovery, uniqueName } from './recovery';
 
@@ -178,6 +178,170 @@ describe('sqlite adapter specifics', () => {
       tail: [],
     });
     expect((await store.sessions.get('p1'))?.updatedAt).toBe(5);
+  });
+
+  describe('group commit', () => {
+    /** Counts the write transactions (BEGIN IMMEDIATE) a store runs on `database`. */
+    const countTransactions = (database: Database.Database) => {
+      const counter = { immediate: 0 };
+      const transaction = database.transaction.bind(database);
+      database.transaction = ((fn: (...args: never[]) => unknown) => {
+        const real = transaction(fn);
+        return Object.assign((...args: never[]) => real(...args), {
+          default: (...args: never[]) => real.default(...args),
+          deferred: (...args: never[]) => real.deferred(...args),
+          exclusive: (...args: never[]) => real.exclusive(...args),
+          immediate: (...args: never[]) => {
+            counter.immediate += 1;
+            return real.immediate(...args);
+          },
+        });
+      }) as typeof database.transaction;
+      return counter;
+    };
+    const ids = Array.from({ length: 50 }, (_, i) => `t${String(i)}`);
+    const session: SessionRecord = {
+      playerId: 'p1',
+      name: 'Ada',
+      metadata: { a: 1 },
+      updatedAt: 1,
+    };
+
+    it('writes appends and snapshots for many tables made in one tick in one transaction', async () => {
+      const database = connect(file());
+      const transactions = countTransactions(database);
+      const store = track(sqliteStore({ database }));
+      const before = transactions.immediate; // the schema setup
+      await Promise.all(
+        ids.flatMap((id) => [
+          store.appendLog(id, [{ seq: 0, data: `"${id}"` }]),
+          store.saveSnapshot(id, { seq: 0, rev: 0, game: 'g', version: 1, data: `"${id}"` }),
+        ]),
+      );
+      await Promise.all([store.closeTable('t0', 'ended'), store.sessions.put(session)]);
+      expect(transactions.immediate - before).toBe(2);
+      for (const id of ids)
+        expect(await store.readLog(id, 0)).toEqual([{ seq: 0, data: `"${id}"` }]);
+      expect(await store.listOpenTables()).toHaveLength(ids.length - 1);
+      expect(await store.sessions.get('p1')).toEqual(session);
+      // Appends awaited one by one are separate commits, as before.
+      await store.appendLog('t0', [{ seq: 1, data: '1' }]);
+      await store.appendLog('t1', [{ seq: 1, data: '1' }]);
+      expect(transactions.immediate - before).toBe(4);
+    });
+
+    it('rejects a session it cannot serialize without failing the group', async () => {
+      const store = track(sqliteStore({ file: ':memory:' }));
+      const bad = { ...session, metadata: { n: 1n } as unknown as SessionRecord['metadata'] };
+      const outcomes = await Promise.allSettled([
+        store.appendLog('t1', [{ seq: 0, data: '{}' }]),
+        store.sessions.put(bad),
+      ]);
+      expect(outcomes.map((o) => o.status)).toEqual(['fulfilled', 'rejected']);
+      expect(await store.sessions.get('p1')).toBeNull();
+    });
+
+    it("fails only the conflicting table's batch, in a group and within one table", async () => {
+      const store = track(sqliteStore({ file: file() }));
+      await store.appendLog('t1', [{ seq: 0, data: '0' }]);
+      const outcomes = await Promise.allSettled([
+        store.appendLog('t0', [{ seq: 0, data: '"a"' }]),
+        store.appendLog('t1', [{ seq: 5, data: '"gap"' }]), // conflict
+        store.appendLog('t2', [
+          { seq: 0, data: '"b"' },
+          { seq: 1, data: '"c"' },
+        ]),
+        store.appendLog('t3', [{ seq: 0, data: '"d"' }]),
+        store.appendLog('t3', [{ seq: 0, data: '"e"' }]), // same seq as the line above
+        store.appendLog('t3', [{ seq: 1, data: '"f"' }]),
+      ]);
+      expect(outcomes.map((o) => o.status)).toEqual([
+        'fulfilled',
+        'rejected',
+        'fulfilled',
+        'fulfilled',
+        'rejected',
+        'fulfilled',
+      ]);
+      expect((outcomes[1] as PromiseRejectedResult).reason).toMatchObject({
+        name: 'StoreConflictError',
+        tableId: 't1',
+        expected: 1,
+        got: 5,
+      });
+      expect((outcomes[4] as PromiseRejectedResult).reason).toMatchObject({ expected: 1, got: 0 });
+      const data = async (id: string) => (await store.readLog(id, 0)).map((e) => e.data);
+      expect(await data('t0')).toEqual(['"a"']);
+      expect(await data('t1')).toEqual(['0']);
+      expect(await data('t2')).toEqual(['"b"', '"c"']);
+      expect(await data('t3')).toEqual(['"d"', '"f"']);
+    });
+
+    it('rejects every caller in the group, and writes nothing, when a write fails', async () => {
+      const path = file();
+      const database = connect(path);
+      const store = track(sqliteStore({ database }));
+      database.exec(`CREATE TRIGGER fail BEFORE INSERT ON shoehive_entries
+        WHEN NEW.data = '"boom"' BEGIN SELECT RAISE(ABORT, 'disk on fire'); END`);
+      const outcomes = await Promise.allSettled([
+        store.appendLog('t0', [{ seq: 0, data: '"ok"' }]),
+        store.appendLog('t1', [{ seq: 0, data: '"boom"' }]),
+        store.appendLog('t2', [{ seq: 0, data: '"ok"' }]),
+      ]);
+      for (const outcome of outcomes) {
+        expect(outcome).toMatchObject({ status: 'rejected', reason: { message: 'disk on fire' } });
+      }
+      expect(database.prepare('SELECT count(*) FROM shoehive_entries').pluck().get()).toBe(0);
+      expect(database.inTransaction).toBe(false);
+      await store.appendLog('t0', [{ seq: 0, data: '"ok"' }]); // and the store still works
+    });
+
+    it('rejects every caller in the group when the transaction cannot begin', async () => {
+      const path = file();
+      const store = track(sqliteStore({ database: connect(path, { timeout: 20 }) }));
+      const other = connect(path);
+      other.exec('BEGIN IMMEDIATE'); // holds the write lock
+      const outcomes = await Promise.allSettled(
+        ids.slice(0, 3).map((id) => store.appendLog(id, [{ seq: 0, data: '{}' }])),
+      );
+      other.exec('ROLLBACK');
+      for (const outcome of outcomes) {
+        expect(outcome).toMatchObject({ status: 'rejected', reason: { code: 'SQLITE_BUSY' } });
+      }
+      expect(await store.readLog('t0', 0)).toEqual([]);
+    });
+
+    it('writes queued appends before any later operation, and on close()', async () => {
+      const path = file();
+      const store = sqliteStore({ file: path });
+      void store.appendLog('t1', [{ seq: 0, data: '0' }]);
+      const snapshot = store.saveSnapshot('t1', {
+        seq: 0,
+        rev: 0,
+        game: 'g',
+        version: 1,
+        data: '{}',
+      });
+      expect(await store.readLog('t1', 0)).toEqual([{ seq: 0, data: '0' }]);
+      await snapshot;
+      const last = store.appendLog('t1', [{ seq: 1, data: '1' }]);
+      await store.close();
+      await last;
+      const reopened = track(sqliteStore({ file: path }));
+      expect(await reopened.loadTable('t1')).toMatchObject({ tail: [{ seq: 1, data: '1' }] });
+      await expect(store.appendLog('t1', [{ seq: 2, data: '2' }])).rejects.toThrow(/closed/);
+    });
+
+    it('still commits while a test fakes the timers', async () => {
+      vi.useFakeTimers();
+      try {
+        const store = track(sqliteStore({ file: ':memory:' }));
+        await store.appendLog('t1', [{ seq: 0, data: '{}' }]);
+        expect(await store.readLog('t1', 0)).toHaveLength(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('accepts a retry from another connection and rejects a partly new batch', async () => {
