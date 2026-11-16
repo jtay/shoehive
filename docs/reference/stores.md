@@ -38,6 +38,11 @@ const shoehive = createServer({ games, store: sqliteStore({ file: './shoehive.db
 - With `{ database }`, pass a `better-sqlite3` connection you own. Its pragmas are left as
   you set them (WAL is recommended; `synchronous = NORMAL` with WAL can lose the last
   transactions on a power loss, not on a process crash), and `close()` leaves it open.
+- **Capacity.** Each write waits for its fsync on the server's thread. In the Phase 8 load test
+  (4 vCPU, see [benchmarks](/reference/benchmarks/)), `synchronous = FULL` kept p95 under
+  20 ms at 300 tables with 1 action per second each, but not at 1,000. With
+  `synchronous = NORMAL` (pass your own `{ database }`), 1,000 tables passed at 15.9 ms p95.
+  For more than a few hundred busy tables with full durability, use Postgres.
 - `tablePrefix` (default `'shoehive_'`) lets several apps share one file.
 - Tables: `<prefix>entries`, `<prefix>snapshots`, `<prefix>sessions`,
   `<prefix>open_tables` and `<prefix>meta` (schema version).

@@ -148,6 +148,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "bench:load": "esbuild bench/load.ts --bundle --platform=node --format=esm --log-level=warning --alias:shoehive=./src --external:ws --external:better-sqlite3 --outfile=bench/.out/load.mjs && node bench/.out/load.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "devtools:ui": "node scripts/build-devtools-ui.mjs",
     "devtools:ui:check": "node scripts/build-devtools-ui.mjs --check",
