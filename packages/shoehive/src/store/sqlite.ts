@@ -15,10 +15,10 @@
  *
  * @packageDocumentation
  */
-// From node:timers rather than the global, so test suites that fake timers do not stall
-// the store's group commit.
-import { clearImmediate, setImmediate } from 'node:timers';
 import Database from 'better-sqlite3';
+// Imported after better-sqlite3: a type-free first import takes the @packageDocumentation
+// comment above with it when the declarations are bundled.
+import { clearImmediate, setImmediate } from 'node:timers';
 import {
   StoreConflictError,
   type SessionRecord,
@@ -196,6 +196,8 @@ export function sqliteStore(options: SqliteStoreOptions): Store {
     conflict?: StoreConflictError;
   }
   let queue: PendingWrite[] = [];
+  // setImmediate comes from node:timers, not the global, so a test suite that fakes timers
+  // does not stall the commit.
   let scheduled: NodeJS.Immediate | undefined;
   const commitGroup = db.transaction((group: PendingWrite[]) => {
     for (const pending of group) {
