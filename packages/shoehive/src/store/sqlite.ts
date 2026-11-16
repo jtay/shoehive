@@ -67,7 +67,7 @@ export type SqliteStoreOptions = SqliteStoreFileOptions | SqliteStoreDatabaseOpt
 /** The schema version this adapter writes, kept in `<prefix>meta` for later migrations. */
 const SCHEMA_VERSION = 1;
 
-/** The most appends one group commit holds; a full queue is written at once. */
+/** The most writes one group commit holds; a full queue is committed at once. */
 const MAX_GROUP = 512;
 
 /**
