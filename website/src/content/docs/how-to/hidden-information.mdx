@@ -70,6 +70,14 @@ return more. The quiz keeps the correct answer out of the view until the `reveal
 
 Blackjack does the same with the hole card, switching on `ctx.phase === 'dealer'`.
 
+## What `view()` does not cover
+
+Every client at the table, spectators included, also receives the table's metadata: its
+options, its result, the seat names, and the deadlines of visible timers. `view()` does not
+filter those, so never put a secret there, such as a private table's password or a quiz's
+answer key. Keep it in state and leave it out of the view. Error details are what the game
+passes to `reject(code, details)`, so they must not carry secrets either.
+
 ## Test it
 
 `t.viewOf(seat)` returns exactly what that seat would receive, and `t.viewOf('spectator')`

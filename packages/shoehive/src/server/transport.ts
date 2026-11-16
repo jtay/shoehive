@@ -16,6 +16,12 @@ export interface UpgradeRequest {
 export interface Connection {
   send(text: string): void;
   close(code: number, reason: string): void;
+  /**
+   * Drops the connection at once, without a closing handshake (used for a client that
+   * stopped reading, whose close frame would only queue behind the backlog). Optional:
+   * without it the server falls back to `close()`.
+   */
+  terminate?(): void;
   /** Bytes queued but not yet sent (for backpressure). */
   bufferedAmount(): number;
   onMessage(listener: (text: string) => void): void;
@@ -80,6 +86,9 @@ export function connectMemory(
     close: (code, reason) => {
       finish(code, reason);
     },
+    terminate: () => {
+      finish(1006, '');
+    },
     bufferedAmount: () => 0,
     onMessage: (l) => serverListeners.push(l),
     onClose: (l) => closeListeners.push(l),
@@ -128,14 +137,33 @@ export function connectMemory(
  * at once; `{ refuseAfterMs }` answers 404 after that long unless another listener has
  * written to or closed the socket by then.
  */
+/** The `Origin` policy for a WebSocket upgrade (see `WsTransportOptions`). */
+function originAllowed(request: IncomingMessage, options: WsTransportOptions): boolean {
+  const origin = request.headers.origin;
+  if (options.origins.includes('*')) return true;
+  if (options.origins.length > 0) return origin !== undefined && options.origins.includes(origin);
+  if (!options.sameOriginOnly || origin === undefined) return true;
+  try {
+    return new URL(origin).host === request.headers.host;
+  } catch {
+    return false;
+  }
+}
+
 export type UnknownUpgradePolicy = 'ignore' | 'refuse' | { refuseAfterMs: number };
 
 export interface WsTransportOptions {
   path: string;
   maxMessageBytes: number;
   heartbeatMs: number;
-  /** Allowed `Origin` values. Empty means any origin. */
+  /** Allowed `Origin` values. Empty means any origin, unless `sameOriginOnly`; `'*'` allows any. */
   origins: readonly string[];
+  /**
+   * With no `origins` listed, refuse a browser upgrade whose `Origin` host differs from the
+   * request's `Host` (cross-site WebSocket hijacking). Upgrades without an `Origin` (not
+   * from a browser) are allowed.
+   */
+  sameOriginOnly?: boolean;
   unknownUpgrades: UnknownUpgradePolicy;
   /**
    * Other upgrade paths Shoehive serves on the same HTTP server (devtools, ADR 0011).
@@ -207,8 +235,7 @@ export function attachWebSocket(
       if (!siblings.has(path)) onUnknownPath(socket);
       return;
     }
-    const origin = request.headers.origin;
-    if (options.origins.length > 0 && (origin === undefined || !options.origins.includes(origin))) {
+    if (!originAllowed(request, options)) {
       refuse(socket, 403);
       return;
     }
@@ -266,6 +293,9 @@ function wrap(ws: WebSocket): Connection {
     },
     close: (code, reason) => {
       ws.close(code, reason);
+    },
+    terminate: () => {
+      ws.terminate();
     },
     bufferedAmount: () => ws.bufferedAmount,
     onMessage: (listener) => {

@@ -160,8 +160,10 @@ npm test
 />
 
 `createServer` takes the list of games it can host. The `secret` signs the resume tokens that
-let a guest keep their seat after a reload, and in production the server refuses to start
-without `SHOEHIVE_SECRET`. The `devtools` option turns on the inspector, in development only.
+let a guest keep their seat after a reload. `npm run dev` sets a random one for the session, and
+in production the server refuses to start without `SHOEHIVE_SECRET`. Never write one into the
+code: whoever knows it can sign in as any guest. The `devtools` option turns on the inspector,
+in development only.
 
 The rest of `src/server.ts` is a small static file server for the built web app. The one line
 that matters is this one, which adds the Shoehive WebSocket endpoint (at `/shoehive`) and the

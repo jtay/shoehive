@@ -17,6 +17,7 @@ import {
 } from '../../src/devtools/ui/client';
 import { JsonTree } from '../../src/devtools/ui/components/json-tree';
 import { mergeEntries } from '../../src/devtools/ui/components/log';
+import { DiagnosticsCard, SeatsCard } from '../../src/devtools/ui/components/overview';
 import { filterTables, sortTables } from '../../src/devtools/ui/components/tables';
 import { statusText } from '../../src/devtools/ui/components/connection';
 import {
@@ -662,5 +663,49 @@ describe('JsonTree', () => {
       root,
     );
     expect(root.querySelector('img')).toBeNull();
+  });
+});
+
+// Phase 8 security review (docs/security/review-1.0-platform.md): player names, game
+// state and error messages come from clients and game code, so they must stay text.
+describe('untrusted strings in the inspector', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+  const evil = '<img src=x onerror="globalThis.pwned=1"><script>globalThis.pwned=1</script>';
+
+  it('renders player names and diagnostic messages as text', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    render(
+      h('div', null, [
+        h(SeatsCard, {
+          key: 'seats',
+          seats: [{ status: 'occupied', player: { id: evil, name: evil }, connected: true }],
+        }),
+        h(DiagnosticsCard, {
+          key: 'diag',
+          replaying: false,
+          diagnostics: [{ at: 0, name: evil, seat: 0, player: evil, code: 'X', message: evil }],
+        }),
+      ]),
+      root,
+    );
+    expect(root.querySelector('img, script')).toBeNull();
+    expect(root.textContent).toContain(evil);
+  });
+
+  it('never renders a JSON value shaped like a Preact vnode as an element', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = JSON.parse(
+      '{"type":"img","props":{"src":"x","onerror":"globalThis.pwned=1"},"__k":null,"__":null,"constructor":null}',
+    ) as Record<string, unknown>;
+    render(
+      h(JsonTree, { value: { state, list: [state] }, diff: EMPTY_DIFF, label: 'State' }),
+      root,
+    );
+    expect(root.querySelector('img')).toBeNull();
+    expect(root.textContent).toContain('onerror');
   });
 });

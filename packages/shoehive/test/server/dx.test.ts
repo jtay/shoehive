@@ -105,7 +105,7 @@ describe('player.rename', () => {
       await c.ok('table.join', { table });
       await c.ok('seat.take', { table });
     }
-    expect(await a.ok('player.rename', { name: '  Ada L.  ' })).toEqual({ name: 'Ada L.' });
+    expect(await a.ok('player.rename', { name: '  Ada L.  ' })).toMatchObject({ name: 'Ada L.' });
     await b.until(() => b.doc(table).seats[0]?.player?.name === 'Ada L.', 'renamed seat');
     a.close();
     const again = TestClient.memory(server);
@@ -117,7 +117,15 @@ describe('player.rename', () => {
     const server = start();
     const c = TestClient.memory(server);
     await c.hello();
-    for (const name of ['   ', 'x'.repeat(33), 'bad\u0007name']) {
+    // Control characters, line separators and bidirectional overrides (security review N-10).
+    for (const name of [
+      '   ',
+      'x'.repeat(33),
+      'bad\u0007name',
+      'Ada\u202Egnp.exe',
+      'two\u2028lines',
+      'iso\u2066late',
+    ]) {
       expect(await c.request('player.rename', { name })).toMatchObject({
         ok: false,
         error: { code: 'BAD_REQUEST' },

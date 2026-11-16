@@ -23,10 +23,10 @@ const dev = process.env.NODE_ENV !== 'production';
 const shoehive = createServer({
   games: [game],
   // Signs guest resume tokens, so players keep their seats across reloads and restarts.
-  // In production, set SHOEHIVE_SECRET (32 characters or more): createServer() refuses to
-  // start without it.
-  secret:
-    process.env.SHOEHIVE_SECRET ?? (dev ? 'dev-only-secret-not-for-production-use' : undefined),
+  // `npm run dev` sets a random SHOEHIVE_SECRET for the session (see vite.config.ts). In
+  // production, set your own (32 characters or more): createServer() refuses to start
+  // without it. Never put one in code: whoever knows it can sign in as any guest.
+  secret: process.env.SHOEHIVE_SECRET,
   // The devtools inspector, in development only. Its URL (with a token) is logged at startup.
   // Under `npm run dev` the token stays the same when this server restarts.
   devtools: dev && { enabled: true, token: process.env.SHOEHIVE_DEVTOOLS_TOKEN },
@@ -89,6 +89,11 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
     'cache-control': file.includes(`${sep}assets${sep}`)
       ? 'public, max-age=31536000, immutable'
       : 'no-cache',
+    // Never sniff a type other than the one sent, and never be framed by another site
+    // (clickjacking a game's buttons).
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'content-security-policy': "frame-ancestors 'none'",
   });
   res.end(req.method === 'HEAD' ? undefined : body);
 }

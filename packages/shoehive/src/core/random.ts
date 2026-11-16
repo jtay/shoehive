@@ -72,6 +72,9 @@ export function randomSeed(): string {
   return bytesToHex(bytes);
 }
 
+/** Words in one keystream: 2^32 blocks of 16 words. */
+const MAX_WORDS = 2 ** 36;
+
 /** A ChaCha20 word stream with random access by word index. */
 export class WordStream {
   private readonly key: Uint32Array;
@@ -84,6 +87,10 @@ export class WordStream {
   }
 
   word(index: number): number {
+    // RFC 8439 has a 32-bit block counter: past 2^32 blocks the keystream would repeat.
+    if (!Number.isSafeInteger(index) || index < 0 || index >= MAX_WORDS) {
+      throw new RangeError(`random: word ${String(index)} is outside this table's keystream`);
+    }
     const block = Math.floor(index / 16);
     if (block !== this.cachedBlock) {
       this.cached = chacha20Block(this.key, block, this.nonce);

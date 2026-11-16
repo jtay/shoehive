@@ -138,6 +138,32 @@ const isString = (v: unknown, max = 256): v is string =>
 const isSeat = (v: unknown): v is number =>
   Number.isInteger(v) && (v as number) >= 0 && (v as number) < 64;
 
+/** Deepest nesting accepted in `act.input` and `table.create.options` (protocol section 9). */
+const MAX_PAYLOAD_DEPTH = 32;
+
+/**
+ * Why a client-supplied payload is unacceptable, or `null`. `JSON.parse` turns numbers
+ * such as `1e400` into `Infinity`, which is not JSON and must not reach game code, and a
+ * 64 KiB message can nest 30 000 levels deep, enough to overflow recursive validators.
+ * Iterative, so the check itself cannot overflow the stack.
+ */
+function payloadProblem(value: unknown): string | null {
+  const stack: [unknown, number][] = [[value, 0]];
+  while (stack.length > 0) {
+    const [node, depth] = stack.pop()!;
+    if (typeof node === 'number') {
+      if (!Number.isFinite(node)) return 'numbers must be finite';
+      continue;
+    }
+    if (typeof node !== 'object' || node === null) continue;
+    if (depth >= MAX_PAYLOAD_DEPTH)
+      return `nesting is limited to ${String(MAX_PAYLOAD_DEPTH)} levels`;
+    for (const child of Array.isArray(node) ? node : Object.values(node))
+      stack.push([child, depth + 1]);
+  }
+  return null;
+}
+
 /**
  * Parses and validates one client message. Never throws. Unknown fields are ignored
  * (protocol section 1, rule 5); the returned message contains only known fields.
@@ -215,7 +241,11 @@ export function parseClientMessage(raw: string): ParseResult {
     case 'table.create': {
       if (!isString(data['game'], 128)) return bad('"game" must be a string');
       const out: Extract<ClientRequest, { t: 'table.create' }> = { t, id, game: data['game'] };
-      if (data['options'] !== undefined) out.options = data['options'] as Json;
+      if (data['options'] !== undefined) {
+        const problem = payloadProblem(data['options']);
+        if (problem !== null) return bad(`"options": ${problem}`);
+        out.options = data['options'] as Json;
+      }
       return { ok: true, message: out };
     }
     case 'table.join': {
@@ -251,7 +281,11 @@ export function parseClientMessage(raw: string): ParseResult {
       if (tid === null) return bad('"table" must be a string');
       if (!isString(data['name'], 128)) return bad('"name" must be a string');
       const out: Extract<ClientRequest, { t: 'act' }> = { t, id, table: tid, name: data['name'] };
-      if (data['input'] !== undefined) out.input = data['input'] as Json;
+      if (data['input'] !== undefined) {
+        const problem = payloadProblem(data['input']);
+        if (problem !== null) return bad(`"input": ${problem}`);
+        out.input = data['input'] as Json;
+      }
       if (data['seat'] !== undefined) {
         if (!isSeat(data['seat'])) return bad('"seat" must be a seat number');
         out.seat = data['seat'];

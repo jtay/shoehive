@@ -15,13 +15,10 @@ import { ticTacToe } from './game';
 const PORT = Number(process.env['PORT'] ?? 3101);
 const WEB_ROOT = fileURLToPath(new URL('../dist-web', import.meta.url));
 
-// Outside production a fixed dev secret keeps resume tokens valid across restarts.
-// In production createServer() refuses to start without SHOEHIVE_SECRET.
-const secret =
-  process.env['SHOEHIVE_SECRET'] ??
-  (process.env['NODE_ENV'] === 'production'
-    ? undefined
-    : 'tic-tac-toe-dev-secret-not-for-production');
+// Resume tokens are signed with SHOEHIVE_SECRET. Without it, createServer() picks a random
+// secret outside production (tokens then do not survive a restart) and refuses to start in
+// production. Never hard-code a secret: anyone who reads it can sign a token for any guest.
+const secret = process.env['SHOEHIVE_SECRET'];
 
 // Devtools in development only (ADR 0011): the inspector URL, with its token, is logged at
 // startup. SHOEHIVE_DEVTOOLS_TOKEN fixes the token (the end-to-end tests use it).
@@ -90,6 +87,11 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
     'cache-control': file.includes(`${sep}assets${sep}`)
       ? 'public, max-age=31536000, immutable'
       : 'no-cache',
+    // Never sniff a type other than the one sent, and never be framed by another site
+    // (clickjacking a game's buttons).
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'content-security-policy': "frame-ancestors 'none'",
   });
   res.end(req.method === 'HEAD' ? undefined : body);
 }

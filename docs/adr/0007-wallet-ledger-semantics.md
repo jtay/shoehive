@@ -123,6 +123,24 @@ Two details differ from the first draft, without changing any rule above:
   calls than it recorded (or fewer) throws `ReplayDivergenceError`, like a different
   sequence of random draws.
 
+### Implementation note (Phase 8 security review)
+
+- **Failed calls are recorded.** A live `reserve` or `balance` that throws (rule 5's
+  `WALLET_UNAVAILABLE`, after a timeout or a backend error) records an effect with
+  `error: { code, message }` (`ok: false` for a reserve, `amount: 0` for a balance), so a
+  game that catches the error and commits replays the same way: replay throws the same
+  error at the same call. Before, such an entry failed recovery with `REPLAY_DIVERGED` or
+  replayed into a different state. The reserve's backend key is still released after the
+  entry commits.
+- **Amounts.** `ctx.wallet.reserve` checks its amount like `credit`: a non-negative safe
+  integer, or a `RangeError` (an `INTERNAL` rejection) before the backend is called. A
+  game whose input schema lets clients pick a negative or fractional bet can no longer
+  pass it to a backend that does not check.
+- **Key prefixes.** `TableRuntime.create` refuses a table id that is empty or contains
+  `:`. Backend keys are `<table>:<key>`, so table `a:b` with key `c` and table `a` with
+  key `b:c` would otherwise share one. Generated ids never contain `:`; this only
+  affects ids passed to `shoehive.tables.create(game, { id })`.
+
 ## Consequences
 
 ### Positive

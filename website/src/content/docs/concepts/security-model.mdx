@@ -84,8 +84,10 @@ slow a table down. Dead connections are dropped after two missed heartbeats.
 Browsers always send an `Origin` header on WebSocket connections. Set `origins` to the list of
 sites allowed to connect, for example `['https://play.example.com']`. Any other origin gets
 HTTP 403 on the upgrade. When the list is set, a request with no `Origin` (not a browser) is
-refused too. The default is to allow any origin, so set it in production. Origin checks stop
-other websites from using your visitors' browsers; they are not authentication.
+refused too. Without the list, guest servers allow any origin, and servers with an `auth`
+hook allow only same-origin pages in production (cookies would otherwise ride along with
+another site's connection). Origin checks stop other websites from using your visitors'
+browsers; they are not authentication.
 
 ## Devtools stay off in production
 

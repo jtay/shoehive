@@ -38,6 +38,18 @@ const shoehive = createServer({ games, store: sqliteStore({ file: './shoehive.db
 - With `{ database }`, pass a `better-sqlite3` connection you own. Its pragmas are left as
   you set them (WAL is recommended; `synchronous = NORMAL` with WAL can lose the last
   transactions on a power loss, not on a process crash), and `close()` leaves it open.
+- **Group commit.** better-sqlite3 runs on the server's thread, so every commit waits for its
+  fsync there. Writes made in the same turn of the event loop (log appends, snapshots, closes
+  and sessions, across all tables) are committed in one transaction, and each resolves after
+  that commit, so one fsync covers them all and an ack still means durable. Each table's batch
+  is still all or nothing, and one table's conflict does not fail another table's append. If
+  the transaction itself fails, for example because another process holds the write lock past
+  the busy timeout, every write in that group rejects.
+- **Capacity.** In the Phase 8 load test (4 vCPU, see [benchmarks](/reference/benchmarks/)),
+  1,000 Hold'em tables at 1 action per second each (about 845 actions per second) kept the p95
+  action-to-patch latency at 9.16 ms with `synchronous = FULL`, and 9.61 ms with
+  `synchronous = NORMAL`. Past that, the single server thread is the limit, whichever store you
+  use.
 - `tablePrefix` (default `'shoehive_'`) lets several apps share one file.
 - Tables: `<prefix>entries`, `<prefix>snapshots`, `<prefix>sessions`,
   `<prefix>open_tables` and `<prefix>meta` (schema version).
@@ -59,7 +71,10 @@ const shoehive = createServer({ games, store: postgresStore({ pool }) });
 
 - You construct the pool, so you control pooling, TLS and credentials. `close()` never ends
   it; end it yourself on shutdown.
-- `schema` (default `public`) and `tablePrefix` (default `'shoehive_'`) isolate apps or tenants.
+- `schema` (default `public`) and `tablePrefix` (default none) isolate apps or tenants. The
+  schema can be up to 63 bytes and the prefix up to 52, because Postgres silently truncates
+  longer names (two of the store's tables would become one); the store throws a `TypeError`
+  for longer names, an empty schema or a NUL character.
 - Without `migratePostgres`, the store creates its schema lazily and idempotently before the
   first operation (concurrent setups are serialized with an advisory lock). Run
   `migratePostgres` from a deploy step if the app's role has no DDL rights.

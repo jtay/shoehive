@@ -179,3 +179,13 @@ describe('PROTOCOL_VERSION', () => {
     expect(PROTOCOL_VERSION).toBe(1);
   });
 });
+
+// Phase 8 security review (docs/security/review-1.0-platform.md, finding P-08).
+describe('WordStream counter', () => {
+  it('refuses to wrap the 32-bit ChaCha20 block counter (keystream reuse)', () => {
+    const stream = new WordStream(normalizeSeed('wrap'));
+    expect(() => stream.word(2 ** 36 - 1)).not.toThrow();
+    expect(() => stream.word(2 ** 36)).toThrow(RangeError);
+    expect(() => stream.word(-1)).toThrow(RangeError);
+  });
+});

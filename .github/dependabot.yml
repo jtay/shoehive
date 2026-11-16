@@ -1,0 +1,33 @@
+# Keeps the SHA-pinned GitHub Actions and the npm dependencies current (Phase 8
+# security review, P-07). Dependabot updates the pinned SHA and the version comment
+# together. Grouped so each run opens one PR per ecosystem rather than one per package.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Tooling and test dependencies: one PR for every non-major bump.
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      # Runtime and peer dependencies: one PR for non-major bumps; majors arrive on
+      # their own so a breaking change in ws, mutative, pg, ioredis or better-sqlite3
+      # gets its own review.
+      runtime-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+    commit-message:
+      prefix: deps

@@ -4,6 +4,25 @@ import { migratePostgres, postgresStore, StoreConflictError } from '../../src/st
 import { runStoreConformance, type StoreBackend } from '../../src/testing/index';
 import { describeRecovery, POSTGRES_URL, uniqueName } from './recovery';
 
+// Phase 8 security review (docs/security/review-1.0-platform.md, finding P-10). No server
+// needed: the names are checked before any query.
+describe('postgresStore names', () => {
+  const pool = {} as pg.Pool;
+  it('refuses schema and table names Postgres would truncate or cannot hold', () => {
+    // 62 bytes: `snapshots` and `sessions` would both become `<prefix>s`.
+    expect(() => postgresStore({ pool, tablePrefix: 'x'.repeat(62) })).toThrow(TypeError);
+    expect(() => postgresStore({ pool, tablePrefix: 'x'.repeat(53) })).toThrow(TypeError);
+    expect(() => postgresStore({ pool, schema: 's'.repeat(64) })).toThrow(TypeError);
+    expect(() => postgresStore({ pool, schema: '' })).toThrow(TypeError);
+    expect(() => postgresStore({ pool, schema: 'a\u0000b' })).toThrow(TypeError);
+    expect(() => postgresStore({ pool, tablePrefix: 'é'.repeat(27) })).toThrow(TypeError);
+    expect(() =>
+      postgresStore({ pool, tablePrefix: 'x'.repeat(52), schema: 's'.repeat(63) }),
+    ).not.toThrow();
+    expect(() => postgresStore({ pool, schema: 'odd "quoted" name' })).not.toThrow();
+  });
+});
+
 if (!POSTGRES_URL) {
   describe.skip('postgres store (set SHOEHIVE_TEST_POSTGRES_URL to run)', () => {
     it('needs a Postgres server', () => undefined);

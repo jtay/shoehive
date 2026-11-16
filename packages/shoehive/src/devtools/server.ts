@@ -152,7 +152,13 @@ const FORK_STARTING_BALANCE = 1000;
 
 const EXPORT_WARNING =
   'This fixture contains the RNG seed and every action of the table. A fixture from a ' +
-  "production table reveals that table's cards: treat it as a secret.";
+  "production table reveals that table's cards: treat it as a secret. Player ids and names " +
+  'are replaced; free text in action inputs, timestamps and wallet balances read by the ' +
+  'game are kept.';
+
+const EXPORT_KEPT_IDS =
+  ' Player ids inside action inputs and table options could not be replaced (the game did ' +
+  'not replay with them replaced), so they are kept in this fixture.';
 
 const REQUEST_TYPES = new Set<DevRequestType>([
   'tables.list',
@@ -216,6 +222,25 @@ function remoteOf(req: IncomingMessage): string {
 /** Loopback clients: 127.0.0.0/8 and ::1. */
 function isLoopback(address: string): boolean {
   return address === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(address);
+}
+
+/** Headers a proxy adds when it relays a request (a same-host proxy connects from loopback). */
+const FORWARDED_HEADERS = ['forwarded', 'x-forwarded-for', 'x-real-ip'] as const;
+
+/**
+ * Whether a `Host` header names this machine in a way a DNS rebinding page cannot use: an
+ * IP literal, `localhost` or a `.localhost` name (RFC 6761: browsers resolve those to
+ * loopback themselves). A page whose origin is an attacker's domain sends that domain.
+ */
+function isLocalHost(host: string): boolean {
+  const value = host.toLowerCase();
+  if (value.startsWith('[')) return /^\[[0-9a-f:.]+\](?::\d{1,5})?$/.test(value);
+  const name = value.replace(/:\d{1,5}$/, '');
+  return (
+    name === 'localhost' ||
+    name.endsWith('.localhost') ||
+    /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(name)
+  );
 }
 
 function pathOf(url: string | undefined): string {
@@ -293,7 +318,7 @@ type Anonymized = { entries: LogEntry[] };
  * aliases of those ids, consistently across the log: action entries, `sit` / `rename`
  * and other system entries, wallet credit ops, and colon-separated segments of wallet
  * keys. With `deep`, strings (and object keys) equal to a player id inside action and
- * timer inputs are replaced too. Each player's distinct names map to distinct aliases,
+ * timer inputs and the table options are replaced too. Each player's distinct names map to distinct aliases,
  * so a rename stays a rename on replay. The seed is kept: the fixture needs it.
  */
 function anonymize(entries: readonly LogEntry[], deep: boolean): Anonymized {
@@ -351,7 +376,9 @@ function anonymize(entries: readonly LogEntry[], deep: boolean): Anonymized {
     };
     switch (entry.kind) {
       case 'create':
-        return { ...entry, ...base };
+        return deep
+          ? { ...entry, ...base, options: replaceDeep(entry.options) }
+          : { ...entry, ...base };
       case 'action':
         return { ...entry, ...base, player: id(entry.player), input: input(entry.input) };
       case 'timer':
@@ -468,7 +495,17 @@ export function createDevtools(host: DevtoolsHost, config: DevtoolsConfig): Devt
   const clients = new Set<Client>();
   const failures = new Map<string, { times: number[]; lockedUntil: number }>();
   const atCache = new Map<string, DevTableDetail>();
-  let remoteHintLogged = false;
+  const hintsLogged = new Set<string>();
+  /** Hosts from the server's `origins` option, also accepted as `Host` (named dev boxes). */
+  const originHosts = new Set(
+    host.origins.flatMap((origin) => {
+      try {
+        return [new URL(origin).host];
+      } catch {
+        return [];
+      }
+    }),
+  );
   let tablesTimer: ReturnType<typeof setTimeout> | null = null;
   let lastTablesPush = 0;
   let closed = false;
@@ -479,16 +516,46 @@ export function createDevtools(host: DevtoolsHost, config: DevtoolsConfig): Devt
     if (client.ws.readyState === client.ws.OPEN) client.ws.send(JSON.stringify(msg));
   };
 
-  const refuseRemote = (remote: string): boolean => {
-    if (config.allowRemote || isLoopback(remote)) return false;
-    if (!remoteHintLogged) {
-      remoteHintLogged = true;
-      logger.warn(
+  const hint = (kind: string, message: string, data: Record<string, unknown>): void => {
+    if (hintsLogged.has(kind)) return;
+    hintsLogged.add(kind);
+    logger.warn(message, data);
+  };
+
+  /**
+   * ADR 0011 rule 4: without `allowRemote`, only this machine is served. The TCP peer must
+   * be loopback, the request must not have been relayed by a proxy (which connects from
+   * loopback on behalf of anyone), and the `Host` must not be a DNS name, so a page that
+   * rebinds its own domain to 127.0.0.1 cannot reach the inspector.
+   */
+  const refuseRemote = (req: IncomingMessage, remote: string): boolean => {
+    if (config.allowRemote) return false;
+    if (!isLoopback(remote)) {
+      hint(
+        'remote',
         `Devtools answered 404 to ${remote}: only loopback clients are allowed. Set devtools: { enabled: true, allowRemote: true } to serve other addresses.`,
         { remote },
       );
+      return true;
     }
-    return true;
+    if (FORWARDED_HEADERS.some((name) => req.headers[name] !== undefined)) {
+      hint(
+        'proxy',
+        'Devtools answered 404 to a request relayed by a proxy: only direct loopback clients are allowed. Set devtools: { enabled: true, allowRemote: true } to serve it through a proxy.',
+        { remote },
+      );
+      return true;
+    }
+    const name = req.headers.host;
+    if (name !== undefined && !isLocalHost(name) && !originHosts.has(name)) {
+      hint(
+        'host',
+        `Devtools answered 404 to a request for host "${name}" (DNS rebinding protection): open it at localhost or 127.0.0.1, list the origin in the server's \`origins\` option, or set allowRemote: true.`,
+        { remote, host: name },
+      );
+      return true;
+    }
+    return false;
   };
 
   // -------------------------------------------------------------------------------
@@ -536,7 +603,7 @@ export function createDevtools(host: DevtoolsHost, config: DevtoolsConfig): Devt
         })
         .end(req.method === 'HEAD' ? undefined : body);
     };
-    if (closed || refuseRemote(remoteOf(req))) {
+    if (closed || refuseRemote(req, remoteOf(req))) {
       plain(404, 'Not found\n');
       return true;
     }
@@ -590,7 +657,7 @@ export function createDevtools(host: DevtoolsHost, config: DevtoolsConfig): Devt
   const handleUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): boolean => {
     if (pathOf(req.url) !== wsPath) return false;
     const remote = remoteOf(req);
-    if (closed || refuseRemote(remote)) {
+    if (closed || refuseRemote(req, remote)) {
       refuse(socket, 404, 'Not Found');
       return true;
     }
@@ -837,7 +904,7 @@ export function createDevtools(host: DevtoolsHost, config: DevtoolsConfig): Devt
       for (const effect of entry.effects ?? []) {
         if (effect.op === 'balance') {
           const player = seated.get(effect.seat);
-          if (player !== undefined) balances[player] = effect.amount;
+          if (player !== undefined && !effect.error) balances[player] = effect.amount;
         } else if (effect.ok) {
           open.set(effect.key, entry.kind === 'action' ? entry.player : '');
         }
@@ -883,12 +950,14 @@ export function createDevtools(host: DevtoolsHost, config: DevtoolsConfig): Devt
     const source = await fullLog(table, seq);
     const create = source[0]!;
     if (create.kind !== 'create') throw new DevError('LOG_UNAVAILABLE', 'No create entry');
-    // Replace ids inside inputs too when that still replays; otherwise only in the
-    // engine's own fields (which always replays, since the engine compares ids only
-    // with each other).
+    // Replace ids inside inputs and options too when that still replays; otherwise only
+    // in the engine's own fields (which always replays, since the engine compares ids
+    // only with each other), and say so in the warning.
     let fixture: Fixture | null = null;
     let failure = '';
+    let kept = false;
     for (const deep of [true, false]) {
+      kept = !deep;
       const { entries } = anonymize(source, deep);
       let runtime: TableRuntime;
       try {
@@ -914,7 +983,7 @@ export function createDevtools(host: DevtoolsHost, config: DevtoolsConfig): Devt
     if (!fixture)
       throw new DevError('REPLAY_FAILED', `The anonymized log does not replay: ${failure}`);
     logger.warn('Devtools exported a fixture', { remote: client.remote, table: table.id, seq });
-    return { fixture, warning: EXPORT_WARNING };
+    return { fixture, warning: kept ? EXPORT_WARNING + EXPORT_KEPT_IDS : EXPORT_WARNING };
   };
 
   const handle = async (

@@ -108,6 +108,30 @@ in URLs.
   `NODE_ENV !== 'production'`; the wallet-with-guests warning follows the same rule.
 - `player.rename` (an open question above) shipped in Phase 4: protocol section 5.
 
+### Changes from the 1.0 network security review
+
+See `docs/security/review-1.0-network.md`.
+
+- **Guest session records expire with the session.** Step 16 keeps names and metadata in
+  `Store.sessions`, but nothing ever deleted a guest's record, so every `hello` from a new
+  guest grew the store for good (finding N-04). When a guest's in-memory session is cleaned
+  up (no connection for twice the grace period) and the guest holds no seat, its record is
+  deleted. Authenticated players' records are kept. A later resume still works: the token
+  carries the id and the name, and a missing record only means `resumed: false`.
+- **`player.rename` returns a fresh token** (`resumeToken`, `resumeExpiresAt`, additive
+  result fields) that carries the new name, and `shoehive/client` stores it, so the name
+  survives the record's deletion.
+- **Names** (step 1 and `player.rename`) also reject line and paragraph separators and the
+  bidirectional overrides and isolates (U+202A to U+202E, U+2066 to U+2069), which can make
+  a name display as something else in other players' seat lists and in logs (finding N-10).
+- **One `hello` per connection, strictly.** A second `hello` sent before the first was
+  answered used to pass the check and bind the connection to two players (finding N-06).
+- **Cookie auth is same-origin by default in production.** Step 7's cookie pattern is open
+  to cross-site WebSocket hijacking without an origin allowlist, so with `auth` set and
+  `origins` empty, production accepts only same-origin browser upgrades (finding N-05,
+  decided by the stakeholder in Phase 8); development only warns. List `origins` for an app
+  served from another origin, or `['*']` to accept any.
+
 ## Consequences
 
 ### Positive

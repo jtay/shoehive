@@ -16,6 +16,9 @@
  * @packageDocumentation
  */
 import Database from 'better-sqlite3';
+// Imported after better-sqlite3: a type-free first import takes the @packageDocumentation
+// comment above with it when the declarations are bundled.
+import { clearImmediate, setImmediate } from 'node:timers';
 import {
   StoreConflictError,
   type SessionRecord,
@@ -64,12 +67,18 @@ export type SqliteStoreOptions = SqliteStoreFileOptions | SqliteStoreDatabaseOpt
 /** The schema version this adapter writes, kept in `<prefix>meta` for later migrations. */
 const SCHEMA_VERSION = 1;
 
+/** The most writes one group commit holds; a full queue is committed at once. */
+const MAX_GROUP = 512;
+
 /**
  * Creates a SQLite store. The schema is created right away (synchronously) if missing, so
- * opening an existing database again is safe. Every write is one transaction, and `appendLog` takes the
- * write lock before reading the last seq, so concurrent writers (in this process or
- * another one) cannot both append the same seq. Retrying a batch that is already stored
- * with identical data succeeds without writing.
+ * opening an existing database again is safe. Every write takes the write lock before
+ * reading the last seq, so concurrent writers (in this process or another one) cannot both
+ * append the same seq. Retrying a batch that is already stored with identical data
+ * succeeds without writing. Writes made in the same turn of the event loop are committed
+ * together (group commit: one fsync for all of them) and each resolves after that commit;
+ * each table's batch is still all or nothing, and one table's conflict does not fail
+ * another's append.
  *
  * @throws `TypeError` for an invalid `tablePrefix`, or an `Error` if the database holds a
  * newer schema than this version of Shoehive understands.
@@ -166,60 +175,128 @@ export function sqliteStore(options: SqliteStoreOptions): Store {
     }
     for (const entry of batch) sql.insertEntry.run(tableId, entry.seq, entry.data);
   });
-  const save = db.transaction((tableId: string, s: StoredSnapshot) => {
-    sql.saveSnapshot.run(tableId, s.seq, s.rev, s.game, s.version, s.data);
-    sql.markOpen.run(tableId);
-  });
   const load = db.transaction((tableId: string) => {
     const snapshot = sql.loadSnapshot.get(tableId);
     if (!snapshot) return null;
     return { snapshot, tail: sql.readLog.all(tableId, snapshot.seq + 1, Number.MAX_SAFE_INTEGER) };
   });
 
+  // Group commit. With `synchronous = FULL` every commit waits for an fsync on this thread,
+  // so one transaction per write caps a server at a few hundred busy tables. Writes made in
+  // the same turn of the event loop are queued and committed in one transaction instead:
+  // one fsync covers them all. Each append runs in its own savepoint, so one table's
+  // conflict rolls back only that table's batch; any other error (or a failed BEGIN or
+  // COMMIT) fails the whole group, and every caller in it rejects. A promise resolves only
+  // after the commit that holds its write. Reads commit the queue first, so every operation
+  // sees the writes called before it, as if each had been committed on its own.
+  interface PendingWrite {
+    write: () => void;
+    resolve: () => void;
+    reject: (error: unknown) => void;
+    conflict?: StoreConflictError;
+  }
+  let queue: PendingWrite[] = [];
+  // setImmediate comes from node:timers, not the global, so a test suite that fakes timers
+  // does not stall the commit.
+  let scheduled: NodeJS.Immediate | undefined;
+  const commitGroup = db.transaction((group: PendingWrite[]) => {
+    for (const pending of group) {
+      try {
+        pending.write();
+      } catch (error) {
+        if (!(error instanceof StoreConflictError)) throw error;
+        pending.conflict = error;
+      }
+    }
+  });
+  /** Commits every queued write now. Never throws: each caller gets its own outcome. */
+  const flush = () => {
+    if (scheduled) clearImmediate(scheduled);
+    scheduled = undefined;
+    const group = queue;
+    queue = [];
+    if (group.length === 0) return;
+    try {
+      commitGroup.immediate(group);
+    } catch (error) {
+      for (const pending of group) pending.reject(error);
+      return;
+    }
+    for (const pending of group) {
+      if (pending.conflict) pending.reject(pending.conflict);
+      else pending.resolve();
+    }
+  };
+
   let closed = false;
-  /** Runs synchronous work as a Promise; a throw becomes a rejection. */
-  const run = <T>(work: () => T): Promise<T> =>
+  const assertOpen = () => {
+    if (closed) throw new Error('sqliteStore: the store is closed');
+  };
+  /** Queues a write for the next group commit; a throw before queueing is a rejection. */
+  const enqueue = (write: () => void): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+      assertOpen();
+      queue.push({ write, resolve, reject });
+      if (queue.length >= MAX_GROUP) flush();
+      else scheduled ??= setImmediate(flush);
+    });
+  /** Runs a read after the queued writes, as a Promise; a throw becomes a rejection. */
+  const read = <T>(work: () => T): Promise<T> =>
     new Promise<T>((resolve) => {
-      if (closed) throw new Error('sqliteStore: the store is closed');
+      assertOpen();
+      flush();
       resolve(work());
     });
 
   return {
-    appendLog: (tableId, batch) =>
-      run(() => {
-        append.immediate(tableId, batch);
+    appendLog: (tableId, batch) => {
+      if (batch.length === 0) return read(() => undefined);
+      const entries = batch.map(({ seq, data }) => ({ seq, data }));
+      return enqueue(() => {
+        append(tableId, entries); // nested in the group's transaction: a savepoint
+      });
+    },
+    saveSnapshot: (tableId, s) =>
+      enqueue(() => {
+        sql.saveSnapshot.run(tableId, s.seq, s.rev, s.game, s.version, s.data);
+        sql.markOpen.run(tableId);
       }),
-    saveSnapshot: (tableId, snapshot) =>
-      run(() => {
-        save.immediate(tableId, snapshot);
-      }),
-    loadTable: (tableId) => run(() => load(tableId)),
+    loadTable: (tableId) => read(() => load(tableId)),
     readLog: (tableId, fromSeq, toSeq = Number.MAX_SAFE_INTEGER) =>
-      run(() => sql.readLog.all(tableId, fromSeq, toSeq)),
-    listOpenTables: () => run(() => sql.listOpen.all().map((row) => row.table_id)),
-    closeTable: (tableId, reason) =>
-      run(() => {
-        sql.closeTable.run(tableId, reason, Date.now());
-      }),
+      read(() => sql.readLog.all(tableId, fromSeq, toSeq)),
+    listOpenTables: () => read(() => sql.listOpen.all().map((row) => row.table_id)),
+    closeTable: (tableId, reason) => {
+      const at = Date.now();
+      return enqueue(() => {
+        sql.closeTable.run(tableId, reason, at);
+      });
+    },
     sessions: {
       get: (playerId) =>
-        run((): SessionRecord | null => {
+        read((): SessionRecord | null => {
           const row = sql.getSession.get(playerId);
           if (!row) return null;
           const metadata = JSON.parse(row.metadata) as SessionRecord['metadata'];
           return { playerId, name: row.name, metadata, updatedAt: row.updated_at };
         }),
-      put: (record) =>
-        run(() => {
-          const metadata = JSON.stringify(record.metadata);
+      put: (record) => {
+        let metadata: string;
+        try {
+          metadata = JSON.stringify(record.metadata);
+        } catch (error) {
+          return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+        }
+        return enqueue(() => {
           sql.putSession.run(record.playerId, record.name, metadata, record.updatedAt);
-        }),
+        });
+      },
       delete: (playerId) =>
-        run(() => {
+        enqueue(() => {
           sql.deleteSession.run(playerId);
         }),
     },
     close: () => {
+      if (!closed) flush();
       if (!closed && owned) db.close();
       closed = true;
       return Promise.resolve();

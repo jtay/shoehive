@@ -159,10 +159,12 @@ restart-recovery end-to-end test per adapter.
 
 ### Status in v1 (Phase 7 review)
 
-- **`migrate` is not implemented.** Any version difference fails recovery with
-  `VERSION_MISMATCH`, whatever the tail; the table stays in the store untouched. Until a
-  `migrate` hook ships, bump `version` only once open tables have ended or been closed.
-  Whether to build it before 1.0 is an open decision for Phase 8.
+- **`migrate` is not in v1 (decided in Phase 8).** Any version difference fails recovery
+  with `VERSION_MISMATCH`, whatever the tail; the table stays in the store untouched and is
+  reported through `table:recovery-failed`. Bump `version` only once open tables have ended
+  or been closed (drain, then deploy). The stakeholder chose not to offer a migration path
+  for 1.0; a `migrate` hook can be added later without breaking anything, because today a
+  version change only ever refuses.
 - **`retainLog` is not implemented**: the full log is always kept (see the Phase 5 note
   on what pruning would need).
 

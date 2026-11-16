@@ -21,6 +21,7 @@ import type {
   ServerMessage,
   TableDocument,
   Welcome,
+  WireError,
 } from '../protocol/messages';
 import { PROTOCOL_VERSION } from '../protocol/version';
 
@@ -76,6 +77,10 @@ export const CLIENT_ERROR_CODES = ['CONNECTION_LOST', 'REQUEST_TIMEOUT', 'CLIENT
 
 /** Close codes after which the client must not reconnect (protocol section 8). */
 const FINAL_CLOSE_CODES = new Set([1000, 1009, 4001, 4002, 4409]);
+
+/** Close code for severe rate-limit abuse: wait at least this long (protocol section 8). */
+const RATE_LIMIT_CLOSE = 4429;
+const RATE_LIMIT_BACKOFF_MS = 30_000;
 
 type Listener<T> = (value: T) => void;
 
@@ -266,16 +271,26 @@ export class TableHandle<G extends AnyGame = AnyGame> {
         this.resolveFirst();
         emitAll(this.listeners, this.doc);
         return;
-      case 'table.patch':
+      case 'table.patch': {
         if (!this.doc || message.from !== this.rev) {
           // A gap (missed patch): ask for a fresh snapshot (protocol section 6.3).
           void this.sync().catch(() => undefined);
           return;
         }
-        this.doc = applyPatch(this.doc as unknown as Json, message.ops) as unknown as TableDocument;
+        let next: TableDocument;
+        try {
+          if (!Array.isArray(message.ops)) throw new TypeError('ops is not an array');
+          next = applyPatch(this.doc as unknown as Json, message.ops) as unknown as TableDocument;
+        } catch {
+          // A patch that does not apply: keep the document and resync rather than throw.
+          void this.sync().catch(() => undefined);
+          return;
+        }
+        this.doc = next;
         this.rev = message.rev;
         emitAll(this.listeners, this.doc);
         return;
+      }
       case 'table.event': {
         const set = this.eventListeners.get(message.name);
         if (set) emitAll(set, { payload: message.payload, rev: message.rev });
@@ -336,7 +351,13 @@ export class LobbyHandle {
         void this.client.request('lobby.sub', this.subFields()).catch(() => undefined);
         return;
       }
-      this.doc = applyPatch(this.doc as unknown as Json, message.ops) as unknown as LobbyDocument;
+      try {
+        if (!Array.isArray(message.ops)) throw new TypeError('ops is not an array');
+        this.doc = applyPatch(this.doc as unknown as Json, message.ops) as unknown as LobbyDocument;
+      } catch {
+        void this.client.request('lobby.sub', this.subFields()).catch(() => undefined);
+        return;
+      }
       this.rev = message.rev;
     } else {
       return;
@@ -452,7 +473,12 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
 
   /** Changes this guest's display name, on every seat it holds too. Resolves the name used. */
   async rename(name: string): Promise<string> {
-    const result = (await this.request('player.rename', { name })) as { name: string };
+    const result = (await this.request('player.rename', { name })) as {
+      name: string;
+      resumeToken?: string;
+    };
+    // Servers since the 1.0 security review send a fresh token that carries the new name.
+    if (typeof result.resumeToken === 'string') this.storage?.set(result.resumeToken);
     if (this.player) this.player = { ...this.player, name: result.name };
     emitAll(this.statusListeners, this.status);
     return result.name;
@@ -661,7 +687,7 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
           return;
         }
         if (event.code === 4401) this.storage?.set(null);
-        this.scheduleReconnect();
+        this.scheduleReconnect(event.code === RATE_LIMIT_CLOSE ? RATE_LIMIT_BACKOFF_MS : 0);
       };
     });
   }
@@ -677,7 +703,8 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
     }
   }
 
-  private scheduleReconnect(): void {
+  /** `minDelayMs`: a floor the server asked for (4429 means at least 30 s). */
+  private scheduleReconnect(minDelayMs = 0): void {
     if (this.options.reconnect === false || this.closedByUser) {
       this.setStatus('closed');
       return;
@@ -686,7 +713,10 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
     const settings = this.options.reconnect ?? {}; // false was handled above
     const initial = settings.initialDelayMs ?? 500;
     const max = settings.maxDelayMs ?? 10_000;
-    const delay = Math.min(max, initial * 2 ** this.attempts) * (0.5 + Math.random() / 2);
+    const delay = Math.max(
+      minDelayMs,
+      Math.min(max, initial * 2 ** this.attempts) * (0.5 + Math.random() / 2),
+    );
     this.attempts += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
@@ -696,12 +726,25 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
   }
 
   private onMessage(text: string): void {
-    let message: ServerMessage;
+    let parsed: unknown;
     try {
-      message = JSON.parse(text) as ServerMessage;
+      parsed = JSON.parse(text);
     } catch {
       return;
     }
+    // Server data is untrusted: anything but an object with a string type is ignored, and
+    // a handler that throws must not escape into the socket's event dispatch (in Node an
+    // exception thrown from a WebSocket listener stops the process).
+    if (typeof parsed !== 'object' || parsed === null) return;
+    if (typeof (parsed as { t?: unknown }).t !== 'string') return;
+    try {
+      this.dispatch(parsed as ServerMessage);
+    } catch (error) {
+      console.error('[shoehive] could not handle a server message', error);
+    }
+  }
+
+  private dispatch(message: ServerMessage): void {
     switch (message.t) {
       case 'ack':
         this.settle(message);
@@ -738,8 +781,21 @@ export class ShoehiveClient<Games extends readonly AnyGame[] = readonly AnyGame[
     if (!p) return;
     clearTimeout(p.timer);
     this.pending.delete(ack.id);
-    if (ack.ok) p.resolve(ack.result);
-    else p.reject(new ShoehiveError({ ...ack.error }));
+    if (ack.ok) {
+      p.resolve(ack.result);
+      return;
+    }
+    // Rebuilt field by field: the server's object may lack fields or carry odd ones.
+    const raw: unknown = ack.error;
+    const error = (typeof raw === 'object' && raw !== null ? raw : {}) as Partial<WireError>;
+    p.reject(
+      new ShoehiveError({
+        code: typeof error.code === 'string' ? error.code : 'INTERNAL',
+        source: error.source === 'game' ? 'game' : 'shoehive',
+        message: typeof error.message === 'string' ? error.message : 'Request failed',
+        ...(error.details === undefined ? {} : { details: error.details }),
+      }),
+    );
   }
 }
 
