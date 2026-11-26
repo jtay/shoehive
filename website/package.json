@@ -17,11 +17,11 @@
     "todo": "tsx scripts/list-todo.ts"
   },
   "dependencies": {
-    "@astrojs/markdown-remark": "7.3.5",
-    "@astrojs/markdown-satteri": "0.4.6",
-    "@astrojs/starlight": "0.42.8",
-    "astro": "7.4.4",
-    "starlight-typedoc": "0.23.2",
+    "@astrojs/markdown-remark": "7.3.10",
+    "@astrojs/markdown-satteri": "0.4.10",
+    "@astrojs/starlight": "0.43.1",
+    "astro": "7.4.13",
+    "starlight-typedoc": "0.23.3",
     "typedoc": "0.28.20",
     "typedoc-plugin-markdown": "4.14.1"
   },
